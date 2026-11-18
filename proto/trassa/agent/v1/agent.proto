@@ -1,0 +1,7 @@
+// Контракт канала между агентом Trassa и шлюзом (gateway).
+// Сообщения, конверт SignedOperation и каталог операций добавляются в E05 (docs/plan/04-agent-protocol.md).
+syntax = "proto3";
+
+package trassa.agent.v1;
+
+option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
