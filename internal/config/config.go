@@ -35,6 +35,7 @@ type Paths struct {
 	StateDir        string // /var/lib/trassa
 	AgentDir        string // /var/lib/trassa/agent: единственный каталог, куда пишет агент (ReadWritePaths)
 	AgentKey        string // /var/lib/trassa/agent/agent.key
+	UpdateDir       string // /var/lib/trassa/agent/update/<operation_id>: выпуск, скачанный агентом
 	HelperDir       string // /var/lib/trassa/helper (root, 0700)
 	Nonces          string // /var/lib/trassa/helper/nonces
 	OpsDir          string // /var/lib/trassa/helper/ops: состояние и итоги операций
@@ -60,6 +61,7 @@ func Under(root string) Paths {
 		StateDir:        j("var/lib/trassa"),
 		AgentDir:        j("var/lib/trassa/agent"),
 		AgentKey:        j("var/lib/trassa/agent/agent.key"),
+		UpdateDir:       j("var/lib/trassa/agent/update"),
 		HelperDir:       j("var/lib/trassa/helper"),
 		Nonces:          j("var/lib/trassa/helper/nonces"),
 		OpsDir:          j("var/lib/trassa/helper/ops"),

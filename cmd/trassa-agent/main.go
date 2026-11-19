@@ -90,7 +90,7 @@ func run(ctx context.Context, log *slog.Logger) int {
 		GatewayURL: en.GatewayURL, ServerID: en.ServerID, Identity: id, PanelKeys: keys,
 		Helper:  &helperrpc.Client{Path: p.Socket, Timeout: 30 * time.Second},
 		Version: config.Version, OS: osID, OSVersion: osVer, Arch: runtime.GOARCH,
-		HTTPClient: &http.Client{}, Log: log,
+		HTTPClient: &http.Client{}, Log: log, UpdateDir: p.UpdateDir,
 	})
 	if err := a.Run(ctx); errors.Is(err, channel.ErrRevoked) {
 		return exitRevoked
@@ -197,6 +197,14 @@ func status(ctx context.Context) int {
 	}
 	fmt.Println("Версия:", config.Version)
 	code := 0
+	// Помощник отвечает только пользователю trassa; от root и других пользователей — отказ, это нормально.
+	hv, caps, err := (&helperrpc.Client{Path: p.Socket, Timeout: 5 * time.Second}).Hello(ctx)
+	if err != nil {
+		fmt.Println("Помощник: нет ответа (" + err.Error() + ")")
+		code = exitError
+	} else {
+		fmt.Printf("Помощник: %s, типы операций: %s\n", hv, strings.Join(caps, ", "))
+	}
 	for _, u := range uninstall.Units {
 		out, err := exec.CommandContext(ctx, "/usr/bin/systemctl", "is-active", u).Output()
 		state := strings.TrimSpace(string(out))

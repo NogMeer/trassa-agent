@@ -6,8 +6,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,7 +19,6 @@ import (
 )
 
 type release struct {
-	srv   *httptest.Server
 	files map[string][]byte
 	priv  minisign.PrivateKey
 	pub   string
@@ -34,15 +31,6 @@ func newRelease(t *testing.T, version string) *release {
 	}
 	txt, _ := pub.MarshalText()
 	r := &release{files: map[string][]byte{}, priv: priv, pub: string(txt)}
-	r.srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		b, ok := r.files[filepath.Base(req.URL.Path)]
-		if !ok {
-			http.NotFound(w, req)
-			return
-		}
-		_, _ = w.Write(b)
-	}))
-	t.Cleanup(r.srv.Close)
 	r.publish(version, version)
 	return r
 }
@@ -66,10 +54,11 @@ func (r *release) publish(version, comment string) {
 }
 
 func (r *release) params(version string) *agentv1.OperationParams {
-	p := &agentv1.AgentUpdateParams{Version: version, SignatureUrl: r.srv.URL + "/v/SHA256SUMS.minisig"}
+	const base = "https://releases.example/v"
+	p := &agentv1.AgentUpdateParams{Version: version, SignatureUrl: base + "/SHA256SUMS.minisig"}
 	for _, bin := range []string{"trassa-agent", "trassa-helper"} {
 		name := bin + "-linux-" + runtime.GOARCH
-		p.Artifacts = append(p.Artifacts, &agentv1.ReleaseArtifact{Os: "linux", Arch: runtime.GOARCH, Url: r.srv.URL + "/v/" + name, Sha256: update.SHA256Hex(r.files[name])})
+		p.Artifacts = append(p.Artifacts, &agentv1.ReleaseArtifact{Os: "linux", Arch: runtime.GOARCH, Url: base + "/" + name, Sha256: update.SHA256Hex(r.files[name])})
 	}
 	return &agentv1.OperationParams{Params: &agentv1.OperationParams_AgentUpdate{AgentUpdate: p}}
 }
@@ -87,8 +76,22 @@ func updateFixture(t *testing.T) (*fixture, *release) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.e.Updater = &Updater{Verifier: v, Client: r.srv.Client()}
+	f.e.Updater = &Updater{Verifier: v}
 	return f, r
+}
+
+// stage — то, что сделал бы агент: файлы выпуска в его каталоге для операции.
+func (r *release) stage(t *testing.T, f *fixture, b *agentv1.OperationBody) []byte {
+	dir := StageDir(f.paths, b.GetOperationId())
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range r.files {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return sealed(b)
 }
 
 func (f *fixture) bin(name string) string {
@@ -100,7 +103,7 @@ func (f *fixture) bin(name string) string {
 func TestUpdateSucceeds(t *testing.T) {
 	f, r := updateFixture(t)
 	b := f.body(ops.TypeAgentUpdate, r.params("1.1.0"))
-	o := f.exec(sealed(b))
+	o := f.exec(r.stage(t, f, b))
 	if o.result.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_AWAITING_CONFIRM {
 		t.Fatalf("%+v", o.result)
 	}
@@ -114,6 +117,9 @@ func TestUpdateSucceeds(t *testing.T) {
 	if len(f.services.scheduled) != 1 {
 		t.Fatal("перезапуск не запланирован")
 	}
+	if _, err := os.Stat(StageDir(f.paths, b.GetOperationId())); !os.IsNotExist(err) {
+		t.Fatal("каталог выпуска не убран")
+	}
 	if res, code := f.confirm(b.GetOperationId()); code != "" || res.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED {
 		t.Fatalf("%q %+v", code, res)
 	}
@@ -123,7 +129,7 @@ func TestUpdateSucceeds(t *testing.T) {
 func TestUpdateWatchdog(t *testing.T) {
 	f, r := updateFixture(t)
 	b := f.body(ops.TypeAgentUpdate, r.params("1.1.0"))
-	f.exec(sealed(b))
+	f.exec(r.stage(t, f, b))
 	f.open()
 	if err := f.e.AutoRollback(context.Background(), b.GetOperationId()); err != nil {
 		t.Fatal(err)
@@ -180,7 +186,7 @@ func TestUpdateRejected(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			f, r := updateFixture(t)
-			o := f.exec(sealed(f.body(ops.TypeAgentUpdate, tc.mut(f, r))))
+			o := f.exec(r.stage(t, f, f.body(ops.TypeAgentUpdate, tc.mut(f, r))))
 			if o.result.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_FAILED || o.result.GetErrorCode() != tc.code {
 				t.Fatalf("ждали %s: %+v", tc.code, o.result)
 			}

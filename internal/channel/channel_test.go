@@ -8,11 +8,17 @@ import (
 	"errors"
 	"math/rand/v2"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/verify"
 )
 
 func TestBackoff(t *testing.T) {
@@ -274,4 +280,67 @@ func TestNoisyNetwork(t *testing.T) {
 		}
 	}
 	t.Logf("сессий %d, операций отправлено %d, выполнено %d", a.Sessions(), next.Load(), len(h.executed))
+}
+
+// agent.update: выпуск скачивает агент в свой каталог до передачи операции помощнику.
+func TestUpdateStagedByAgent(t *testing.T) {
+	id := newIdentity(t)
+	staged := make(chan []string, 1)
+	h := &stagingHelper{fakeHelper: newFakeHelper(), staged: staged}
+	op := opID(77)
+	g := newGateway(t, id.PublicKey(), func(ctx context.Context, c *gwConn) {
+		_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: updateOp(t, op, "https://"+c.host+"/rel")}})
+		for {
+			if _, err := c.read(ctx); err != nil {
+				return
+			}
+		}
+	})
+	g.files = map[string][]byte{"SHA256SUMS.minisig": []byte("sig"), "SHA256SUMS": []byte("sums"), "trassa-agent-linux-amd64": []byte("a"), "trassa-helper-linux-amd64": []byte("h")}
+	a := newAgent(t, id, g, h)
+	a.cfg.Arch = "amd64"
+	a.cfg.UpdateDir = filepath.Join(t.TempDir(), "update")
+	h.dir = filepath.Join(a.cfg.UpdateDir, op)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = a.Run(ctx) }()
+	select {
+	case names := <-staged:
+		if len(names) != 4 {
+			t.Fatalf("скачано %v", names)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("помощник не получил операцию")
+	}
+}
+
+type stagingHelper struct {
+	*fakeHelper
+	dir    string
+	staged chan []string
+}
+
+func (s *stagingHelper) Execute(ctx context.Context, signed []byte, onAck func(bool, string), onProgress func([]byte)) ([]byte, error) {
+	ents, _ := os.ReadDir(s.dir)
+	var names []string
+	for _, e := range ents {
+		names = append(names, e.Name())
+	}
+	s.staged <- names
+	return s.fakeHelper.Execute(ctx, signed, onAck, onProgress)
+}
+
+func updateOp(t *testing.T, op, base string) *agentv1.SignedOperation {
+	now := time.Now()
+	n := make([]byte, 16)
+	params := &agentv1.AgentUpdateParams{Version: "1.1.0", SignatureUrl: base + "/SHA256SUMS.minisig"}
+	for _, b := range []string{"trassa-agent", "trassa-helper"} {
+		params.Artifacts = append(params.Artifacts, &agentv1.ReleaseArtifact{Os: "linux", Arch: "amd64", Url: base + "/" + b + "-linux-amd64", Sha256: strings.Repeat("a", 64)})
+	}
+	body, _ := proto.Marshal(&agentv1.OperationBody{
+		OperationId: op, ServerId: serverID, Type: "agent.update", Nonce: n,
+		Params:     &agentv1.OperationParams{Params: &agentv1.OperationParams_AgentUpdate{AgentUpdate: params}},
+		NotAfterMs: now.Add(5 * time.Minute).UnixMilli(), IssuedAtMs: now.UnixMilli(), Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+	})
+	return &agentv1.SignedOperation{Body: body, KeyId: "k1", Signature: ed25519.Sign(panelPriv, verify.Input(verify.ContextOperation, body))}
 }

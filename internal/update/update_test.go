@@ -4,10 +4,14 @@ package update
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"aead.dev/minisign"
@@ -129,5 +133,65 @@ func TestInstallRestore(t *testing.T) {
 	st, _ := os.Stat(filepath.Join(bin, "trassa-agent"))
 	if string(b) != "old" || st.Mode().Perm() != 0o755 {
 		t.Fatalf("%q %v", b, st.Mode().Perm())
+	}
+}
+
+func TestReadStaged(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "ok"), []byte("data"), 0o600)
+	if b, err := ReadStaged(dir, "ok", 10); err != nil || string(b) != "data" {
+		t.Fatalf("%q %v", b, err)
+	}
+	if _, err := ReadStaged(dir, "ok", 3); err == nil {
+		t.Fatal("больше предела принято")
+	}
+	secret := filepath.Join(t.TempDir(), "secret")
+	_ = os.WriteFile(secret, []byte("s"), 0o600)
+	_ = os.Symlink(secret, filepath.Join(dir, "link"))
+	if _, err := ReadStaged(dir, "link", 10); err == nil {
+		t.Fatal("ссылка на файл прочитана")
+	}
+	linkDir := filepath.Join(t.TempDir(), "d")
+	_ = os.Symlink(dir, linkDir)
+	if _, err := ReadStaged(linkDir, "ok", 10); err == nil {
+		t.Fatal("каталог-ссылка прочитан")
+	}
+	_ = os.Mkdir(filepath.Join(dir, "sub"), 0o700)
+	if _, err := ReadStaged(dir, "sub", 10); err == nil {
+		t.Fatal("каталог прочитан как файл")
+	}
+	if _, err := ReadStaged(dir, "../ok", 10); err == nil {
+		t.Fatal("путь с .. принят")
+	}
+}
+
+func TestStage(t *testing.T) {
+	files := map[string][]byte{"SHA256SUMS.minisig": []byte("sig"), "SHA256SUMS": []byte("sums"), "trassa-agent-linux-amd64": []byte("bin")}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, ok := files[filepath.Base(r.URL.Path)]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(b)
+	}))
+	defer srv.Close()
+	dir := filepath.Join(t.TempDir(), "stage")
+	err := Stage(context.Background(), srv.Client(), srv.URL+"/v/SHA256SUMS.minisig",
+		map[string]string{"trassa-agent-linux-amd64": srv.URL + "/v/trassa-agent-linux-amd64"}, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range files {
+		if b, err := ReadStaged(dir, name, 100); err != nil || !bytes.Equal(b, want) {
+			t.Fatalf("%s: %q %v", name, b, err)
+		}
+	}
+	if err := Stage(context.Background(), srv.Client(), srv.URL+"/v/SHA256SUMS.minisig",
+		map[string]string{"../evil": srv.URL + "/v/x"}, dir); err == nil {
+		t.Fatal("имя с путём принято")
+	}
+	if err := Stage(context.Background(), srv.Client(), strings.Replace(srv.URL, "https", "http", 1)+"/v/SHA256SUMS.minisig", nil, dir); err == nil {
+		t.Fatal("http принят")
 	}
 }

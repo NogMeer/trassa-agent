@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,8 +23,10 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/identity"
 	"github.com/NogMeer/trassa-agent/internal/ops"
+	"github.com/NogMeer/trassa-agent/internal/update"
 	"github.com/NogMeer/trassa-agent/internal/verify"
 )
 
@@ -61,6 +65,8 @@ type Config struct {
 	Log        *slog.Logger
 	Backoff    Backoff
 	Now        func() time.Time
+	// UpdateDir — куда скачивать выпуск для agent.update (/var/lib/trassa/agent/update).
+	UpdateDir string
 }
 
 var (
@@ -378,6 +384,9 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 		return
 	}
 	// Операция живёт дольше соединения: контекст агента, а не сессии.
+	if body.GetType() == ops.TypeAgentUpdate && !body.GetDryRun() {
+		a.stageUpdate(context.WithoutCancel(sctx), &body)
+	}
 	res, err := a.cfg.Helper.Execute(context.WithoutCancel(sctx), raw, ack, func(p []byte) {
 		var pr agentv1.OperationProgress
 		if proto.Unmarshal(p, &pr) == nil {
@@ -392,6 +401,27 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 		return // отклонена, ack уже отправлен
 	}
 	a.deliver(sctx, c, res)
+}
+
+// stageUpdate скачивает выпуск в каталог агента: помощник (root) в сеть не выходит, он только проверяет подпись и
+// суммы скачанного. Сбой загрузки не останавливает передачу операции: помощник сам вернёт UPDATE_DOWNLOAD_FAILED.
+func (a *Agent) stageUpdate(ctx context.Context, b *agentv1.OperationBody) {
+	if a.cfg.UpdateDir == "" || !config.IsUUID(b.GetOperationId()) {
+		return
+	}
+	p := b.GetParams().GetAgentUpdate()
+	bins := map[string]string{}
+	for _, art := range p.GetArtifacts() {
+		if bin, ok := ops.ArtifactBinary(art); ok && art.GetArch() == a.cfg.Arch {
+			bins[update.BinaryName(bin, art.GetArch())] = art.GetUrl()
+		}
+	}
+	dctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	dir := filepath.Join(a.cfg.UpdateDir, strings.ToLower(b.GetOperationId()))
+	if err := update.Stage(dctx, a.cfg.HTTPClient, p.GetSignatureUrl(), bins, dir); err != nil {
+		a.cfg.Log.Warn("выпуск не скачан", "op", b.GetOperationId(), "err", err)
+	}
 }
 
 func (a *Agent) confirm(sctx context.Context, c *conn, raw []byte) {

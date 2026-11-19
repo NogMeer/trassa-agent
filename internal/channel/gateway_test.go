@@ -47,6 +47,7 @@ func panelKeys() []verify.PanelKey {
 
 // gwConn — соединение на стороне тестового шлюза.
 type gwConn struct {
+	host  string
 	ws    *websocket.Conn
 	seq   uint64
 	hello *agentv1.Hello
@@ -85,6 +86,8 @@ type testGateway struct {
 	// welcome — отвечать ли Welcome; reason — вместо Welcome прислать Close.
 	reason agentv1.CloseReason
 	script func(ctx context.Context, c *gwConn)
+	// files — что отдаёт тот же сервер по обычному GET (выпуск для agent.update).
+	files map[string][]byte
 }
 
 func newGateway(t *testing.T, pub ed25519.PublicKey, script func(ctx context.Context, c *gwConn)) *testGateway {
@@ -103,6 +106,10 @@ func (g *testGateway) handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(g.status)
 		return
 	}
+	if b, ok := g.files[filepath.Base(r.URL.Path)]; ok && r.URL.Path != "/agent/v1/connect" {
+		_, _ = w.Write(b)
+		return
+	}
 	ws, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
@@ -110,7 +117,7 @@ func (g *testGateway) handle(w http.ResponseWriter, r *http.Request) {
 	defer ws.CloseNow()
 	ws.SetReadLimit(1 << 20)
 	ctx := r.Context()
-	c := &gwConn{ws: ws}
+	c := &gwConn{ws: ws, host: r.Host}
 	nonce := make([]byte, 32)
 	_, _ = rand.Read(nonce)
 	if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Challenge{Challenge: &agentv1.Challenge{

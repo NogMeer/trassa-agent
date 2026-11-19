@@ -6,9 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/url"
-	"path"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -16,6 +14,7 @@ import (
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
+	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/redact"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
@@ -27,18 +26,15 @@ import (
 type Updater struct {
 	// Verifier — ключи выпуска; nil — обновления не ставятся (UPDATE_SIGNATURE_INVALID).
 	Verifier *update.Verifier
-	Client   *http.Client
 }
 
 // Бинарники, которые меняет обновление.
 var binaries = []string{"trassa-agent", "trassa-helper"}
 
-// Предельные размеры загрузок.
-const (
-	maxSignature = 4 << 10
-	maxSums      = 64 << 10
-	maxBinary    = 128 << 20
-)
+// StageDir — куда агент скачивает выпуск для операции op (каталог агента: помощник в сеть не выходит).
+func StageDir(p config.Paths, op string) string {
+	return filepath.Join(p.UpdateDir, strings.ToLower(op))
+}
 
 func (e *Executor) builtinHandlers() map[string]handler {
 	h := map[string]handler{
@@ -242,16 +238,16 @@ func (e *Executor) applyUpdate(ctx context.Context, r *run) *agentv1.OperationRe
 	if e.Updater == nil || e.Updater.Verifier == nil {
 		return r.failed(update.CodeSignatureInvalid, "В сборке нет ключей выпуска: обновление не ставится")
 	}
-	client := e.Updater.Client
-	r.system("Скачиваю подпись и контрольные суммы")
-	sig, err := update.Fetch(ctx, client, p.GetSignatureUrl(), maxSignature)
+	// Выпуск скачал агент; здесь — только чтение без ссылок и проверка. Каталог убирается в любом исходе.
+	stage := StageDir(e.Paths, op)
+	defer os.RemoveAll(stage)
+	sig, err := update.ReadStaged(stage, update.SignatureName, update.MaxSignature)
 	if err != nil {
-		return r.failed(update.CodeDownloadFailed, err.Error())
+		return r.failed(update.CodeDownloadFailed, "агент не скачал подпись выпуска: "+err.Error())
 	}
-	sumsURL := strings.TrimSuffix(p.GetSignatureUrl(), ".minisig")
-	sums, err := update.Fetch(ctx, client, sumsURL, maxSums)
+	sums, err := update.ReadStaged(stage, update.SumsName, update.MaxSums)
 	if err != nil {
-		return r.failed(update.CodeDownloadFailed, err.Error())
+		return r.failed(update.CodeDownloadFailed, "агент не скачал SHA256SUMS: "+err.Error())
 	}
 	if err := e.Updater.Verifier.VerifySums(sums, sig, p.GetVersion()); err != nil {
 		return r.failed(update.CodeSignatureInvalid, "Подпись выпуска не сошлась")
@@ -263,14 +259,13 @@ func (e *Executor) applyUpdate(ctx context.Context, r *run) *agentv1.OperationRe
 	files := map[string][]byte{}
 	for _, b := range binaries {
 		a := arts[b]
-		u, _ := url.Parse(a.GetUrl())
-		if table[path.Base(u.Path)] != a.GetSha256() {
+		name := update.BinaryName(b, runtime.GOARCH)
+		if table[name] != a.GetSha256() {
 			return r.failed(update.CodeSignatureInvalid, b+": сумма не совпала с подписанным SHA256SUMS")
 		}
-		r.system("Скачиваю %s", b)
-		data, err := update.Fetch(ctx, client, a.GetUrl(), maxBinary)
+		data, err := update.ReadStaged(stage, name, update.MaxBinary)
 		if err != nil {
-			return r.failed(update.CodeDownloadFailed, err.Error())
+			return r.failed(update.CodeDownloadFailed, "агент не скачал "+name+": "+err.Error())
 		}
 		if update.SHA256Hex(data) != a.GetSha256() {
 			return r.failed(update.CodeSignatureInvalid, b+": контрольная сумма не совпала")

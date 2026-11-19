@@ -15,13 +15,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"os/user"
 	"strconv"
 	"syscall"
-	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
@@ -128,7 +126,6 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 	} else {
 		updater.Verifier = v
 	}
-	updater.Client = &http.Client{Timeout: 5 * time.Minute}
 	host := sysinfo.Real()
 	inv := &sysinfo.Inventory{Host: host, Units: sdunits.List}
 	ex := &helper.Executor{
