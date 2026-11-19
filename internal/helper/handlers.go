@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -238,9 +237,9 @@ func (e *Executor) applyUpdate(ctx context.Context, r *run) *agentv1.OperationRe
 	if e.Updater == nil || e.Updater.Verifier == nil {
 		return r.failed(update.CodeSignatureInvalid, "В сборке нет ключей выпуска: обновление не ставится")
 	}
-	// Выпуск скачал агент; здесь — только чтение без ссылок и проверка. Каталог убирается в любом исходе.
+	// Выпуск скачал агент; здесь — только чтение без ссылок и проверка. Каталог принадлежит агенту, и убирает его
+	// агент: root не удаляет ничего по путям, которые контролирует непривилегированный пользователь.
 	stage := StageDir(e.Paths, op)
-	defer os.RemoveAll(stage)
 	sig, err := update.ReadStaged(stage, update.SignatureName, update.MaxSignature)
 	if err != nil {
 		return r.failed(update.CodeDownloadFailed, "агент не скачал подпись выпуска: "+err.Error())

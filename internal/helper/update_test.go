@@ -117,9 +117,6 @@ func TestUpdateSucceeds(t *testing.T) {
 	if len(f.services.scheduled) != 1 {
 		t.Fatal("перезапуск не запланирован")
 	}
-	if _, err := os.Stat(StageDir(f.paths, b.GetOperationId())); !os.IsNotExist(err) {
-		t.Fatal("каталог выпуска не убран")
-	}
 	if res, code := f.confirm(b.GetOperationId()); code != "" || res.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED {
 		t.Fatalf("%q %+v", code, res)
 	}

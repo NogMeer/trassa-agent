@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -385,7 +386,9 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 	}
 	// Операция живёт дольше соединения: контекст агента, а не сессии.
 	if body.GetType() == ops.TypeAgentUpdate && !body.GetDryRun() {
-		a.stageUpdate(context.WithoutCancel(sctx), &body)
+		if dir := a.stageUpdate(context.WithoutCancel(sctx), &body); dir != "" {
+			defer os.RemoveAll(dir)
+		}
 	}
 	res, err := a.cfg.Helper.Execute(context.WithoutCancel(sctx), raw, ack, func(p []byte) {
 		var pr agentv1.OperationProgress
@@ -405,9 +408,9 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 
 // stageUpdate скачивает выпуск в каталог агента: помощник (root) в сеть не выходит, он только проверяет подпись и
 // суммы скачанного. Сбой загрузки не останавливает передачу операции: помощник сам вернёт UPDATE_DOWNLOAD_FAILED.
-func (a *Agent) stageUpdate(ctx context.Context, b *agentv1.OperationBody) {
+func (a *Agent) stageUpdate(ctx context.Context, b *agentv1.OperationBody) string {
 	if a.cfg.UpdateDir == "" || !config.IsUUID(b.GetOperationId()) {
-		return
+		return ""
 	}
 	p := b.GetParams().GetAgentUpdate()
 	bins := map[string]string{}
@@ -422,6 +425,7 @@ func (a *Agent) stageUpdate(ctx context.Context, b *agentv1.OperationBody) {
 	if err := update.Stage(dctx, a.cfg.HTTPClient, p.GetSignatureUrl(), bins, dir); err != nil {
 		a.cfg.Log.Warn("выпуск не скачан", "op", b.GetOperationId(), "err", err)
 	}
+	return dir
 }
 
 func (a *Agent) confirm(sctx context.Context, c *conn, raw []byte) {
