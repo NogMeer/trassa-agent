@@ -21,6 +21,10 @@ cat >/etc/trassa/enrollment.json <<'JSON'
 {"serverId":"01a1f4b6-f327-7a5d-ac23-e95c272c0fe8","gatewayUrl":"wss://127.0.0.1:9/agent/v1/connect","protocolVersion":1,"panelKeys":[{"keyId":"ci","publicKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}
 JSON
 chown root:trassa /etc/trassa/enrollment.json
+# Ключ агента (32 байта seed, trassa, 0600) — без него служба агента правильно не стартует.
+head -c 32 /dev/urandom >/var/lib/trassa/agent/agent.key
+chown trassa:trassa /var/lib/trassa/agent/agent.key
+chmod 0600 /var/lib/trassa/agent/agent.key
 chmod 0640 /etc/trassa/enrollment.json
 
 systemctl daemon-reload
