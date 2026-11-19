@@ -64,3 +64,16 @@ func TestEnrollmentRoundTripAndStrict(t *testing.T) {
 		t.Fatalf("неизвестное поле принято: %v", err)
 	}
 }
+
+func TestPanelKeyEncodings(t *testing.T) {
+	raw := make([]byte, 32)
+	raw[0], raw[1], raw[2] = 0xfb, 0xff, 0xfe // символы +/ и -_ в разных алфавитах
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		e := validEnrollment()
+		e.PanelKeys[0].PublicKey = enc.EncodeToString(raw)
+		keys, err := e.Validate()
+		if err != nil || string(keys[0].PublicKey) != string(raw) {
+			t.Fatalf("%q: %v", e.PanelKeys[0].PublicKey, err)
+		}
+	}
+}

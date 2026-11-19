@@ -78,7 +78,7 @@ func Under(root string) Paths {
 	}
 }
 
-// PanelKey — открытый ключ подписи операций панели: kid JWK и 32 байта Ed25519 в base64url без дополнения.
+// PanelKey — открытый ключ подписи операций панели: kid и 32 байта Ed25519 в base64 (обычном или base64url).
 type PanelKey struct {
 	KeyID     string `json:"keyId"`
 	PublicKey string `json:"publicKey"`
@@ -126,13 +126,27 @@ func (e Enrollment) Validate() ([]verify.PanelKey, error) {
 			return nil, bad("panelKeys: пустой или повторный keyId")
 		}
 		seen[k.KeyID] = true
-		raw, err := base64.RawURLEncoding.DecodeString(k.PublicKey)
+		raw, err := DecodeKey(k.PublicKey)
 		if err != nil || len(raw) != 32 {
-			return nil, bad("panelKeys: ключ %q не 32 байта base64url", k.KeyID)
+			return nil, bad("panelKeys: ключ %q не 32 байта base64", k.KeyID)
 		}
 		keys = append(keys, verify.PanelKey{ID: k.KeyID, PublicKey: raw})
 	}
 	return keys, nil
+}
+
+// DecodeKey раскодирует ключ в base64: обычном или base64url, с дополнением или без. Шлюз отдаёт обычный
+// base64, kid-ключи JWK — base64url; длину проверяет вызывающий.
+func DecodeKey(s string) ([]byte, error) {
+	var last error
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		b, err := enc.Strict().DecodeString(s)
+		if err == nil {
+			return b, nil
+		}
+		last = err
+	}
+	return nil, last
 }
 
 // DecodeStrict разбирает JSON без неизвестных полей и без хвоста.
