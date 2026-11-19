@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Root-помощник агента Trassa: выполняет только подписанные операции из зашитого списка (E05, decisions п. 7).
+# Строгая песочница невозможна — операциям следующих эпиков предстоит менять конфигурацию системы.
+[Unit]
+Description=Trassa helper
+Documentation=https://github.com/NogMeer/trassa-agent
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/trassa-helper serve
+User=root
+RuntimeDirectory=trassa
+RuntimeDirectoryMode=0750
+UMask=0077
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

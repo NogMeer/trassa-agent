@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Сетевой процесс агента Trassa: без прав, пишет только в /var/lib/trassa/agent (E05, decisions п. 7).
+[Unit]
+Description=Trassa agent
+Documentation=https://github.com/NogMeer/trassa-agent
+Wants=network-online.target
+After=network-online.target trassa-helper.service
+Requires=trassa-helper.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/trassa-agent run
+User=trassa
+Group=trassa
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ReadWritePaths=/var/lib/trassa/agent
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+Restart=always
+RestartSec=5
+# Код 3 — ключ отозван панелью: перезапуск бесполезен.
+RestartPreventExitStatus=3
+
+[Install]
+WantedBy=multi-user.target

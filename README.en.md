@@ -7,7 +7,7 @@ The agent for servers managed with **Trassa**. Trassa installs this program on y
 The source is open so that anyone can verify what runs on their server.
 
 > [!IMPORTANT]
-> **Status: in development.** The repository currently holds only the skeleton and licenses. There is no working agent and no release yet, so it cannot be installed. The rest of this README describes how the agent will work. These are design commitments that the implementation is built against.
+> **Status: in development.** The agent and helper code is here, but there are no signed releases yet, so the agent cannot be installed. The rest of this README describes the design; these are commitments the implementation is built against.
 
 ---
 
@@ -108,9 +108,16 @@ Updates are signed and rolled out in waves. If a new version fails to start, the
 | Path | Contents |
 |---|---|
 | [`proto/trassa/agent/v1/`](proto/trassa/agent/v1/) | The agent–panel channel contract (protobuf) |
-| `cmd/`, `internal/` | The Go agent code, coming with the implementation |
+| `cmd/trassa-agent`, `cmd/trassa-helper` | The two processes: unprivileged network process and root helper |
+| `internal/channel`, `internal/identity`, `internal/enroll` | WSS channel, agent key, enrollment |
+| `internal/helper`, `internal/helperrpc`, `internal/ops`, `internal/nonce` | Helper: socket with caller uid check, built-in operation list, signature, expiry and nonce checks |
+| `internal/rollback`, `internal/autorollback` | Rollback points and timer-based auto-rollback via systemd |
+| `internal/update`, `internal/uninstall`, `internal/redact`, `internal/sysinfo` | minisign-verified updates, uninstall, secret redaction in output, system facts |
+| [`scripts/install.sh`](scripts/install.sh), [`packaging/systemd/`](packaging/systemd/) | Installer and service units |
 
-Build: Go 1.26. The protobuf schema is checked with [buf](https://buf.build/): `buf lint`. Reproducible builds and signed releases will arrive with the first version.
+Updates are downloaded by the network process; the helper never goes online, it only verifies the signature and checksums of what was downloaded and installs the binaries.
+
+Build and checks: Go 1.26, `make tools`, then `make check` (protobuf codegen, `go vet`, staticcheck, tests in the regular build and with the internal `testops` tag, release binary check). The test operation `test.config_write` exists only in builds with the `testops` tag; `make release-check` verifies the release binary does not contain it. Reproducible builds and signed releases will arrive with the first version.
 
 ## Security
 
