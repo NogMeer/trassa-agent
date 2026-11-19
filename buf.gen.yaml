@@ -1,0 +1,10 @@
+# Генерация Go из proto/: `make proto` (buf и protoc-gen-go — версии в decisions E05 панели и в Makefile).
+version: v2
+inputs:
+  - directory: proto
+plugins:
+  - local: protoc-gen-go
+    out: gen
+    opt:
+      - paths=source_relative
+clean: true

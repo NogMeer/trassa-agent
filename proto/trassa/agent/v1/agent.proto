@@ -1,8 +1,406 @@
 // SPDX-License-Identifier: Apache-2.0
-// Контракт канала между агентом Trassa и шлюзом (gateway).
-// Сообщения, конверт SignedOperation и каталог операций появятся вместе с реализацией агента (см. README).
+// Контракт канала между агентом Trassa и шлюзом (gateway): docs/plan/04-agent-protocol.md и E05, разделы 5–6.
+//
+// Каждый кадр WSS — одно сообщение: от агента AgentMessage, от шлюза GatewayMessage. Размер кадра — до 1 МиБ.
+// Подписанные сообщения (SignedOperation, SignedConfirm) несут готовые байты тела: подпись Ed25519 ставится на
+// `контекст || 0x00 || body`, где контекст — "trassa-operation-v1" или "trassa-confirm-v1". Агент проверяет
+// подпись по полученным байтам и только потом разбирает их.
 syntax = "proto3";
 
 package trassa.agent.v1;
 
 option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
+
+// Версия протокола этого файла. Шлюз поддерживает текущую и предыдущую.
+enum ProtocolVersion {
+  PROTOCOL_VERSION_UNSPECIFIED = 0;
+  PROTOCOL_VERSION_1 = 1;
+}
+
+// ---------- Кадры канала ----------
+
+// Агент → шлюз.
+message AgentMessage {
+  // Номер кадра в соединении, с 1. Шлюз подтверждает приём результатов по нему (InboundAck).
+  uint64 seq = 1;
+  oneof payload {
+    Hello hello = 10;
+    Heartbeat heartbeat = 11;
+    OperationAck operation_ack = 12;
+    OperationProgress operation_progress = 13;
+    OperationResult operation_result = 14;
+    MetricsBatch metrics = 15;
+    Event event = 16;
+    LogChunk log_chunk = 17;
+  }
+}
+
+// Шлюз → агент.
+message GatewayMessage {
+  uint64 seq = 1;
+  oneof payload {
+    Challenge challenge = 10;
+    Welcome welcome = 11;
+    SignedOperation operation = 12;
+    SignedConfirm confirm = 13;
+    InboundAck inbound_ack = 14;
+    Subscribe subscribe = 15;
+    Unsubscribe unsubscribe = 16;
+    Close close = 17;
+  }
+}
+
+// ---------- Рукопожатие ----------
+
+// Первый кадр шлюза. На ответ Hello — 10 секунд.
+message Challenge {
+  // 32 случайных байта.
+  bytes nonce = 1;
+  int64 gateway_time_ms = 2;
+  repeated ProtocolVersion protocol_versions = 3;
+}
+
+// Ответ агента: подпись Ed25519 ключом агента по `"trassa-agent-auth-v1" || nonce || server_id` (UTF-8).
+message Hello {
+  string server_id = 1;
+  bytes signature = 2;
+  ProtocolVersion protocol_version = 3;
+  string agent_version = 4;
+  string helper_version = 5;
+  // Типы операций, которые умеет эта сборка (список помощника).
+  repeated string capabilities = 6;
+  string os = 7;
+  string os_version = 8;
+  string arch = 9;
+  int64 agent_time_ms = 10;
+}
+
+// Рукопожатие принято.
+message Welcome {
+  ProtocolVersion protocol_version = 1;
+  int64 gateway_time_ms = 2;
+  uint32 heartbeat_sec = 3;
+}
+
+// Пульс агента; шлюз отвечает своим временем для оценки расхождения часов.
+message Heartbeat {
+  int64 agent_time_ms = 1;
+  // Операции, которые сейчас выполняет помощник: шлюз сверяет с RUNNING в базе.
+  repeated string running_operation_ids = 2;
+}
+
+// Шлюз закрывает соединение и объясняет причину.
+message Close {
+  CloseReason reason = 1;
+  string message = 2;
+}
+
+enum CloseReason {
+  CLOSE_REASON_UNSPECIFIED = 0;
+  // Ключ отозван: агенту больше не подключаться.
+  CLOSE_REASON_REVOKED = 1;
+  // Новое соединение с тем же ключом вытеснило это.
+  CLOSE_REASON_REPLACED = 2;
+  // Три вытеснения за 5 минут: похоже, сервер скопирован с ключом агента.
+  CLOSE_REASON_DUPLICATE = 3;
+  CLOSE_REASON_PROTOCOL_UNSUPPORTED = 4;
+  CLOSE_REASON_AUTH_FAILED = 5;
+  CLOSE_REASON_MESSAGE_TOO_LARGE = 6;
+  CLOSE_REASON_RATE_LIMITED = 7;
+  CLOSE_REASON_SHUTDOWN = 8;
+}
+
+// ---------- Подписанная операция ----------
+
+message SignedOperation {
+  // Байты сериализованного OperationBody — ровно те, что подписаны.
+  bytes body = 1;
+  bytes signature = 2;
+  string key_id = 3;
+}
+
+message OperationBody {
+  string operation_id = 1;
+  string server_id = 2;
+  string type = 3;
+  OperationParams params = 4;
+  // 16 случайных байт; помощник хранит окно до not_after + 2 минуты.
+  bytes nonce = 5;
+  // Не дальше 10 минут от issued_at.
+  int64 not_after_ms = 6;
+  RollbackKind rollback = 7;
+  uint32 confirm_within_sec = 8;
+  // Только предпросмотр, ничего не менять.
+  bool dry_run = 9;
+  int64 issued_at_ms = 10;
+}
+
+enum RollbackKind {
+  ROLLBACK_KIND_UNSPECIFIED = 0;
+  ROLLBACK_KIND_NONE = 1;
+  ROLLBACK_KIND_CONFIG = 2;
+  ROLLBACK_KIND_SNAPSHOT = 3;
+}
+
+// Параметры по типу. Тип и вариант oneof обязаны совпадать (иначе PARAMS_INVALID).
+message OperationParams {
+  oneof params {
+    SystemInfoParams system_info = 1;
+    SystemInventoryParams system_inventory = 2;
+    AgentUpdateParams agent_update = 3;
+    AgentUninstallParams agent_uninstall = 4;
+    RollbackRestoreParams rollback_restore = 5;
+    // Только в сборке с тегом testops.
+    TestConfigWriteParams test_config_write = 100;
+  }
+}
+
+message SystemInfoParams {}
+
+message SystemInventoryParams {
+  repeated InventoryKind include = 1;
+}
+
+enum InventoryKind {
+  INVENTORY_KIND_UNSPECIFIED = 0;
+  INVENTORY_KIND_SERVICES = 1;
+  INVENTORY_KIND_CONTAINERS = 2;
+  INVENTORY_KIND_PORTS = 3;
+}
+
+message AgentUpdateParams {
+  string version = 1;
+  repeated ReleaseArtifact artifacts = 2;
+  // Подпись minisign файла SHA256SUMS выпуска.
+  string signature_url = 3;
+}
+
+message ReleaseArtifact {
+  string os = 1;
+  string arch = 2;
+  string url = 3;
+  // Шестнадцатеричный SHA-256.
+  string sha256 = 4;
+}
+
+message AgentUninstallParams {
+  bool purge_rollback = 1;
+}
+
+message RollbackRestoreParams {
+  string target_operation_id = 1;
+}
+
+message TestConfigWriteParams {
+  string path = 1;
+  string content = 2;
+  bool break_verify = 3;
+  uint32 confirm_within = 4;
+}
+
+// Подтверждение после изменения с автооткатом: снимает таймер. Шлёт его только соединение, открытое после
+// применения (S5).
+message SignedConfirm {
+  bytes body = 1;
+  bytes signature = 2;
+  string key_id = 3;
+}
+
+message ConfirmBody {
+  string operation_id = 1;
+  string server_id = 2;
+  bytes nonce = 3;
+  int64 not_after_ms = 4;
+}
+
+// ---------- Ход и итог ----------
+
+// Агент принял операцию (подпись и проверки помощника пройдены) или отклонил её.
+message OperationAck {
+  string operation_id = 1;
+  bool accepted = 2;
+  // Код отказа помощника: SIGNATURE_INVALID, SERVER_MISMATCH, EXPIRED, NOT_AFTER_TOO_FAR, REPLAY, TYPE_UNKNOWN,
+  // PARAMS_INVALID, PEER_FORBIDDEN.
+  string reject_code = 3;
+}
+
+enum OperationPhase {
+  OPERATION_PHASE_UNSPECIFIED = 0;
+  OPERATION_PHASE_PREVIEW = 1;
+  OPERATION_PHASE_ROLLBACK_POINT = 2;
+  OPERATION_PHASE_APPLY = 3;
+  OPERATION_PHASE_VERIFY = 4;
+  OPERATION_PHASE_AWAIT_CONFIRM = 5;
+  OPERATION_PHASE_ROLLBACK = 6;
+}
+
+enum LogStream {
+  LOG_STREAM_UNSPECIFIED = 0;
+  LOG_STREAM_STDOUT = 1;
+  LOG_STREAM_STDERR = 2;
+  LOG_STREAM_SYSTEM = 3;
+}
+
+// Кусок вывода (до 16 КиБ, секреты вычищены на агенте). seq — номер куска в операции, с 1.
+message OperationProgress {
+  string operation_id = 1;
+  uint32 seq = 2;
+  OperationPhase phase = 3;
+  LogStream stream = 4;
+  string chunk = 5;
+}
+
+enum OperationOutcome {
+  OPERATION_OUTCOME_UNSPECIFIED = 0;
+  OPERATION_OUTCOME_SUCCEEDED = 1;
+  OPERATION_OUTCOME_FAILED = 2;
+  OPERATION_OUTCOME_ROLLED_BACK = 3;
+  // Применено, ждёт OperationConfirm.
+  OPERATION_OUTCOME_AWAITING_CONFIRM = 4;
+}
+
+message OperationResult {
+  string operation_id = 1;
+  OperationOutcome outcome = 2;
+  // VERIFY_FAILED, ROLLBACK_UNAVAILABLE, ROLLBACK_FAILED, AUTO_ROLLBACK_NO_CONFIRM, UPDATE_SIGNATURE_INVALID,
+  // UPDATE_ROLLED_BACK и коды отказа помощника.
+  string error_code = 3;
+  string message = 4;
+  int64 started_at_ms = 5;
+  int64 finished_at_ms = 6;
+  // Для dry_run.
+  Preview preview = 7;
+  RollbackPoint rollback_point = 8;
+  oneof data {
+    SystemInfoResult system_info = 20;
+    SystemInventoryResult system_inventory = 21;
+  }
+}
+
+// Подтверждение приёма кадра агента: агент перестаёт досылать результат после InboundAck с этим seq.
+message InboundAck {
+  uint64 seq = 1;
+}
+
+// ---------- Предпросмотр и точка отката ----------
+
+message Preview {
+  string summary = 1;
+  repeated FileChange files = 2;
+  repeated string services = 3;
+  repeated string notes = 4;
+}
+
+message FileChange {
+  string path = 1;
+  FileChangeKind kind = 2;
+  // Унифицированная разница; обрезается до 64 КиБ.
+  string diff = 3;
+}
+
+enum FileChangeKind {
+  FILE_CHANGE_KIND_UNSPECIFIED = 0;
+  FILE_CHANGE_KIND_CREATE = 1;
+  FILE_CHANGE_KIND_MODIFY = 2;
+  FILE_CHANGE_KIND_DELETE = 3;
+}
+
+message RollbackPoint {
+  RollbackKind kind = 1;
+  // Каталог /var/lib/trassa/rollback/<operation_id>/.
+  string ref = 2;
+  uint32 files = 3;
+  uint64 bytes = 4;
+}
+
+// ---------- Результаты операций E05 ----------
+
+message SystemInfoResult {
+  string hostname = 1;
+  string os = 2;
+  string os_version = 3;
+  string kernel = 4;
+  string arch = 5;
+  uint32 cpu_cores = 6;
+  uint64 ram_mb = 7;
+  uint64 disk_gb = 8;
+  string public_ipv4 = 9;
+  string public_ipv6 = 10;
+  string virtualization = 11;
+  int64 boot_time_ms = 12;
+  string agent_version = 13;
+  string helper_version = 14;
+  bool allow_exec = 15;
+}
+
+// Списки до 500 записей каждого вида, строки до 200 символов.
+message SystemInventoryResult {
+  repeated ServiceEntry services = 1;
+  repeated ContainerEntry containers = 2;
+  repeated PortEntry ports = 3;
+}
+
+message ServiceEntry {
+  string name = 1;
+  // active, inactive, failed …
+  string state = 2;
+}
+
+message ContainerEntry {
+  string name = 1;
+  string image = 2;
+  string state = 3;
+  repeated string published_ports = 4;
+}
+
+message PortEntry {
+  string address = 1;
+  uint32 port = 2;
+  string protocol = 3;
+  string process = 4;
+}
+
+// ---------- Метрики, события, журналы (схемы для E08) ----------
+
+message MetricsBatch {
+  int64 collected_at_ms = 1;
+  repeated Metric metrics = 2;
+}
+
+// Имя и единица фиксируются здесь и в E08: например cpu.usage_percent, mem.used_bytes, disk.used_bytes.
+message Metric {
+  string name = 1;
+  double value = 2;
+  map<string, string> labels = 3;
+}
+
+message Event {
+  string kind = 1;
+  EventSeverity severity = 2;
+  string message = 3;
+  int64 at_ms = 4;
+  map<string, string> attributes = 5;
+}
+
+enum EventSeverity {
+  EVENT_SEVERITY_UNSPECIFIED = 0;
+  EVENT_SEVERITY_INFO = 1;
+  EVENT_SEVERITY_WARN = 2;
+  EVENT_SEVERITY_CRIT = 3;
+}
+
+message LogChunk {
+  string subscription_id = 1;
+  uint32 seq = 2;
+  string chunk = 3;
+}
+
+message Subscribe {
+  string subscription_id = 1;
+  string kind = 2;
+  map<string, string> options = 3;
+}
+
+message Unsubscribe {
+  string subscription_id = 1;
+}
