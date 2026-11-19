@@ -78,3 +78,13 @@ func TestEnrollErrors(t *testing.T) {
 		t.Fatal("кривой токен ушёл в сеть")
 	}
 }
+
+func TestPublicKeyString(t *testing.T) {
+	pk := make([]byte, 32)
+	pk[0] = 0xfb
+	s := PublicKeyString(pk)
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil || len(b) != 32 || strings.ContainsAny(s, "-_") {
+		t.Fatalf("%q %v", s, err)
+	}
+}

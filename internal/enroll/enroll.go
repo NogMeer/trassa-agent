@@ -24,7 +24,7 @@ import (
 // Request — тело запроса.
 type Request struct {
 	Token            string `json:"token"`
-	PublicKey        string `json:"publicKey"` // 32 байта Ed25519, base64url без дополнения
+	PublicKey        string `json:"publicKey"` // 32 байта Ed25519, обычный base64 с дополнением
 	Hostname         string `json:"hostname"`
 	OS               string `json:"os"`
 	OSVersion        string `json:"osVersion"`
@@ -55,7 +55,7 @@ var tokenRe = regexp.MustCompile(`^trs_enr_[A-Za-z0-9_-]{43}$`)
 func ValidToken(t string) bool { return tokenRe.MatchString(t) }
 
 // PublicKeyString — открытый ключ агента для запроса.
-func PublicKeyString(pk ed25519.PublicKey) string { return base64.RawURLEncoding.EncodeToString(pk) }
+func PublicKeyString(pk ed25519.PublicKey) string { return base64.StdEncoding.EncodeToString(pk) }
 
 // Do отправляет запрос на panelURL (https://agents.<домен>) и проверяет ответ.
 func Do(ctx context.Context, c *http.Client, panelURL string, req Request) (config.Enrollment, error) {
