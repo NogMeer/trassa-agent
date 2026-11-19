@@ -1,5 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
 // Контракт канала между агентом Trassa и шлюзом (gateway).
-// Сообщения, конверт SignedOperation и каталог операций добавляются в E05 (docs/plan/04-agent-protocol.md).
+// Сообщения, конверт SignedOperation и каталог операций появятся вместе с реализацией агента (см. README).
 syntax = "proto3";
 
 package trassa.agent.v1;
