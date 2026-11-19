@@ -1,0 +1,7 @@
+# Настройки gitleaks: стандартные правила плюс одно исключение.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Синтетические образцы секретов для теста фильтра R20 (internal/redact): настоящих ключей там нет"
+paths = ['''^internal/redact/redact_test\.go$''']
