@@ -14,5 +14,5 @@ require (
 
 require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	golang.org/x/crypto v0.13.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
 )
