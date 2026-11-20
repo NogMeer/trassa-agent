@@ -480,13 +480,18 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 				}
 			case agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED:
 				p.writeJSON("ssh-harden.json", r)
-				op := p.signRollback(hardenRevert, "rollback.restore", &agentv1.OperationParams{Params: &agentv1.OperationParams_RollbackRestore{
+				// Возврат операции с автооткатом — тоже с автооткатом и подтверждением связи.
+				op := p.signConfirm(hardenRevert, "rollback.restore", &agentv1.OperationParams{Params: &agentv1.OperationParams_RollbackRestore{
 					RollbackRestore: &agentv1.RollbackRestoreParams{TargetOperationId: hardenOperation}}})
 				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
 					return
 				}
 			default:
 				p.writeJSON("ssh-harden.json", r)
+			}
+		case m.GetOperationResult().GetOperationId() == hardenRevert && m.GetOperationResult().GetOutcome() == agentv1.OperationOutcome_OPERATION_OUTCOME_AWAITING_CONFIRM:
+			if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Confirm{Confirm: p.confirm(hardenRevert)}}); err != nil {
+				return
 			}
 		case m.GetOperationResult().GetOperationId() == hardenRevert:
 			p.writeJSON("ssh-revert.json", m.GetOperationResult())
@@ -523,13 +528,18 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 				}
 			case agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED:
 				p.writeJSON("fw-apply.json", r)
-				op := p.signRollback(fwRevert, "rollback.restore", &agentv1.OperationParams{Params: &agentv1.OperationParams_RollbackRestore{
+				// Возврат операции с автооткатом — тоже с автооткатом и подтверждением связи.
+				op := p.signConfirm(fwRevert, "rollback.restore", &agentv1.OperationParams{Params: &agentv1.OperationParams_RollbackRestore{
 					RollbackRestore: &agentv1.RollbackRestoreParams{TargetOperationId: fwApply}}})
 				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
 					return
 				}
 			default:
 				p.writeJSON("fw-apply.json", r)
+			}
+		case m.GetOperationResult().GetOperationId() == fwRevert && m.GetOperationResult().GetOutcome() == agentv1.OperationOutcome_OPERATION_OUTCOME_AWAITING_CONFIRM:
+			if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Confirm{Confirm: p.confirm(fwRevert)}}); err != nil {
+				return
 			}
 		case m.GetOperationResult().GetOperationId() == fwRevert:
 			p.writeJSON("fw-revert.json", m.GetOperationResult())
