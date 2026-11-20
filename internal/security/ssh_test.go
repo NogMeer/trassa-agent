@@ -138,6 +138,17 @@ func TestTimeAndEOL(t *testing.T) {
 	if states(r["TIME_SYNC_OFF"]) != "PASS:" || states(r["OS_EOL"]) != "FAIL:debian 12" {
 		t.Fatalf("%s %s", states(r["TIME_SYNC_OFF"]), states(r["OS_EOL"]))
 	}
+	// adjtimex запрещён песочницей — ответ timedatectl.
+	sys.Adjtimex = func() (int64, error) { return 0, errors.New("operation not permitted") }
+	sys.Run = func(_ context.Context, name string, _ ...string) ([]byte, error) {
+		if name == "timedatectl" {
+			return []byte("yes\n"), nil
+		}
+		return nil, errors.New("нет")
+	}
+	if got := states(scan(t, sys, "TIME_SYNC_OFF")["TIME_SYNC_OFF"]); got != "PASS:" {
+		t.Fatal("timedatectl:", got)
+	}
 	if got := states(scan(t, build(t, tree{"etc/os-release": "ID=fedora\nVERSION_ID=40\n"}), "OS_EOL")["OS_EOL"]); got != "NA:" {
 		t.Fatal(got)
 	}

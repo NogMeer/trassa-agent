@@ -19,15 +19,12 @@ func init() {
 const maxSyncError = 16_000_000
 
 func checkTimeSync(ctx context.Context, s *Scan) []Finding {
-	if s.sys.Adjtimex == nil {
-		return []Finding{failed(ErrUnsupported, fmt.Errorf("adjtimex недоступен"))}
-	}
-	maxErr, err := s.sys.Adjtimex()
+	synced, ev, err := timeSynced(ctx, s.sys)
 	if err != nil {
 		return []Finding{failed(ErrReadFailed, err)}
 	}
-	if maxErr < maxSyncError {
-		return []Finding{pass("", fmt.Sprintf("часы синхронизированы, погрешность до %d мс", maxErr/1000))}
+	if synced {
+		return []Finding{pass("", ev)}
 	}
 	svc := "ни systemd-timesyncd, ни chrony не работают"
 	for _, u := range []string{"systemd-timesyncd.service", "chrony.service", "chronyd.service"} {
@@ -37,6 +34,24 @@ func checkTimeSync(ctx context.Context, s *Scan) []Finding {
 		}
 	}
 	return []Finding{fail("", "часы не синхронизированы: "+svc)}
+}
+
+// timeSynced — adjtimex (modes = 0); служба помощника с ProtectClock=yes его запрещает (фильтр системных
+// вызовов @clock), тогда — NTPSynchronized у systemd-timedated: он считается по тому же maxerror.
+func timeSynced(ctx context.Context, sys *System) (bool, string, error) {
+	if sys.Adjtimex != nil {
+		if maxErr, err := sys.Adjtimex(); err == nil {
+			return maxErr < maxSyncError, fmt.Sprintf("погрешность часов до %d мс", maxErr/1000), nil
+		}
+	}
+	out, err := sys.run(ctx, "timedatectl", "show", "--property=NTPSynchronized", "--value")
+	switch strings.TrimSpace(string(out)) {
+	case "yes":
+		return true, "часы синхронизированы (timedatectl)", nil
+	case "no":
+		return false, "", nil
+	}
+	return false, "", fmt.Errorf("ни adjtimex, ни timedatectl: %v", err)
 }
 
 // Сроки поддержки (decisions E10, OS_EOL): Ubuntu — стандартная поддержка (ESM — платная подписка Ubuntu Pro);

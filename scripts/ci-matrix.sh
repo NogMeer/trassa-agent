@@ -117,6 +117,9 @@ done
 jq -e '[.security_scan.checks[] | select(.error == "TIMEOUT")] | length == 0' "$ctx/security.json" >/dev/null ||
 	fail "проверки не уложились в срок: $(jq -c '[.security_scan.checks[] | select(.error == "TIMEOUT") | .code]' "$ctx/security.json")"
 jq -e '.security_scan.checks | length > 30' "$ctx/security.json" >/dev/null || fail "в скане мало проверок"
+# Ошибок чтения на чистой системе быть не должно (кроме того, чего в контейнере нет по построению).
+jq -e '[.security_scan.checks[] | select(.state == "CHECK_STATE_ERROR")] | length == 0' "$ctx/security.json" >/dev/null ||
+	fail "проверки с ошибкой: $(jq -c '[.security_scan.checks[] | select(.state == "CHECK_STATE_ERROR") | {code, error, evidence}]' "$ctx/security.json")"
 jq -r '.security_scan.checks[] | "\(.code) \(.state) \(.subject // "") \(.error // "")"' "$ctx/security.json"
 jq -c '{updates: (.packages_list_updates.packages // [] | length), security: ([.packages_list_updates.packages[]? | select(.security)] | length)}' "$ctx/packages.json"
 
