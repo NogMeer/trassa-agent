@@ -8,8 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/backup"
@@ -74,12 +77,21 @@ func TestBackupInitAndRun(t *testing.T) {
 	_ = os.Rename(raw+".bz2", filepath.Join(stage, backup.ResticStaged))
 	arch, _ := os.ReadFile(filepath.Join(stage, backup.ResticStaged))
 	sum := sha256.Sum256(arch)
+	// Поддельный архив теста — временно в таблице агента (настоящие суммы — в backup.KnownTools).
+	prev := backup.KnownTools["restic"]["0.20.0"]
+	backup.KnownTools["restic"]["0.20.0"] = map[string]string{runtime.GOARCH: hex.EncodeToString(sum[:])}
+	t.Cleanup(func() { backup.KnownTools["restic"]["0.20.0"] = prev })
 	b.Params = &agentv1.OperationParams{Params: &agentv1.OperationParams_BackupInit{BackupInit: &agentv1.BackupInitParams{
 		PlanId: testPlan, ResticVersion: "0.20.0", ResticSha256: hex.EncodeToString(sum[:]),
 		ResticUrl: "https://github.com/restic/restic/releases/download/v0.20.0/restic_0.20.0_linux_amd64.bz2",
 		Repo: &agentv1.BackupRepo{Url: "s3:https://s3.example.com/bucket/p", Password: seal("password", "repo-pass-1"),
 			Env: map[string]*agentv1.SealedSecret{"AWS_SECRET_ACCESS_KEY": seal("env:AWS_SECRET_ACCESS_KEY", "aws-secret-1")}},
 	}}}
+	// Сумма не из таблицы агента — отказ до выполнения, ничего не ставится.
+	bad := proto.Clone(b).(*agentv1.OperationBody)
+	bad.OperationId, bad.Nonce = newUUID(), newNonce()
+	bad.GetParams().GetBackupInit().ResticSha256 = strings.Repeat("d", 64)
+	expectReject(t, f, sealed(bad), backup.CodeToolUnknown)
 	o := f.exec(sealed(b))
 	if o.result.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED || o.result.GetBackupInit().GetRepoExisted() {
 		t.Fatalf("init: %+v", o.result)
@@ -111,7 +123,7 @@ func TestBackupInitAndRun(t *testing.T) {
 		t.Fatalf("состояние бэкапов: %+v %v", st, err)
 	}
 	// Запрещённый путь — свой код отказа до выполнения.
-	bad := f.body(ops.TypeBackupRun, &agentv1.OperationParams{Params: &agentv1.OperationParams_BackupRun{BackupRun: &agentv1.BackupRunParams{
+	bad = f.body(ops.TypeBackupRun, &agentv1.OperationParams{Params: &agentv1.OperationParams_BackupRun{BackupRun: &agentv1.BackupRunParams{
 		PlanId: testPlan, Sources: []*agentv1.BackupSource{{Name: "x", Source: &agentv1.BackupSource_Path{Path: &agentv1.PathSource{Path: "/var/lib/trassa/helper"}}}},
 	}}})
 	expectReject(t, f, sealed(bad), backup.CodePathForbidden)

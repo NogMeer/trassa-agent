@@ -7,9 +7,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -69,7 +71,7 @@ func sealedOK() *agentv1.SealedSecret {
 
 func TestValidate(t *testing.T) {
 	repo := &agentv1.BackupRepo{Url: "s3:https://s3.example.com/b", Password: sealedOK(), Env: map[string]*agentv1.SealedSecret{"AWS_ACCESS_KEY_ID": sealedOK()}}
-	init := &agentv1.BackupInitParams{PlanId: planID, Repo: repo, ResticVersion: "0.20.0", ResticSha256: strings.Repeat("a", 64), ResticUrl: "https://github.com/restic/restic/releases/download/v0.20.0/restic_0.20.0_linux_amd64.bz2"}
+	init := &agentv1.BackupInitParams{PlanId: planID, Repo: repo, ResticVersion: "0.20.0", ResticSha256: KnownTools["restic"]["0.20.0"][runtime.GOARCH], ResticUrl: "https://github.com/restic/restic/releases/download/v0.20.0/restic_0.20.0_linux_amd64.bz2"}
 	if err := ValidateInit(init); err != nil {
 		t.Fatal(err)
 	}
@@ -136,11 +138,11 @@ func TestValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := "ssh-ed25519 " + strings.Repeat("A", 68) + " src"
-	tool := &agentv1.BackupTool{Version: "1.75.2", Sha256: strings.Repeat("b", 64), Url: "https://x.example/t.zip"}
-	if err := ValidateTargetEnsure(&agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "trassa-bk-a1", SourcePublicKey: key, SourceAddress: "10.0.0.5", Rclone: tool, Restic: tool}); err != nil {
+	rcl, res := knownTool("rclone", "1.75.2"), knownTool("restic", "0.20.0")
+	if err := ValidateTargetEnsure(&agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "trassa-bk-a1", SourcePublicKey: key, SourceAddress: "10.0.0.5", Rclone: rcl, Restic: res}); err != nil {
 		t.Fatal(err)
 	}
-	if ValidateTargetEnsure(&agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "root", SourcePublicKey: key, SourceAddress: "10.0.0.5", Rclone: tool, Restic: tool}) == nil {
+	if ValidateTargetEnsure(&agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "root", SourcePublicKey: key, SourceAddress: "10.0.0.5", Rclone: rcl, Restic: res}) == nil {
 		t.Fatal("чужой пользователь принят")
 	}
 	if ValidateBrowse(&agentv1.BackupBrowseParams{PlanId: planID, SnapshotId: "abcdef12", Path: "/", Limit: 1001}) == nil {
@@ -474,9 +476,16 @@ func TestInstallRestic(t *testing.T) {
 	_ = os.Rename(raw+".bz2", filepath.Join(stage, ResticStaged))
 	arch, _ := os.ReadFile(filepath.Join(stage, ResticStaged))
 	sum := sha256hex(arch)
-	if _, err := InstallRestic(context.Background(), stage, strings.Repeat("0", 64), "0.20.0", bin); !errors.Is(err, ErrResticChecksum) {
-		t.Fatalf("неверная сумма: %v", err)
+	// Сумма из таблицы агента, а архив другой — не ставится.
+	if _, err := InstallRestic(context.Background(), stage, KnownTools["restic"]["0.20.0"][runtime.GOARCH], "0.20.0", bin); !errors.Is(err, ErrResticChecksum) {
+		t.Fatalf("архив с другой суммой: %v", err)
 	}
+	// Сумма архива верна, но её нет в таблице — не ставится.
+	if _, err := InstallRestic(context.Background(), stage, sum, "0.20.0", bin); !errors.Is(err, ErrToolUnknown) {
+		t.Fatalf("сумма не из таблицы: %v", err)
+	}
+	withTool(t, "restic", "0.20.0", sum)
+	withTool(t, "restic", "0.19.1", sum)
 	if _, err := InstallRestic(context.Background(), stage, sum, "0.19.1", bin); err == nil {
 		t.Fatal("не та версия принята")
 	}
@@ -539,18 +548,18 @@ func TestTargetAppendOnly(t *testing.T) {
 
 func TestValidateTargetTools(t *testing.T) {
 	key := "ssh-ed25519 " + strings.Repeat("A", 68)
-	tool := &agentv1.BackupTool{Version: "1.75.2", Sha256: strings.Repeat("b", 64), Url: "https://github.com/rclone/rclone/releases/download/v1.75.2/rclone-v1.75.2-linux-amd64.zip"}
-	ok := &agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "trassa-bk-a1", SourcePublicKey: key, SourceAddress: "10.0.0.5", Rclone: tool, Restic: tool}
+	ok := &agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "trassa-bk-a1", SourcePublicKey: key, SourceAddress: "10.0.0.5",
+		Rclone: knownTool("rclone", "1.75.2"), Restic: knownTool("restic", "0.20.0")}
 	if err := ValidateTargetEnsure(ok); err != nil {
 		t.Fatal(err)
 	}
 	for name, mod := range map[string]func(p *agentv1.BackupTargetEnsureParams){
-		"без rclone": func(p *agentv1.BackupTargetEnsureParams) { p.Rclone = nil },
-		"http": func(p *agentv1.BackupTargetEnsureParams) {
-			p.Restic = &agentv1.BackupTool{Version: "0.20.0", Sha256: tool.Sha256, Url: "http://x/r.bz2"}
-		},
-		"пробел":  func(p *agentv1.BackupTargetEnsureParams) { p.Path = "/srv/b k" },
-		"кавычка": func(p *agentv1.BackupTargetEnsureParams) { p.Path = "/srv/b'k" },
+		"без rclone":   func(p *agentv1.BackupTargetEnsureParams) { p.Rclone = nil },
+		"http":         func(p *agentv1.BackupTargetEnsureParams) { p.Restic.Url = "http://x/r.bz2" },
+		"чужая сумма":  func(p *agentv1.BackupTargetEnsureParams) { p.Rclone.Sha256 = strings.Repeat("c", 64) },
+		"чужая версия": func(p *agentv1.BackupTargetEnsureParams) { p.Rclone.Version = "1.76.0" },
+		"пробел":       func(p *agentv1.BackupTargetEnsureParams) { p.Path = "/srv/b k" },
+		"кавычка":      func(p *agentv1.BackupTargetEnsureParams) { p.Path = "/srv/b'k" },
 	} {
 		p := proto.Clone(ok).(*agentv1.BackupTargetEnsureParams)
 		mod(p)
@@ -636,9 +645,14 @@ func TestInstallRclone(t *testing.T) {
 	_ = zw.Close()
 	_ = os.WriteFile(filepath.Join(stage, RcloneStaged), buf.Bytes(), 0o600)
 	sum := sha256hex(buf.Bytes())
-	if _, err := InstallRclone(context.Background(), stage, strings.Repeat("0", 64), "1.75.2", bin); !errors.Is(err, ErrResticChecksum) {
-		t.Fatalf("неверная сумма: %v", err)
+	if _, err := InstallRclone(context.Background(), stage, KnownTools["rclone"]["1.75.2"][runtime.GOARCH], "1.75.2", bin); !errors.Is(err, ErrResticChecksum) {
+		t.Fatalf("архив с другой суммой: %v", err)
 	}
+	if _, err := InstallRclone(context.Background(), stage, sum, "1.75.2", bin); !errors.Is(err, ErrToolUnknown) {
+		t.Fatalf("сумма не из таблицы: %v", err)
+	}
+	withTool(t, "rclone", "1.75.2", sum)
+	withTool(t, "rclone", "1.76.0", sum)
 	if _, err := InstallRclone(context.Background(), stage, sum, "1.76.0", bin); err == nil {
 		t.Fatal("не та версия принята")
 	}
@@ -702,5 +716,57 @@ func TestRestoreRejectsPatternPaths(t *testing.T) {
 		if !errors.Is(err, ErrPathForbidden) {
 			t.Errorf("%s: %v", id, err)
 		}
+	}
+}
+
+func knownTool(tool, version string) *agentv1.BackupTool {
+	return &agentv1.BackupTool{Version: version, Sha256: KnownTools[tool][version][runtime.GOARCH], Url: "https://x.example/" + tool}
+}
+
+// withTool — временно разрешить сумму в таблице (поддельные архивы тестов).
+func withTool(t *testing.T, tool, version, sha string) {
+	t.Helper()
+	prev, had := KnownTools[tool][version]
+	m := map[string]string{}
+	for k, v := range prev {
+		m[k] = v
+	}
+	m[runtime.GOARCH] = sha
+	KnownTools[tool][version] = m
+	t.Cleanup(func() {
+		if had {
+			KnownTools[tool][version] = prev
+		} else {
+			delete(KnownTools[tool], version)
+		}
+	})
+}
+
+// Суммы в коде совпадают с decisions E13 (монорепозиторий Trassa). Отдельный репозиторий агента decisions не
+// содержит — там проверка пропускается с причиной.
+func TestKnownToolsMatchDecisions(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", "plan", "decisions", "E13-backups.md"))
+	if errors.Is(err, os.ErrNotExist) {
+		t.Skip("decisions E13 нет рядом: агент вне монорепозитория Trassa")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	files := map[string]string{"restic": "restic_%s_linux_%s.bz2", "rclone": "rclone-v%s-linux-%s.zip"}
+	n := 0
+	for tool, versions := range KnownTools {
+		for v, arches := range versions {
+			for arch, sum := range arches {
+				row := "| `" + fmt.Sprintf(files[tool], v, arch) + "` | `" + sum + "` |"
+				if !strings.Contains(doc, row) {
+					t.Errorf("в decisions нет строки %s", row)
+				}
+				n++
+			}
+		}
+	}
+	if n != 4 {
+		t.Fatalf("в таблице %d сумм, ждали 4 (restic и rclone × amd64, arm64)", n)
 	}
 }

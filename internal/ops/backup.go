@@ -26,8 +26,11 @@ const (
 
 // pathCoded — запрещённый путь отклоняется своим кодом, а не общим PARAMS_INVALID.
 func pathCoded(err error) error {
-	if errors.Is(err, backup.ErrPathForbidden) {
+	switch {
+	case errors.Is(err, backup.ErrPathForbidden):
 		return &CodeError{Code: backup.CodePathForbidden, Err: err}
+	case errors.Is(err, backup.ErrToolUnknown):
+		return &CodeError{Code: backup.CodeToolUnknown, Err: err}
 	}
 	return err
 }
@@ -38,7 +41,7 @@ func backupSpecs() []Spec {
 		{
 			Type: TypeBackupInit, Class: Change, Rollback: config, Long: true,
 			match:    func(p *agentv1.OperationParams) bool { return p.GetBackupInit() != nil },
-			Validate: func(b *agentv1.OperationBody) error { return backup.ValidateInit(b.GetParams().GetBackupInit()) },
+			Validate: func(b *agentv1.OperationBody) error { return pathCoded(backup.ValidateInit(b.GetParams().GetBackupInit())) },
 		},
 		{
 			Type: TypeBackupRun, Class: Change, Rollback: none, Long: true,

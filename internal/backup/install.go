@@ -43,6 +43,9 @@ func ResticPath(binDir, version string) string { return filepath.Join(binDir, "r
 // подписанной в теле операции, распаковка не больше MaxResticBinary, бинарник root 0755, его версия совпадает.
 // Та же версия уже стоит и запускается — архив всё равно сверяется, но бинарник не переписывается.
 func InstallRestic(ctx context.Context, stageDir, wantSHA, version, binDir string) (string, error) {
+	if err := CheckTool("restic", version, wantSHA); err != nil {
+		return "", err
+	}
 	raw, err := update.ReadStaged(stageDir, ResticStaged, MaxResticArchive)
 	if err != nil {
 		return "", fmt.Errorf("агент не скачал restic: %w", err)
@@ -122,6 +125,9 @@ func RclonePath(binDir, version string) string { return filepath.Join(binDir, "r
 // InstallRclone ставит rclone из zip, который скачал агент: sha256 архива равна подписанной, в архиве ровно один
 // файл …/rclone не больше MaxRcloneBinary, бинарник root 0755 (его запускает пользователь цели), версия совпадает.
 func InstallRclone(ctx context.Context, stageDir, wantSHA, version, binDir string) (string, error) {
+	if err := CheckTool("rclone", version, wantSHA); err != nil {
+		return "", err
+	}
 	raw, err := update.ReadStaged(stageDir, RcloneStaged, MaxRcloneArchive)
 	if err != nil {
 		return "", fmt.Errorf("агент не скачал rclone: %w", err)

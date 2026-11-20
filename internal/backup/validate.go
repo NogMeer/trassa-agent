@@ -205,6 +205,9 @@ func ValidateInit(p *agentv1.BackupInitParams) error {
 	if !httpsURL(p.GetResticUrl()) {
 		return errors.New("restic_url")
 	}
+	if err := CheckTool("restic", p.GetResticVersion(), p.GetResticSha256()); err != nil {
+		return err
+	}
 	if k := p.GetSshHostKey(); k != "" && !hostKeyRe.MatchString(k) {
 		return errors.New("ssh_host_key")
 	}
@@ -437,6 +440,12 @@ func ValidateTargetEnsure(p *agentv1.BackupTargetEnsureParams) error {
 		return err
 	}
 	if err := checkTool(p.GetRestic(), "restic"); err != nil {
+		return err
+	}
+	if err := CheckTool("rclone", p.GetRclone().GetVersion(), p.GetRclone().GetSha256()); err != nil {
+		return err
+	}
+	if err := CheckTool("restic", p.GetRestic().GetVersion(), p.GetRestic().GetSha256()); err != nil {
 		return err
 	}
 	if !unixUserRe.MatchString(p.GetUnixUser()) {

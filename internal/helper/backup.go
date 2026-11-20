@@ -48,7 +48,7 @@ func backupCode(err error) string {
 	for _, known := range []error{
 		backup.ErrRepoExists, backup.ErrRepoPassword, backup.ErrRepoLocked, backup.ErrTargetDown,
 		backup.ErrSnapshotMissing, backup.ErrNoSpace, backup.ErrRollbackUnavailable, backup.ErrRestoreVerify,
-		backup.ErrResticChecksum, backup.ErrPathForbidden, backup.ErrNoPlan, backup.ErrTargetPrecondition,
+		backup.ErrResticChecksum, backup.ErrToolUnknown, backup.ErrPathForbidden, backup.ErrNoPlan, backup.ErrTargetPrecondition,
 		backup.ErrDeadline,
 	} {
 		if errors.Is(err, known) {
