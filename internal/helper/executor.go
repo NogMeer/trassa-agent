@@ -20,6 +20,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
 	"github.com/NogMeer/trassa-agent/internal/backup"
 	"github.com/NogMeer/trassa-agent/internal/config"
+	"github.com/NogMeer/trassa-agent/internal/deploy"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/logsrc"
 	"github.com/NogMeer/trassa-agent/internal/nonce"
@@ -99,6 +100,8 @@ type Executor struct {
 	// Access — доступ (E16); nil — ACCESS_UNAVAILABLE. Terminals — терминалы через помощник (E16).
 	Access    *access.Env
 	Terminals *Terminals
+	// Deploy — деплой (E17); nil — DEPLOY_UNAVAILABLE.
+	Deploy *deploy.Env
 
 	once     sync.Once
 	handlers map[string]handler

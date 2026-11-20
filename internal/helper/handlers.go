@@ -62,6 +62,9 @@ func (e *Executor) builtinHandlers() map[string]handler {
 	for _, code := range security.FixCodes() {
 		h[ops.FixPrefix+code] = handler{preview: e.previewFix, apply: e.applyFix}
 	}
+	for t, x := range e.deployHandlers() {
+		h[t] = x
+	}
 	for t, x := range e.accessHandlers() {
 		h[t] = x
 	}

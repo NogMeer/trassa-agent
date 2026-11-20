@@ -32,6 +32,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
 	"github.com/NogMeer/trassa-agent/internal/backup"
 	"github.com/NogMeer/trassa-agent/internal/config"
+	"github.com/NogMeer/trassa-agent/internal/deploy"
 	"github.com/NogMeer/trassa-agent/internal/dockerapi"
 	"github.com/NogMeer/trassa-agent/internal/helper"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
@@ -80,6 +81,11 @@ func main() {
 		}
 		e := wgEnv(config.Default())
 		err = errors.Join(e.SyncHosts(args[0]), e.Sync(ctx, args[0]))
+	case "proxy-sync":
+		// После отката маршрутов: документ Caddy по возвращённому состоянию (rollback.State.Commands).
+		if err = requireRoot(); err == nil {
+			err = deployEnv(config.Default()).SyncProxy(ctx)
+		}
 	case "wireguard-purge":
 		// При удалении агента: интерфейсы, правила DOCKER-USER, блоки имён и пересылка Trassa снимаются.
 		if err = requireRoot(); err == nil {
@@ -187,6 +193,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 			Docker: &dockerapi.Client{}, Run: backup.RunCommand, Look: backup.LookPath,
 		},
 		Access: &access.Env{Root: "/", Run: backup.RunCommand},
+		Deploy: deployEnv(p),
 		Terminals: &helper.Terminals{Units: terminal.Systemd{}, OpenPTY: terminal.OpenPTY, Locales: func(ctx context.Context) []string {
 			out, _ := backup.RunCommand(ctx, "locale", "-a")
 			return strings.Fields(string(out))
@@ -330,4 +337,10 @@ func wgEnv(p config.Paths) *wireguard.Env {
 			return ps, names, nil
 		},
 	}
+}
+
+// deployEnv — деплой (E17): Docker, прокси Caddy; программы скачивает агент в каталог операции.
+func deployEnv(p config.Paths) *deploy.Env {
+	return &deploy.Env{Root: "/", Docker: &dockerapi.Client{}, Run: backup.RunCommand,
+		Stage: func(op string) string { return helper.StageDir(p, op) }, StateDir: filepath.Join(p.StateDir, "deploy")}
 }

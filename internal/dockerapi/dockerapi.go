@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package dockerapi — клиент Docker Engine API по Unix-сокету для помощника (root): инвентарь и журналы
-// контейнеров (E05, E08-T15). Только GET, свой клиент на net/http, без SDK Docker.
+// контейнеров (E05, E08-T15), деплой (E17). Свой клиент на net/http, без SDK Docker.
 package dockerapi
 
 import (
@@ -41,6 +41,12 @@ func (c *Client) socket() string {
 // Get выполняет GET path (без префикса версии) с договорённой версией API. Тело закрывает вызывающий.
 // Сроки задаёт ctx.
 func (c *Client) Get(ctx context.Context, path string) (*http.Response, error) {
+	return c.Do(ctx, http.MethodGet, path, nil, nil)
+}
+
+// Do — запрос method path с телом body (JSON, nil — без тела) и заголовками hdr (X-Registry-Auth). Деплой E17:
+// POST и DELETE; параметры контейнера помощник собирает из типизированных полей, не из сырого JSON панели.
+func (c *Client) Do(ctx context.Context, method, path string, body io.Reader, hdr map[string]string) (*http.Response, error) {
 	sock := c.socket()
 	if _, err := os.Stat(sock); errors.Is(err, os.ErrNotExist) {
 		return nil, ErrNoDocker
@@ -52,19 +58,25 @@ func (c *Client) Get(ctx context.Context, path string) (*http.Response, error) {
 		},
 		DisableKeepAlives: true,
 	}}
-	get := func(p string) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker"+p, nil)
+	do := func(m, p string, b io.Reader) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, m, "http://docker"+p, b)
 		if err != nil {
 			return nil, err
 		}
+		if b != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
 		return hc.Do(req)
 	}
-	resp, err := get("/_ping")
+	resp, err := do(http.MethodGet, "/_ping", nil)
 	if err != nil {
 		return nil, err
 	}
 	resp.Body.Close()
-	return get("/v" + Version(resp.Header.Get("Api-Version")) + path)
+	return do(method, "/v"+Version(resp.Header.Get("Api-Version"))+path, body)
 }
 
 // Version — min(MaxAPI, версия демона); пустой или кривой заголовок — MaxAPI.
