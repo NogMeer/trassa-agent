@@ -287,3 +287,11 @@ func (f *fixture) state(op string) *OpState {
 	}
 	return st
 }
+
+// Автооткат дольше предела каталога — отказ проверки 6 до выполнения: сервер без связи не должен ждать часами.
+func TestConfirmWithinAboveMax(t *testing.T) {
+	f := newFixture(t)
+	b := f.configWrite(f.target("old"), "new", false, ops.MaxConfirmWithin+1)
+	b.GetParams().GetTestConfigWrite().ConfirmWithin = 30 // предел — по полю тела, а не по параметрам типа
+	expectReject(t, f, sealed(b), ops.CodeParamsInvalid)
+}

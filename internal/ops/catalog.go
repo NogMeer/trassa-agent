@@ -173,6 +173,9 @@ func CheckParams(spec Spec, b *agentv1.OperationBody) error {
 	if !spec.AutoRollback && b.GetConfirmWithinSec() != 0 {
 		return errors.New("confirm_within у типа без автооткатa")
 	}
+	if b.GetConfirmWithinSec() > MaxConfirmWithin {
+		return fmt.Errorf("confirm_within %d больше предела %d", b.GetConfirmWithinSec(), MaxConfirmWithin)
+	}
 	return spec.Validate(b)
 }
 
