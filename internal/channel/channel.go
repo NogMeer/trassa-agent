@@ -460,8 +460,8 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 			defer os.RemoveAll(dir)
 		}
 	}
-	if body.GetType() == ops.TypeBackupInit && !body.GetDryRun() {
-		if dir := a.stageRestic(context.WithoutCancel(sctx), &body); dir != "" {
+	if (body.GetType() == ops.TypeBackupInit || body.GetType() == ops.TypeBackupTargetEnsure) && !body.GetDryRun() {
+		if dir := a.stageBackupTools(context.WithoutCancel(sctx), &body); dir != "" {
 			defer os.RemoveAll(dir)
 		}
 	}
@@ -503,30 +503,44 @@ func (a *Agent) stageUpdate(ctx context.Context, b *agentv1.OperationBody) strin
 	return dir
 }
 
-// stageRestic скачивает архив restic для backup.init в каталог операции: помощник сверяет его sha256 с подписанной
-// и ставит сам. Сбой загрузки не останавливает передачу операции — помощник вернёт понятную ошибку.
-func (a *Agent) stageRestic(ctx context.Context, b *agentv1.OperationBody) string {
+// stageBackupTools скачивает архивы программ бэкапа в каталог операции (backup.init — restic; backup.target.ensure
+// — rclone и restic): помощник сверяет их sha256 с подписанными и ставит сам. Сбой загрузки не останавливает
+// передачу операции — помощник вернёт понятную ошибку.
+func (a *Agent) stageBackupTools(ctx context.Context, b *agentv1.OperationBody) string {
 	if a.cfg.UpdateDir == "" || !config.IsUUID(b.GetOperationId()) {
 		return ""
+	}
+	type download struct {
+		url string
+		max int64
+	}
+	files := map[string]download{}
+	if p := b.GetParams().GetBackupInit(); p != nil {
+		files[backup.ResticStaged] = download{p.GetResticUrl(), backup.MaxResticArchive}
+	}
+	if p := b.GetParams().GetBackupTargetEnsure(); p != nil {
+		files[backup.ResticStaged] = download{p.GetRestic().GetUrl(), backup.MaxResticArchive}
+		files[backup.RcloneStaged] = download{p.GetRclone().GetUrl(), backup.MaxRcloneArchive}
 	}
 	dir := filepath.Join(a.cfg.UpdateDir, strings.ToLower(b.GetOperationId()))
 	dctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	err := func() error {
-		if err := os.RemoveAll(dir); err != nil {
-			return err
+	if err := os.RemoveAll(dir); err != nil {
+		a.cfg.Log.Warn("каталог загрузки", "err", err)
+		return ""
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		a.cfg.Log.Warn("каталог загрузки", "err", err)
+		return ""
+	}
+	for name, f := range files {
+		raw, err := update.Fetch(dctx, a.cfg.HTTPClient, f.url, f.max)
+		if err == nil {
+			err = fsutil.WriteFileAtomic(filepath.Join(dir, name), raw, 0o600, fsutil.Keep)
 		}
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return err
-		}
-		raw, err := update.Fetch(dctx, a.cfg.HTTPClient, b.GetParams().GetBackupInit().GetResticUrl(), backup.MaxResticArchive)
 		if err != nil {
-			return err
+			a.cfg.Log.Warn("программа бэкапа не скачана", "op", b.GetOperationId(), "file", name, "err", err)
 		}
-		return fsutil.WriteFileAtomic(filepath.Join(dir, backup.ResticStaged), raw, 0o600, fsutil.Keep)
-	}()
-	if err != nil {
-		a.cfg.Log.Warn("restic не скачан", "op", b.GetOperationId(), "err", err)
 	}
 	return dir
 }

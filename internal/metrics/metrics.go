@@ -17,6 +17,7 @@ import (
 	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/backupstatus"
 )
 
 // Лимиты E08 (раздел 4) и канала (раздел 6).
@@ -42,6 +43,8 @@ type Collector struct {
 	// IsDir — точка монтирования каталог; файлы, смонтированные поверх файлов (/etc/hostname в контейнере),
 	// не разделы. nil — не проверять.
 	IsDir func(path string) bool
+	// BackupStatus — файл времени бэкапов (E13): backup_last_success_age_seconds; "" — метрики нет.
+	BackupStatus string
 
 	prevCPU  *cpuTimes
 	prevNet  map[string][2]uint64
@@ -49,7 +52,9 @@ type Collector struct {
 }
 
 // New — сборщик реальной системы.
-func New() *Collector { return &Collector{Proc: "/proc", Sys: "/sys", Statfs: statfs, IsDir: isDir} }
+func New() *Collector {
+	return &Collector{Proc: "/proc", Sys: "/sys", Statfs: statfs, IsDir: isDir, BackupStatus: backupstatus.Path}
+}
 
 func isDir(p string) bool {
 	fi, err := os.Stat(p)
@@ -145,6 +150,13 @@ func (c *Collector) Collect(now time.Time) (*agentv1.MetricsBatch, []error) {
 			}
 		}
 		c.prevNet = cur
+	}
+	if c.BackupStatus != "" {
+		if st, err := backupstatus.Read(c.BackupStatus); err != nil {
+			fail("backup", err)
+		} else if age, ok := st.Age(now); ok {
+			add("backup_last_success_age_seconds", age, nil)
+		}
 	}
 	c.prevTime = now
 	if len(out) > MaxPoints {

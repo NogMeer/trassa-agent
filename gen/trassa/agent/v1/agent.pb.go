@@ -2956,6 +2956,7 @@ type OperationResult struct {
 	//	*OperationResult_BackupSnapshots
 	//	*OperationResult_BackupBrowse
 	//	*OperationResult_BackupPrune
+	//	*OperationResult_BackupTargetEnsure
 	Data          isOperationResult_Data `protobuf_oneof:"data"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3225,6 +3226,15 @@ func (x *OperationResult) GetBackupPrune() *BackupPruneResult {
 	return nil
 }
 
+func (x *OperationResult) GetBackupTargetEnsure() *BackupTargetEnsureResult {
+	if x != nil {
+		if x, ok := x.Data.(*OperationResult_BackupTargetEnsure); ok {
+			return x.BackupTargetEnsure
+		}
+	}
+	return nil
+}
+
 type isOperationResult_Data interface {
 	isOperationResult_Data()
 }
@@ -3305,6 +3315,10 @@ type OperationResult_BackupPrune struct {
 	BackupPrune *BackupPruneResult `protobuf:"bytes,38,opt,name=backup_prune,json=backupPrune,proto3,oneof"`
 }
 
+type OperationResult_BackupTargetEnsure struct {
+	BackupTargetEnsure *BackupTargetEnsureResult `protobuf:"bytes,39,opt,name=backup_target_ensure,json=backupTargetEnsure,proto3,oneof"`
+}
+
 func (*OperationResult_SystemInfo) isOperationResult_Data() {}
 
 func (*OperationResult_SystemInventory) isOperationResult_Data() {}
@@ -3342,6 +3356,8 @@ func (*OperationResult_BackupSnapshots) isOperationResult_Data() {}
 func (*OperationResult_BackupBrowse) isOperationResult_Data() {}
 
 func (*OperationResult_BackupPrune) isOperationResult_Data() {}
+
+func (*OperationResult_BackupTargetEnsure) isOperationResult_Data() {}
 
 // Подтверждение приёма кадра агента: агент перестаёт досылать результат после InboundAck с этим seq.
 type InboundAck struct {
@@ -4950,7 +4966,7 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x05phase\x18\x03 \x01(\x0e2\x1f.trassa.agent.v1.OperationPhaseR\x05phase\x122\n" +
 	"\x06stream\x18\x04 \x01(\x0e2\x1a.trassa.agent.v1.LogStreamR\x06stream\x12\x14\n" +
 	"\x05chunk\x18\x05 \x01(\tR\x05chunk\x127\n" +
-	"\x06backup\x18\x06 \x01(\v2\x1f.trassa.agent.v1.BackupProgressR\x06backup\"\xba\x0e\n" +
+	"\x06backup\x18\x06 \x01(\v2\x1f.trassa.agent.v1.BackupProgressR\x06backup\"\x99\x0f\n" +
 	"\x0fOperationResult\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12;\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2!.trassa.agent.v1.OperationOutcomeR\aoutcome\x12\x1d\n" +
@@ -4982,7 +4998,8 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x0fbackup_discover\x18# \x01(\v2%.trassa.agent.v1.BackupDiscoverResultH\x00R\x0ebackupDiscover\x12S\n" +
 	"\x10backup_snapshots\x18$ \x01(\v2&.trassa.agent.v1.BackupSnapshotsResultH\x00R\x0fbackupSnapshots\x12J\n" +
 	"\rbackup_browse\x18% \x01(\v2#.trassa.agent.v1.BackupBrowseResultH\x00R\fbackupBrowse\x12G\n" +
-	"\fbackup_prune\x18& \x01(\v2\".trassa.agent.v1.BackupPruneResultH\x00R\vbackupPruneB\x06\n" +
+	"\fbackup_prune\x18& \x01(\v2\".trassa.agent.v1.BackupPruneResultH\x00R\vbackupPrune\x12]\n" +
+	"\x14backup_target_ensure\x18' \x01(\v2).trassa.agent.v1.BackupTargetEnsureResultH\x00R\x12backupTargetEnsureB\x06\n" +
 	"\x04data\"\x1e\n" +
 	"\n" +
 	"InboundAck\x12\x10\n" +
@@ -5293,6 +5310,7 @@ var file_trassa_agent_v1_agent_proto_goTypes = []any{
 	(*BackupSnapshotsResult)(nil),        // 98: trassa.agent.v1.BackupSnapshotsResult
 	(*BackupBrowseResult)(nil),           // 99: trassa.agent.v1.BackupBrowseResult
 	(*BackupPruneResult)(nil),            // 100: trassa.agent.v1.BackupPruneResult
+	(*BackupTargetEnsureResult)(nil),     // 101: trassa.agent.v1.BackupTargetEnsureResult
 }
 var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	14,  // 0: trassa.agent.v1.AgentMessage.hello:type_name -> trassa.agent.v1.Hello
@@ -5381,30 +5399,31 @@ var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	98,  // 83: trassa.agent.v1.OperationResult.backup_snapshots:type_name -> trassa.agent.v1.BackupSnapshotsResult
 	99,  // 84: trassa.agent.v1.OperationResult.backup_browse:type_name -> trassa.agent.v1.BackupBrowseResult
 	100, // 85: trassa.agent.v1.OperationResult.backup_prune:type_name -> trassa.agent.v1.BackupPruneResult
-	37,  // 86: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
-	7,   // 87: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
-	2,   // 88: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
-	41,  // 89: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
-	42,  // 90: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
-	43,  // 91: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
-	45,  // 92: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
-	57,  // 93: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
-	8,   // 94: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
-	58,  // 95: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
-	49,  // 96: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
-	10,  // 97: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
-	9,   // 98: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
-	48,  // 99: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
-	59,  // 100: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
-	48,  // 101: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
-	50,  // 102: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
-	49,  // 103: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
-	60,  // 104: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
-	105, // [105:105] is the sub-list for method output_type
-	105, // [105:105] is the sub-list for method input_type
-	105, // [105:105] is the sub-list for extension type_name
-	105, // [105:105] is the sub-list for extension extendee
-	0,   // [0:105] is the sub-list for field type_name
+	101, // 86: trassa.agent.v1.OperationResult.backup_target_ensure:type_name -> trassa.agent.v1.BackupTargetEnsureResult
+	37,  // 87: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
+	7,   // 88: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
+	2,   // 89: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
+	41,  // 90: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
+	42,  // 91: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
+	43,  // 92: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
+	45,  // 93: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
+	57,  // 94: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
+	8,   // 95: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
+	58,  // 96: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
+	49,  // 97: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
+	10,  // 98: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
+	9,   // 99: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
+	48,  // 100: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
+	59,  // 101: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
+	48,  // 102: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
+	50,  // 103: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
+	49,  // 104: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
+	60,  // 105: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
+	106, // [106:106] is the sub-list for method output_type
+	106, // [106:106] is the sub-list for method input_type
+	106, // [106:106] is the sub-list for extension type_name
+	106, // [106:106] is the sub-list for extension extendee
+	0,   // [0:106] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_agent_proto_init() }
@@ -5491,6 +5510,7 @@ func file_trassa_agent_v1_agent_proto_init() {
 		(*OperationResult_BackupSnapshots)(nil),
 		(*OperationResult_BackupBrowse)(nil),
 		(*OperationResult_BackupPrune)(nil),
+		(*OperationResult_BackupTargetEnsure)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

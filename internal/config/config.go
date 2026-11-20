@@ -55,6 +55,7 @@ type Paths struct {
 	HelperBin       string // /var/lib/trassa/helper/bin: restic-<версия>
 	BackupWorkDir   string // /var/lib/trassa/backup: restore-test, restore, localcopy
 	CacheDir        string // /var/cache/trassa: кэш restic
+	TargetBin       string // /usr/local/lib/trassa: rclone и restic цели бэкапов (0755: их запускает пользователь цели)
 }
 
 // Default — пути на сервере.
@@ -87,6 +88,7 @@ func Under(root string) Paths {
 		HelperBin:       j("var/lib/trassa/helper/bin"),
 		BackupWorkDir:   j("var/lib/trassa/backup"),
 		CacheDir:        j("var/cache/trassa"),
+		TargetBin:       j("usr/local/lib/trassa"),
 	}
 }
 

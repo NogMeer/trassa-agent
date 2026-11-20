@@ -79,6 +79,9 @@ message BackupInitParams {
   string restic_url = 5;
   // Цель SERVER: создать пару ключей SSH на источнике.
   bool ssh_keypair = 6;
+  // Цель SERVER: открытый ключ хоста цели ("ssh-ed25519 AAAA…" из BackupTargetEnsureResult.host_public_key) —
+  // known_hosts плана закрепляется им, первое соединение не доверяется вслепую.
+  string ssh_host_key = 7;
 }
 
 message BackupInitResult {
@@ -222,6 +225,9 @@ message BackupPruneParams {
   string plan_id = 1;
   Retention retention = 2;
   BackupRepo maintenance_repo = 3;
+  // Цель SERVER: чистка на самом сервере-цели по каталогу цели этого пользователя (полный доступ — только
+  // локально у root цели; ключ источника — «только добавление»). Тогда maintenance_repo.url пустой.
+  string target_unix_user = 4;
 }
 
 message BackupPruneResult {
@@ -229,12 +235,41 @@ message BackupPruneResult {
   uint64 freed_bytes = 2;
 }
 
-// backup.target.ensure (DESTRUCTIVE, на сервере-цели).
+// Внешняя программа для цели: версия, sha256 архива выпуска (hex) и адрес загрузки (скачивает агент).
+message BackupTool {
+  string version = 1;
+  string sha256 = 2;
+  string url = 3;
+}
+
+// Права ключа на репозиторий цели.
+enum BackupAccess {
+  BACKUP_ACCESS_UNSPECIFIED = 0;
+  // Добавление; удалять можно только блокировки (rclone serve restic --append-only).
+  BACKUP_ACCESS_APPEND_ONLY = 1;
+  BACKUP_ACCESS_FULL = 2;
+}
+
+// backup.target.ensure (DESTRUCTIVE, на сервере-цели). Ключ источника получает только «добавление»:
+// принудительная команда rclone serve restic --stdio --append-only по SSH, без оболочки и сетевого порта.
+// Источник подключается как rclone:<unix_user>@<адрес>:repo с rclone.program = ssh.
 message BackupTargetEnsureParams {
   string path = 1;
   string unix_user = 2;
   string source_public_key = 3;
   string source_address = 4;
+  // rclone (zip выпуска) — принудительная команда ключа источника; restic (bz2) — для backup.prune на цели.
+  BackupTool rclone = 5;
+  BackupTool restic = 6;
+}
+
+message BackupTargetEnsureResult {
+  BackupAccess access = 1;
+  // Каталог репозитория на цели.
+  string repo_path = 2;
+  uint64 free_bytes = 3;
+  // Открытый ключ хоста цели (ssh-ed25519) — для BackupInitParams.ssh_host_key источника.
+  string host_public_key = 4;
 }
 
 // backup.target.remove (DESTRUCTIVE).

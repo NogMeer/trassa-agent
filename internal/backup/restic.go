@@ -49,6 +49,8 @@ type Restic struct {
 	KnownHosts   string
 	// Nice — приоритет процесса (0 — не менять): бэкап не отнимает процессор у рабочих служб.
 	Nice int
+	// Credential — запуск от пользователя цели (чистка локального репозитория цели: файлы остаются его).
+	Credential *syscall.Credential
 }
 
 // Exit — итог команды: код и сообщение exit_error (без секретов).
@@ -86,30 +88,48 @@ func (r *Restic) env() ([]string, error) {
 	return env, nil
 }
 
-// sftpArgs — для sftp: своя команда ssh: ключ плана, свой known_hosts, только по ключу, без переадресаций.
-func (r *Restic) sftpArgs() ([]string, error) {
-	if !strings.HasPrefix(r.Repo.URL, "sftp:") {
+// sshArgs — для sftp: и rclone: своя команда ssh: ключ плана, свой known_hosts, только по ключу, без
+// переадресаций. Ключ хоста закреплён (known_hosts не пуст) — StrictHostKeyChecking=yes, иначе accept-new.
+// rclone: (цель SERVER) — rclone.program = ssh: на цели принудительная команда rclone serve restic
+// --append-only, аргументы с этой стороны не значат ничего.
+func (r *Restic) sshArgs() ([]string, error) {
+	var rest string
+	switch {
+	case strings.HasPrefix(r.Repo.URL, "sftp:"):
+		rest = strings.TrimPrefix(r.Repo.URL, "sftp:")
+	case strings.HasPrefix(r.Repo.URL, "rclone:"):
+		rest = strings.TrimPrefix(r.Repo.URL, "rclone:")
+	default:
 		return nil, nil
 	}
-	rest := strings.TrimPrefix(r.Repo.URL, "sftp:")
 	at := strings.IndexByte(rest, ':')
 	if at < 0 {
-		return nil, errors.New("адрес sftp")
+		return nil, errors.New("адрес ssh")
 	}
 	userHost := rest[:at]
 	if r.SSHKey == "" || r.KnownHosts == "" {
-		return nil, errors.New("sftp: нет ключа плана")
+		return nil, errors.New("ssh: нет ключа плана")
+	}
+	strict := "accept-new"
+	if st, err := os.Stat(r.KnownHosts); err == nil && st.Size() > 0 {
+		strict = "yes"
 	}
 	cmd := []string{"ssh", "-i", r.SSHKey, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
-		"-o", "UserKnownHostsFile=" + r.KnownHosts, "-o", "StrictHostKeyChecking=accept-new",
+		"-o", "UserKnownHostsFile=" + r.KnownHosts, "-o", "StrictHostKeyChecking=" + strict,
 		"-o", "ServerAliveInterval=60", "-o", "ServerAliveCountMax=240",
-		"-o", "ClearAllForwardings=yes", userHost, "-s", "sftp"}
+		"-o", "ClearAllForwardings=yes", userHost}
+	if strings.HasPrefix(r.Repo.URL, "sftp:") {
+		cmd = append(cmd, "-s", "sftp")
+	}
 	for _, c := range cmd {
 		if strings.ContainsAny(c, " \t\"'\\") {
-			return nil, fmt.Errorf("sftp: недопустимый символ в %q", c)
+			return nil, fmt.Errorf("ssh: недопустимый символ в %q", c)
 		}
 	}
-	return []string{"-o", "sftp.command=" + strings.Join(cmd, " ")}, nil
+	if strings.HasPrefix(r.Repo.URL, "sftp:") {
+		return []string{"-o", "sftp.command=" + strings.Join(cmd, " ")}, nil
+	}
+	return []string{"-o", "rclone.program=" + strings.Join(cmd, " "), "-o", "rclone.args=serve restic --stdio"}, nil
 }
 
 // Command — подготовленный запуск: аргументы после глобальных опций.
@@ -137,7 +157,7 @@ func (r *Restic) Run(ctx context.Context, c Command) error {
 	if !c.Raw {
 		args = append(args, "--json")
 	}
-	sa, err := r.sftpArgs()
+	sa, err := r.sshArgs()
 	if err != nil {
 		return err
 	}
@@ -155,7 +175,7 @@ func (r *Restic) Run(ctx context.Context, c Command) error {
 	cmd.Env = env
 	cmd.Dir = "/"
 	cmd.Stdin = c.Stdin
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Credential: r.Credential}
 	// Срок: SIGTERM всей группе (restic завершается чисто и снимка не оставляет), через StopGrace — SIGKILL.
 	cmd.Cancel = func() error { return unix.Kill(-cmd.Process.Pid, unix.SIGTERM) }
 	cmd.WaitDelay = StopGrace

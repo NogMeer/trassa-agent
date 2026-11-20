@@ -345,6 +345,7 @@ message OperationResult {
     BackupSnapshotsResult backup_snapshots = 36;
     BackupBrowseResult backup_browse = 37;
     BackupPruneResult backup_prune = 38;
+    BackupTargetEnsureResult backup_target_ensure = 39;
   }
 }
 

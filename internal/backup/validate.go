@@ -47,6 +47,8 @@ var (
 	sha256Re   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	unixUserRe = regexp.MustCompile(`^trassa-bk-[a-z0-9]{1,20}$`)
 	pubKeyRe   = regexp.MustCompile(`^ssh-ed25519 [A-Za-z0-9+/]{68}(?: [^\n\r\x00]{0,100})?$`)
+	rcloneRe   = regexp.MustCompile(`^rclone:[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9.-]{1,253}:[A-Za-z0-9/_.-]{1,256}$`)
+	hostKeyRe  = regexp.MustCompile(`^ssh-ed25519 [A-Za-z0-9+/]{68}$`)
 	sftpRe     = regexp.MustCompile(`^sftp:[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9.-]{1,253}:/[^\x00]+$`) // длина адреса — до 2048 (RepoURL)
 )
 
@@ -139,7 +141,7 @@ func RepoURL(u string) error {
 		return httpURL(u[3:], "https")
 	case strings.HasPrefix(u, "rest:"):
 		return httpURL(u[5:], "https", "http")
-	case sftpRe.MatchString(u):
+	case sftpRe.MatchString(u), rcloneRe.MatchString(u):
 		return nil
 	}
 	return errors.New("адрес репозитория")
@@ -200,10 +202,33 @@ func ValidateInit(p *agentv1.BackupInitParams) error {
 	if !versionRe.MatchString(p.GetResticVersion()) || !sha256Re.MatchString(p.GetResticSha256()) {
 		return errors.New("restic_version, restic_sha256")
 	}
-	if x, err := url.Parse(p.GetResticUrl()); err != nil || x.Scheme != "https" || x.User != nil || x.Hostname() == "" {
+	if !httpsURL(p.GetResticUrl()) {
 		return errors.New("restic_url")
 	}
+	if k := p.GetSshHostKey(); k != "" && !hostKeyRe.MatchString(k) {
+		return errors.New("ssh_host_key")
+	}
 	return nil
+}
+
+func httpsURL(u string) bool {
+	x, err := url.Parse(u)
+	return err == nil && x.Scheme == "https" && x.User == nil && x.Hostname() != "" && len(u) <= 2048
+}
+
+func checkTool(t *agentv1.BackupTool, what string) error {
+	if t == nil || !versionRe.MatchString(t.GetVersion()) || !sha256Re.MatchString(t.GetSha256()) || !httpsURL(t.GetUrl()) {
+		return fmt.Errorf("%s: версия, sha256 или адрес", what)
+	}
+	return nil
+}
+
+// plainPath — путь без пробелов и кавычек: он попадает в строку ForceCommand sshd.
+func plainPath(p string) error {
+	if strings.ContainsAny(p, " \t\"'\\") {
+		return fmt.Errorf("%w: в пути цели пробел или кавычка", ErrPathForbidden)
+	}
+	return checkPath(p)
 }
 
 func checkSource(s *agentv1.BackupSource) error {
@@ -386,12 +411,29 @@ func ValidatePrune(p *agentv1.BackupPruneParams) error {
 	if r.GetKeepLast() == 0 && r.GetKeepWithinDaily() == "" && r.GetKeepWithinWeekly() == "" && r.GetKeepWithinMonthly() == "" {
 		return errors.New("retention: пустая политика (R1)")
 	}
+	if u := p.GetTargetUnixUser(); u != "" {
+		// Чистка на цели: репозиторий — каталог цели этого пользователя, адреса нет; пароль — секретом.
+		if !unixUserRe.MatchString(u) {
+			return errors.New("target_unix_user")
+		}
+		m := p.GetMaintenanceRepo()
+		if m.GetUrl() != "" || len(m.GetEnv()) > 0 {
+			return errors.New("maintenance_repo: у чистки на цели нет адреса и переменных")
+		}
+		return checkSealed(m.GetPassword(), "maintenance_repo.password")
+	}
 	return checkRepo(p.GetMaintenanceRepo(), "maintenance_repo")
 }
 
 // ValidateTargetEnsure — backup.target.ensure.
 func ValidateTargetEnsure(p *agentv1.BackupTargetEnsureParams) error {
-	if err := checkPath(p.GetPath()); err != nil {
+	if err := plainPath(p.GetPath()); err != nil {
+		return err
+	}
+	if err := checkTool(p.GetRclone(), "rclone"); err != nil {
+		return err
+	}
+	if err := checkTool(p.GetRestic(), "restic"); err != nil {
 		return err
 	}
 	if !unixUserRe.MatchString(p.GetUnixUser()) {
@@ -411,7 +453,7 @@ func ValidateTargetRemove(p *agentv1.BackupTargetRemoveParams) error {
 	if !unixUserRe.MatchString(p.GetUnixUser()) {
 		return errors.New("unix_user")
 	}
-	return checkPath(p.GetPath())
+	return plainPath(p.GetPath())
 }
 
 // ValidateUnconfigure — backup.unconfigure.

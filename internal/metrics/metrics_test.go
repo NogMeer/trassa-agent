@@ -13,6 +13,7 @@ import (
 	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/backupstatus"
 )
 
 // Образцы — фрагменты настоящих файлов Ubuntu 24.04 и Debian 12.
@@ -241,5 +242,39 @@ func TestIfaceLimit(t *testing.T) {
 	got := (&Collector{Sys: sys}).ifaces(cur)
 	if len(got) != MaxIfaces || got[0] != "eth0" {
 		t.Fatalf("%v", got)
+	}
+}
+
+// Время бэкапов (E13): метрика есть, когда помощник ведёт файл; нет файла — нет метрики и нет ошибки.
+func TestBackupAgeMetric(t *testing.T) {
+	dir := t.TempDir()
+	status := filepath.Join(dir, "status.json")
+	now := time.UnixMilli(1_800_000_000_000)
+	c := &Collector{Proc: dir, Sys: dir, Statfs: func(string) (FS, error) { return FS{}, nil }, BackupStatus: status}
+	find := func(b *agentv1.MetricsBatch) (float64, bool) {
+		for _, m := range b.GetMetrics() {
+			if m.GetName() == "backup_last_success_age_seconds" {
+				return m.GetValue(), true
+			}
+		}
+		return 0, false
+	}
+	b, errs := c.Collect(now)
+	if _, ok := find(b); ok {
+		t.Fatal("метрика без файла")
+	}
+	for _, e := range errs {
+		if strings.HasPrefix(e.Error(), "backup") {
+			t.Fatalf("ошибка без файла: %v", e)
+		}
+	}
+	if err := backupstatus.Update(status, func(f *backupstatus.File) {
+		f.Plans["p"] = backupstatus.Plan{ConfiguredMs: now.Add(-time.Hour).UnixMilli(), LastSuccessMs: now.Add(-90 * time.Second).UnixMilli()}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = c.Collect(now)
+	if v, ok := find(b); !ok || v != 90 {
+		t.Fatalf("возраст %v %v", v, ok)
 	}
 }

@@ -181,9 +181,11 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		Secrets:   secrets,
 		Backup: &backup.Env{
 			Store: backup.Store{Dir: p.BackupDir}, BinDir: p.HelperBin, CacheDir: filepath.Join(p.CacheDir, "restic"),
-			WorkDir: p.BackupWorkDir, Docker: &dockerapi.Client{}, Run: backup.RunCommand, Look: backup.LookPath,
+			WorkDir: p.BackupWorkDir, StatusPath: filepath.Join(p.BackupWorkDir, "status.json"),
+			Docker: &dockerapi.Client{}, Run: backup.RunCommand, Look: backup.LookPath,
 		},
-		BackupTarget: &backup.Target{Root: "/", Run: backup.RunCommand},
+		BackupTarget: &backup.Target{Root: "/", BinDir: p.TargetBin, Run: backup.RunCommand,
+			StageDir: func(op string) string { return helper.StageDir(p, op) }},
 	}
 	if err := ex.CheckHandlers(); err != nil {
 		n.Close()

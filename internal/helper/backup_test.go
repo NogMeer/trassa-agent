@@ -13,6 +13,7 @@ import (
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/backup"
+	"github.com/NogMeer/trassa-agent/internal/backupstatus"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	secretkey "github.com/NogMeer/trassa-agent/internal/sealed"
 )
@@ -40,7 +41,8 @@ func (f *fixture) enableBackup(t *testing.T) *secretkey.Key {
 	f.e.Secrets = k
 	f.e.Backup = &backup.Env{
 		Store: backup.Store{Dir: f.paths.BackupDir}, BinDir: f.paths.HelperBin, CacheDir: filepath.Join(f.paths.CacheDir, "restic"),
-		WorkDir: f.paths.BackupWorkDir, Look: func(n string) (string, error) { return "/usr/bin/" + n, nil },
+		WorkDir: f.paths.BackupWorkDir, StatusPath: filepath.Join(f.paths.BackupWorkDir, "status.json"),
+		Look: func(n string) (string, error) { return "/usr/bin/" + n, nil },
 	}
 	return k
 }
@@ -103,6 +105,11 @@ func TestBackupInitAndRun(t *testing.T) {
 	if src := o.result.GetBackupRun().GetSources(); len(src) != 1 || src[0].GetSnapshotId() != "ffffffff55" || src[0].GetBytesAdded() != 42 {
 		t.Fatalf("run: %+v", o.result.GetBackupRun())
 	}
+	// Метрика: успешный запуск записан для агента.
+	st, err := backupstatus.Read(f.e.Backup.StatusPath)
+	if err != nil || st.Plans[testPlan].LastSuccessMs == 0 || st.Plans[testPlan].ConfiguredMs == 0 {
+		t.Fatalf("состояние бэкапов: %+v %v", st, err)
+	}
 	// Запрещённый путь — свой код отказа до выполнения.
 	bad := f.body(ops.TypeBackupRun, &agentv1.OperationParams{Params: &agentv1.OperationParams_BackupRun{BackupRun: &agentv1.BackupRunParams{
 		PlanId: testPlan, Sources: []*agentv1.BackupSource{{Name: "x", Source: &agentv1.BackupSource_Path{Path: &agentv1.PathSource{Path: "/var/lib/trassa/helper"}}}},
@@ -120,5 +127,8 @@ func TestBackupInitAndRun(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(f.paths.BackupDir, testPlan)); !os.IsNotExist(err) {
 		t.Fatal("каталог плана остался")
+	}
+	if st, _ := backupstatus.Read(f.e.Backup.StatusPath); len(st.Plans) != 0 {
+		t.Fatalf("план остался в метрике: %+v", st)
 	}
 }

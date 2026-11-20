@@ -42,7 +42,7 @@ func Plan(p config.Paths, purgeRollback bool) Steps {
 	}
 	s.Paths = append(s.Paths,
 		filepath.Join(p.BinDir, "trassa-agent"), filepath.Join(p.BinDir, "trassa-helper"),
-		p.EtcDir, p.RunDir, p.AgentDir, p.HelperDir, p.BinPrevDir, p.CacheDir,
+		p.EtcDir, p.RunDir, p.AgentDir, p.HelperDir, p.BinPrevDir, p.CacheDir, p.TargetBin,
 	)
 	if purgeRollback {
 		s.Paths = append(s.Paths, p.StateDir)

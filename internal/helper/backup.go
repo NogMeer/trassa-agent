@@ -16,6 +16,7 @@ import (
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/backup"
+	"github.com/NogMeer/trassa-agent/internal/backupstatus"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 )
@@ -155,6 +156,11 @@ func (e *Executor) applyBackupInit(ctx context.Context, r *run) *agentv1.Operati
 			if err := env.Store.Save(plan, repo); err != nil {
 				return err
 			}
+			if k := p.GetSshHostKey(); k != "" {
+				if err := env.PinHostKey(plan, repo.URL, k); err != nil {
+					return err
+				}
+			}
 			if p.GetSshKeypair() {
 				// Цель SERVER: сначала ключ (панель ставит его на цель backup.target.ensure), репозиторий —
 				// следующим backup.init, когда цель готова.
@@ -183,8 +189,22 @@ func (e *Executor) applyBackupInit(ctx context.Context, r *run) *agentv1.Operati
 	})
 	if res.GetOutcome() == agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED {
 		res.Data = &agentv1.OperationResult_BackupInit{BackupInit: data}
+		now := e.now().UnixMilli()
+		e.markStatus(env, plan, func(s *backupstatus.Plan) bool {
+			if s.ConfiguredMs == 0 {
+				s.ConfiguredMs = now
+			}
+			return true
+		})
 	}
 	return res
+}
+
+// markStatus — учёт для метрики backup_last_success_age_seconds; сбой записи не меняет итог операции.
+func (e *Executor) markStatus(env *backup.Env, plan string, fn func(*backupstatus.Plan) bool) {
+	if err := env.MarkStatus(plan, fn); err != nil {
+		e.log().Warn("helper: состояние бэкапов не записано", "plan", plan, "err", err)
+	}
 }
 
 // ---------- backup.unconfigure ----------
@@ -207,6 +227,7 @@ func (e *Executor) applyBackupUnconfigure(_ context.Context, r *run) *agentv1.Op
 	if err := env.Store.Remove(plan); err != nil {
 		return r.failed(CodeApplyFailed, err.Error())
 	}
+	e.markStatus(env, plan, func(*backupstatus.Plan) bool { return false })
 	if err := os.RemoveAll(filepath.Join(env.CacheDir, strings.ToLower(plan))); err != nil {
 		r.system("Кэш restic не удалён: %v", err)
 	}
@@ -286,6 +307,14 @@ func (e *Executor) applyBackupRun(ctx context.Context, r *run) *agentv1.Operatio
 		res = r.failed(code, "Не все источники скопированы")
 	default:
 		res = r.succeeded(fmt.Sprintf("Источников скопировано: %d", len(out.GetSources())))
+		now := e.now().UnixMilli()
+		e.markStatus(env, p.GetPlanId(), func(s *backupstatus.Plan) bool {
+			if s.ConfiguredMs == 0 {
+				s.ConfiguredMs = now
+			}
+			s.LastSuccessMs = now
+			return true
+		})
 	}
 	res.Data = &agentv1.OperationResult_BackupRun{BackupRun: out}
 	return res
@@ -340,6 +369,9 @@ func (e *Executor) applyBackupPrune(ctx context.Context, r *run) *agentv1.Operat
 		return r.failed(CodeBackupUnavailable, "нет ключа секретов помощника")
 	}
 	p := r.body.GetParams().GetBackupPrune()
+	if u := p.GetTargetUnixUser(); u != "" {
+		return e.pruneOnTarget(ctx, r, env, p)
+	}
 	saved, err := env.Store.Load(p.GetPlanId())
 	if err != nil {
 		return r.failed(backupCode(err), err.Error())
@@ -353,6 +385,25 @@ func (e *Executor) applyBackupPrune(ctx context.Context, r *run) *agentv1.Operat
 	}
 	maint.ResticVersion = saved.ResticVersion
 	out, err := env.Prune(ctx, p.GetPlanId(), maint, p.GetRetention(), env.Deadline(0))
+	if err != nil {
+		return r.failed(backupCode(err), err.Error())
+	}
+	res := r.succeeded(fmt.Sprintf("Удалено копий: %d", out.GetRemovedSnapshots()))
+	res.Data = &agentv1.OperationResult_BackupPrune{BackupPrune: out}
+	return res
+}
+
+// pruneOnTarget — чистка репозитория цели SERVER на самой цели: пароль — секретом в операции, только на время.
+func (e *Executor) pruneOnTarget(ctx context.Context, r *run, env *backup.Env, p *agentv1.BackupPruneParams) *agentv1.OperationResult {
+	t, fail := e.backupTarget(r)
+	if fail != nil {
+		return fail
+	}
+	maint, err := backup.OpenRepo(e.Secrets, r.body, p.GetPlanId(), p.GetMaintenanceRepo(), backup.FieldMaintPrefix)
+	if err != nil {
+		return r.failed("SECRET_INVALID", err.Error())
+	}
+	out, err := env.PruneTarget(ctx, t, p.GetTargetUnixUser(), maint.Password, p.GetRetention(), env.Deadline(0))
 	if err != nil {
 		return r.failed(backupCode(err), err.Error())
 	}
@@ -431,7 +482,11 @@ func (e *Executor) previewTargetEnsure(_ context.Context, r *run) (*agentv1.Prev
 			{Path: backup.TargetKeyDir + "/" + p.GetUnixUser() + ".keys", Kind: agentv1.FileChangeKind_FILE_CHANGE_KIND_CREATE},
 		},
 		Services: []string{"ssh.service"},
-		Notes:    []string{"Пользователь без оболочки: только SFTP в своём каталоге, вход по ключу только с адреса " + p.GetSourceAddress()},
+		Notes: []string{
+			"Ключ источника только добавляет копии (rclone serve restic --append-only): взломанный источник не удалит старые копии",
+			"Вход по ключу только с адреса " + p.GetSourceAddress() + ", без оболочки, переадресаций и пароля",
+			"Удаление копий (backup.prune) — только на этом сервере",
+		},
 	}, nil
 }
 
@@ -441,12 +496,21 @@ func (e *Executor) applyTargetEnsure(ctx context.Context, r *run) *agentv1.Opera
 		return fail
 	}
 	p := r.body.GetParams().GetBackupTargetEnsure()
-	return e.runConfigChange(ctx, r, configChange{
-		paths:  t.Paths(p.GetUnixUser()),
-		code:   backupCode,
-		apply:  func() error { return t.Ensure(ctx, p) },
+	var data *agentv1.BackupTargetEnsureResult
+	res := e.runConfigChange(ctx, r, configChange{
+		paths: t.Paths(p.GetUnixUser()),
+		code:  backupCode,
+		apply: func() error {
+			var err error
+			data, err = t.Ensure(ctx, r.body.GetOperationId(), p)
+			return err
+		},
 		verify: func() error { return t.Check(ctx, p) },
 	})
+	if res.GetOutcome() == agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED && data != nil {
+		res.Data = &agentv1.OperationResult_BackupTargetEnsure{BackupTargetEnsure: data}
+	}
+	return res
 }
 
 func (e *Executor) previewTargetRemove(_ context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult) {

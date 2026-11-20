@@ -23,6 +23,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/backupstatus"
 	"github.com/NogMeer/trassa-agent/internal/dockerapi"
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
 )
@@ -36,7 +37,9 @@ type Env struct {
 	BinDir   string // /var/lib/trassa/helper/bin: restic-<версия>
 	CacheDir string // /var/cache/trassa/restic/<plan_id>
 	WorkDir  string // /var/lib/trassa/backup: restore-test/<op>, restore/<op>, localcopy/<op>
-	Docker   *dockerapi.Client
+	// StatusPath — время успешных бэкапов для метрики агента (backupstatus); "" — не вести.
+	StatusPath string
+	Docker     *dockerapi.Client
 	// Run — команда хоста без оболочки (psql, useradd, sshd); Exec — для дампов в потоке: путь программы.
 	Run  func(ctx context.Context, name string, args ...string) ([]byte, error)
 	Look func(name string) (string, error)
@@ -322,4 +325,56 @@ func (l *limitWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
+}
+
+// PinHostKey — known_hosts плана: ключ хоста цели из подписанной операции закрепляется за хостом из адреса
+// репозитория; restic ходит к цели только с ним (StrictHostKeyChecking=yes).
+func (e *Env) PinHostKey(planID, repoURL, key string) error {
+	d, err := e.Store.PlanDir(planID)
+	if err != nil {
+		return err
+	}
+	rest := strings.TrimPrefix(strings.TrimPrefix(repoURL, "sftp:"), "rclone:")
+	at, colon := strings.IndexByte(rest, '@'), strings.IndexByte(rest, ':')
+	if rest == repoURL || at < 0 || colon < at {
+		return errors.New("ключ хоста — только для адресов sftp и rclone")
+	}
+	host := rest[at+1 : colon]
+	return fsutil.WriteFileAtomic(filepath.Join(d, knownHostsFile), []byte(host+" "+key+"\n"), 0o600, fsutil.Keep)
+}
+
+// PruneTarget — backup.prune на сервере-цели: полный доступ к репозиторию — только здесь, у root цели
+// (ключ источника — «только добавление»).
+func (e *Env) PruneTarget(ctx context.Context, t *Target, unixUser string, password []byte, ret *agentv1.Retention, deadline time.Time) (*agentv1.BackupPruneResult, error) {
+	r, cleanup, err := t.PruneRestic(unixUser, password)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+	before, berr := Stats(ctx, r)
+	removed, err := Forget(ctx, r, ret, deadline)
+	if err != nil {
+		return nil, err
+	}
+	out := &agentv1.BackupPruneResult{RemovedSnapshots: removed}
+	if after, aerr := Stats(ctx, r); berr == nil && aerr == nil && before > after {
+		out.FreedBytes = before - after
+	}
+	return out, nil
+}
+
+// MarkStatus — учёт времени бэкапов плана: настроен (init), успешный запуск (run), удалён (unconfigure).
+func (e *Env) MarkStatus(planID string, fn func(p *backupstatus.Plan) bool) error {
+	if e.StatusPath == "" {
+		return nil
+	}
+	id := strings.ToLower(planID)
+	return backupstatus.Update(e.StatusPath, func(f *backupstatus.File) {
+		p := f.Plans[id]
+		if fn(&p) {
+			f.Plans[id] = p
+		} else {
+			delete(f.Plans, id)
+		}
+	})
 }

@@ -3,6 +3,8 @@
 package backup
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -11,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	secretkey "github.com/NogMeer/trassa-agent/internal/sealed"
@@ -132,10 +136,11 @@ func TestValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := "ssh-ed25519 " + strings.Repeat("A", 68) + " src"
-	if err := ValidateTargetEnsure(&agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "trassa-bk-a1", SourcePublicKey: key, SourceAddress: "10.0.0.5"}); err != nil {
+	tool := &agentv1.BackupTool{Version: "1.75.2", Sha256: strings.Repeat("b", 64), Url: "https://x.example/t.zip"}
+	if err := ValidateTargetEnsure(&agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "trassa-bk-a1", SourcePublicKey: key, SourceAddress: "10.0.0.5", Rclone: tool, Restic: tool}); err != nil {
 		t.Fatal(err)
 	}
-	if ValidateTargetEnsure(&agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "root", SourcePublicKey: key, SourceAddress: "10.0.0.5"}) == nil {
+	if ValidateTargetEnsure(&agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "root", SourcePublicKey: key, SourceAddress: "10.0.0.5", Rclone: tool, Restic: tool}) == nil {
 		t.Fatal("чужой пользователь принят")
 	}
 	if ValidateBrowse(&agentv1.BackupBrowseParams{PlanId: planID, SnapshotId: "abcdef12", Path: "/", Limit: 1001}) == nil {
@@ -483,12 +488,20 @@ func TestInstallRestic(t *testing.T) {
 	}
 }
 
-func TestTargetRemoveChecksPath(t *testing.T) {
+func TestTargetAppendOnly(t *testing.T) {
 	root := tmp(t)
-	tg := &Target{Root: root, Run: func(context.Context, string, ...string) ([]byte, error) { return nil, nil }}
-	_ = os.MkdirAll(filepath.Join(root, SSHDropInDir), 0o755)
-	p := &agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "trassa-bk-a1", SourcePublicKey: "ssh-ed25519 AAAA", SourceAddress: "10.0.0.5"}
-	_ = os.WriteFile(filepath.Join(root, SSHDropInDir, "trassa-bk-a1.conf"), []byte(dropInText(p)), 0o644)
+	tg := &Target{Root: root, BinDir: "/usr/local/lib/trassa", Run: func(context.Context, string, ...string) ([]byte, error) { return nil, nil }}
+	cmd := RcloneCommand(RclonePath(tg.BinDir, "1.75.2"), "/srv/bk")
+	txt := dropInText("trassa-bk-a1", keyFile("trassa-bk-a1"), cmd)
+	for _, want := range []string{"Match User trassa-bk-a1", "ForceCommand /usr/local/lib/trassa/rclone-1.75.2 serve restic --stdio --append-only /srv/bk",
+		"AuthorizedKeysFile /etc/ssh/trassa-bk/trassa-bk-a1.keys", "PermitTTY no", "AllowTcpForwarding no", "PasswordAuthentication no", "PermitUserRC no"} {
+		if !strings.Contains(txt, want+"\n") {
+			t.Errorf("нет %q", want)
+		}
+	}
+	// Удаление: путь обязан совпадать с каталогом из состояния Trassa.
+	_ = os.MkdirAll(filepath.Join(root, TargetStateDir), 0o700)
+	_ = os.WriteFile(filepath.Join(root, stateFile("trassa-bk-a1")), []byte(`{"path":"/srv/bk","rclone":"1.75.2","restic":"0.20.0"}`), 0o600)
 	_ = os.MkdirAll(filepath.Join(root, "srv/other"), 0o755)
 	err := tg.Remove(context.Background(), &agentv1.BackupTargetRemoveParams{UnixUser: "trassa-bk-a1", Path: "/srv/other", DeleteData: true})
 	if !errors.Is(err, ErrTargetPrecondition) {
@@ -497,10 +510,139 @@ func TestTargetRemoveChecksPath(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "srv/other")); err != nil {
 		t.Fatal("чужой каталог удалён")
 	}
-	txt := dropInText(p)
-	for _, want := range []string{"Match User trassa-bk-a1", "ChrootDirectory /srv/bk", "ForceCommand internal-sftp -d /repo", "PermitTTY no", "AllowTcpForwarding no"} {
-		if !strings.Contains(txt, want) {
-			t.Errorf("нет %q", want)
+	if err := tg.Remove(context.Background(), &agentv1.BackupTargetRemoveParams{UnixUser: "trassa-bk-zz", Path: "/srv/bk"}); !errors.Is(err, ErrTargetPrecondition) {
+		t.Fatalf("нет цели: %v", err)
+	}
+	// Каталог репозитория: чужой непустой — отказ; пустой свой — владелец меняется.
+	busy := filepath.Join(root, "srv/busy")
+	_ = os.MkdirAll(busy, 0o755)
+	_ = os.WriteFile(filepath.Join(busy, "data"), []byte("x"), 0o644)
+	if err := tg.repoDir("/srv/busy", os.Getuid()+1, os.Getgid()); !errors.Is(err, ErrTargetPrecondition) {
+		t.Fatalf("занятый каталог: %v", err)
+	}
+	if err := tg.repoDir("/srv/fresh", os.Getuid(), os.Getgid()); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(filepath.Join(root, "srv/fresh")); st.Mode().Perm() != 0o700 {
+		t.Fatalf("права каталога %v", st.Mode())
+	}
+	// Ссылка вместо каталога — отказ.
+	_ = os.Symlink(filepath.Join(root, "srv/other"), filepath.Join(root, "srv/link"))
+	if err := tg.repoDir("/srv/link", os.Getuid(), os.Getgid()); err == nil {
+		t.Fatal("ссылка принята")
+	}
+}
+
+func TestValidateTargetTools(t *testing.T) {
+	key := "ssh-ed25519 " + strings.Repeat("A", 68)
+	tool := &agentv1.BackupTool{Version: "1.75.2", Sha256: strings.Repeat("b", 64), Url: "https://github.com/rclone/rclone/releases/download/v1.75.2/rclone-v1.75.2-linux-amd64.zip"}
+	ok := &agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "trassa-bk-a1", SourcePublicKey: key, SourceAddress: "10.0.0.5", Rclone: tool, Restic: tool}
+	if err := ValidateTargetEnsure(ok); err != nil {
+		t.Fatal(err)
+	}
+	for name, mod := range map[string]func(p *agentv1.BackupTargetEnsureParams){
+		"без rclone": func(p *agentv1.BackupTargetEnsureParams) { p.Rclone = nil },
+		"http": func(p *agentv1.BackupTargetEnsureParams) {
+			p.Restic = &agentv1.BackupTool{Version: "0.20.0", Sha256: tool.Sha256, Url: "http://x/r.bz2"}
+		},
+		"пробел":  func(p *agentv1.BackupTargetEnsureParams) { p.Path = "/srv/b k" },
+		"кавычка": func(p *agentv1.BackupTargetEnsureParams) { p.Path = "/srv/b'k" },
+	} {
+		p := proto.Clone(ok).(*agentv1.BackupTargetEnsureParams)
+		mod(p)
+		if ValidateTargetEnsure(p) == nil {
+			t.Errorf("%s принят", name)
 		}
+	}
+	if err := RepoURL("rclone:trassa-bk-a1@10.0.0.2:repo"); err != nil {
+		t.Fatal(err)
+	}
+	if RepoURL("rclone:b2:bucket") == nil {
+		t.Fatal("rclone без пользователя принят")
+	}
+	// Чистка на цели: без адреса, с паролем.
+	prune := &agentv1.BackupPruneParams{PlanId: planID, TargetUnixUser: "trassa-bk-a1", Retention: &agentv1.Retention{KeepLast: 3},
+		MaintenanceRepo: &agentv1.BackupRepo{Password: sealedOK()}}
+	if err := ValidatePrune(prune); err != nil {
+		t.Fatal(err)
+	}
+	prune.MaintenanceRepo.Url = "s3:https://x.example/b"
+	if ValidatePrune(prune) == nil {
+		t.Fatal("чистка на цели с адресом принята")
+	}
+	init := &agentv1.BackupInitParams{PlanId: planID, Repo: &agentv1.BackupRepo{Url: "rclone:trassa-bk-a1@10.0.0.2:repo", Password: sealedOK()},
+		ResticVersion: "0.20.0", ResticSha256: strings.Repeat("a", 64), ResticUrl: "https://x.example/r.bz2", SshHostKey: "ssh-rsa AAAA"}
+	if ValidateInit(init) == nil {
+		t.Fatal("ключ хоста не ed25519 принят")
+	}
+}
+
+// rclone: — restic ходит к цели через ssh с ключом плана; ключ хоста закреплён — StrictHostKeyChecking=yes.
+func TestResticRcloneTarget(t *testing.T) {
+	f := newFake(t)
+	r := f.restic("rclone:trassa-bk-a1@10.0.0.2:repo", nil)
+	f.on("snapshots", "[]", 0)
+	if _, err := Snapshots(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	c := f.calls()[0]
+	for _, want := range []string{"rclone.program=ssh -i " + r.SSHKey, "StrictHostKeyChecking=accept-new", "trassa-bk-a1@10.0.0.2", "rclone.args=serve restic --stdio"} {
+		if !strings.Contains(c, want) {
+			t.Errorf("нет %q в %s", want, c)
+		}
+	}
+	if strings.Contains(c, "-s sftp") {
+		t.Fatal("для rclone — не подсистема sftp")
+	}
+	e := &Env{Store: Store{Dir: filepath.Join(tmp(t), "plans")}}
+	d, _ := e.Store.PlanDir(planID)
+	_ = os.MkdirAll(d, 0o700)
+	key := "ssh-ed25519 " + strings.Repeat("A", 68)
+	if err := e.PinHostKey(planID, "rclone:trassa-bk-a1@10.0.0.2:repo", key); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(d, knownHostsFile))
+	if string(raw) != "10.0.0.2 "+key+"\n" {
+		t.Fatalf("known_hosts: %q", raw)
+	}
+	if e.PinHostKey(planID, "s3:https://x.example/b", key) == nil {
+		t.Fatal("ключ хоста для s3 принят")
+	}
+	r.KnownHosts = filepath.Join(d, knownHostsFile)
+	if _, err := Snapshots(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	if c := f.calls()[1]; !strings.Contains(c, "StrictHostKeyChecking=yes") {
+		t.Fatalf("закреплённый ключ: %s", c)
+	}
+}
+
+func TestInstallRclone(t *testing.T) {
+	root := tmp(t)
+	stage, bin := filepath.Join(root, "stage"), filepath.Join(root, "bin")
+	_ = os.MkdirAll(stage, 0o700)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	h := &zip.FileHeader{Name: "rclone-v1.75.2-linux-amd64/rclone", Method: zip.Deflate}
+	h.SetMode(0o755)
+	w, _ := zw.CreateHeader(h)
+	_, _ = w.Write([]byte("#!/bin/sh\necho 'rclone v1.75.2'\necho '- os/version: test'\n"))
+	rd, _ := zw.Create("rclone-v1.75.2-linux-amd64/README.txt")
+	_, _ = rd.Write([]byte("readme"))
+	_ = zw.Close()
+	_ = os.WriteFile(filepath.Join(stage, RcloneStaged), buf.Bytes(), 0o600)
+	sum := sha256hex(buf.Bytes())
+	if _, err := InstallRclone(context.Background(), stage, strings.Repeat("0", 64), "1.75.2", bin); !errors.Is(err, ErrResticChecksum) {
+		t.Fatalf("неверная сумма: %v", err)
+	}
+	if _, err := InstallRclone(context.Background(), stage, sum, "1.76.0", bin); err == nil {
+		t.Fatal("не та версия принята")
+	}
+	p, err := InstallRclone(context.Background(), stage, sum, "1.75.2", bin)
+	if err != nil || p != RclonePath(bin, "1.75.2") {
+		t.Fatalf("%s %v", p, err)
+	}
+	if st, _ := os.Stat(p); st.Mode().Perm() != 0o755 {
+		t.Fatalf("права %v", st.Mode())
 	}
 }
