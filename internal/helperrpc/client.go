@@ -53,7 +53,7 @@ func (c *Client) call(ctx context.Context, req Request, want string) (Response, 
 		return Response{}, err
 	}
 	defer conn.Close()
-	if err := WriteFrame(conn, req); err != nil {
+	if err := writeRequest(conn, req); err != nil {
 		return Response{}, err
 	}
 	var r Response
@@ -107,7 +107,7 @@ func (c *Client) Execute(ctx context.Context, signed []byte, onAck func(accepted
 		return nil, err
 	}
 	defer conn.Close()
-	if err := WriteFrame(conn, Request{Method: MethodExecute, Signed: signed}); err != nil {
+	if err := writeRequest(conn, Request{Method: MethodExecute, Signed: signed}); err != nil {
 		return nil, err
 	}
 	acked := false
@@ -147,3 +147,17 @@ func (c *Client) LogsPoll(ctx context.Context, subscription string, positions ma
 	return r.Subscription, r.Records, r.Positions, r.More, err
 }
 
+// writeRequest пишет запрос. Помощник отказывает чужому uid (PEER_FORBIDDEN) до чтения запроса и закрывает
+// соединение, поэтому запись может упасть с EPIPE, хотя ответ с кодом уже лежит в сокете: тогда возвращается
+// этот код, а не «broken pipe».
+func writeRequest(conn net.Conn, req Request) error {
+	werr := WriteFrame(conn, req)
+	if werr == nil {
+		return nil
+	}
+	var r Response
+	if ReadFrame(conn, &r) == nil && r.Kind == KindError {
+		return &RemoteError{Code: r.Code}
+	}
+	return werr
+}
