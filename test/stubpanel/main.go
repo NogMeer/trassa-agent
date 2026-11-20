@@ -65,6 +65,9 @@ const (
 	fwPlan     = "01a1f4b6-f2f2-7e66-85b4-000000000401"
 	fwApply    = "01a1f4b6-f2f2-7e66-85b4-000000000402"
 	fwRevert   = "01a1f4b6-f2f2-7e66-85b4-000000000403"
+	// restartOp и upgradeOp — service.restart и packages.upgrade.
+	restartOp  = "01a1f4b6-f2f2-7e66-85b4-000000000500"
+	upgradeOp  = "01a1f4b6-f2f2-7e66-85b4-000000000501"
 	panelKeyID = "stub"
 )
 
@@ -521,6 +524,21 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			}
 		case m.GetOperationResult().GetOperationId() == fwRevert:
 			p.writeJSON("fw-revert.json", m.GetOperationResult())
+			// Обслуживание (E10-T24): перезапуск службы и обновления безопасности; перезагрузку в контейнере не делаем.
+			for _, op := range []*agentv1.SignedOperation{
+				p.sign(restartOp, "service.restart", &agentv1.OperationParams{Params: &agentv1.OperationParams_ServiceRestart{
+					ServiceRestart: &agentv1.ServiceRestartParams{Unit: "ssh.service"}}}),
+				p.sign(upgradeOp, "packages.upgrade", &agentv1.OperationParams{Params: &agentv1.OperationParams_PackagesUpgrade{
+					PackagesUpgrade: &agentv1.PackagesUpgradeParams{Scope: agentv1.UpgradeScope_UPGRADE_SCOPE_SECURITY}}}),
+			} {
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
+					return
+				}
+			}
+		case m.GetOperationResult().GetOperationId() == restartOp:
+			p.writeJSON("restart.json", m.GetOperationResult())
+		case m.GetOperationResult().GetOperationId() == upgradeOp:
+			p.writeJSON("upgrade.json", m.GetOperationResult())
 		case p.isFix(m.GetOperationResult().GetOperationId()):
 			r := m.GetOperationResult()
 			fx := p.takeFix(r.GetOperationId())

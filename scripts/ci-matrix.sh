@@ -156,6 +156,14 @@ x test ! -e /etc/trassa/firewall.nft -a ! -e /etc/systemd/system/trassa-firewall
 x systemctl is-active --quiet trassa-agent.service || fail "агент упал после firewall"
 echo "firewall: план, отказ запирающему набору, применение, подтверждение и возврат"
 
+# Обслуживание (E10-T24): перезапуск ssh.service и обновления безопасности с проверкой служб.
+for f in restart upgrade; do
+	for _ in $(seq 1 600); do x test -s "$STUB/$f.json" && break; sleep 1; done
+	podman cp "$NAME:$STUB/$f.json" "$ctx/$f.json" 2>/dev/null || fail "нет итога $f"
+	jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/$f.json" >/dev/null || fail "$f: $(cat "$ctx/$f.json")"
+	echo "$f: $(jq -r .message "$ctx/$f.json")"
+done
+
 # Исправления E10-T10: применить с проверкой и вернуть rollback.restore — система как до исправления.
 for code in PERM_WORLD_WRITABLE SYSCTL_NETWORK BRUTEFORCE_NO_PROTECTION; do
 	for _ in $(seq 1 240); do x test -s "$STUB/revert-$code.json" && break; sleep 1; done
@@ -203,7 +211,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" --slurpfile scan "$ctx/security.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "firewall", "events", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "firewall", "service.restart", "packages.upgrade", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
 	  security: $scan[0].security_scan.checks,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"

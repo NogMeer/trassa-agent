@@ -5,7 +5,9 @@ package helper
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/ops"
@@ -173,6 +175,100 @@ func (e *Executor) applyFirewallApply(ctx context.Context, r *run) *agentv1.Oper
 		apply:  func() error { return p.Apply(ctx) },
 		verify: func() error { return p.Verify(ctx) },
 	})
+}
+
+// Коды итога обслуживания.
+const (
+	CodeUpgradeFailed = "UPGRADE_FAILED"
+	CodeRebootFailed  = "REBOOT_FAILED"
+	CodeRestartFailed = "SERVICE_RESTART_FAILED"
+)
+
+func (e *Executor) previewUpgrade(ctx context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult) {
+	if e.Security == nil {
+		return nil, r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	plan, err := security.PlanUpgrade(ctx, e.Security, r.body.GetParams().GetPackagesUpgrade().GetScope())
+	if err != nil {
+		return nil, r.failed(CodePackagesFailed, err.Error())
+	}
+	pv := &agentv1.Preview{Summary: fmt.Sprintf("Обновить пакетов: %d (по кэшу apt; перед обновлением списки обновятся)", len(plan.Packages))}
+	for _, p := range plan.Packages {
+		pv.Notes = append(pv.Notes, fmt.Sprintf("%s %s → %s", p.GetName(), p.GetCurrent(), p.GetCandidate()))
+	}
+	if running, err := security.RunningServices(ctx, e.Security); err == nil {
+		pv.Services = running
+	}
+	if list, err := security.ListUpdates(ctx, e.Security); err == nil && list.GetRebootRequired() {
+		pv.Notes = append(pv.Notes, "Система уже ждёт перезагрузки")
+	}
+	return pv, nil
+}
+
+// applyUpgrade — packages.upgrade: службы, что работали до обновления, должны работать после.
+func (e *Executor) applyUpgrade(ctx context.Context, r *run) *agentv1.OperationResult {
+	if e.Security == nil {
+		return r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	before, err := security.RunningServices(ctx, e.Security)
+	if err != nil {
+		return r.failed(CodeUpgradeFailed, err.Error())
+	}
+	r.phase = agentv1.OperationPhase_OPERATION_PHASE_APPLY
+	n, err := security.Upgrade(ctx, e.Security, r.body.GetParams().GetPackagesUpgrade().GetScope())
+	if err != nil {
+		return r.failed(CodeUpgradeFailed, err.Error())
+	}
+	r.system("Обновлено пакетов: %d", n)
+	r.phase = agentv1.OperationPhase_OPERATION_PHASE_VERIFY
+	if err := security.VerifyUpgrade(ctx, e.Security, before); err != nil {
+		return r.failed(CodeVerifyFailed, err.Error())
+	}
+	msg := fmt.Sprintf("Обновлено пакетов: %d", n)
+	if list, err := security.ListUpdates(ctx, e.Security); err == nil && list.GetRebootRequired() {
+		msg += "; нужна перезагрузка"
+	}
+	return r.succeeded(msg)
+}
+
+func (e *Executor) previewReboot(ctx context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult) {
+	pv := &agentv1.Preview{Summary: fmt.Sprintf("Перезагрузка через %d с", rebootDelay(r))}
+	if e.Security != nil {
+		if running, err := security.RunningServices(ctx, e.Security); err == nil {
+			pv.Services = running
+		}
+		if inv, _ := e.System.Inventory(ctx, []agentv1.InventoryKind{agentv1.InventoryKind_INVENTORY_KIND_CONTAINERS}); inv != nil {
+			for _, c := range inv.GetContainers() {
+				pv.Notes = append(pv.Notes, "Контейнер "+c.GetName()+" ("+c.GetState()+")")
+			}
+		}
+	}
+	return pv, nil
+}
+
+// rebootDelay — не раньше чем через 5 с: итог операции успевает уйти шлюзу.
+func rebootDelay(r *run) uint32 {
+	return max(r.body.GetParams().GetSystemReboot().GetDelaySeconds(), 5)
+}
+
+// applyReboot — перезагрузка таймером systemd; возвращение агента на связь проверяет панель (10 минут).
+func (e *Executor) applyReboot(ctx context.Context, r *run) *agentv1.OperationResult {
+	d := time.Duration(rebootDelay(r)) * time.Second
+	if err := e.Services.Schedule(ctx, "trassa-reboot", d, "/usr/bin/systemctl", "reboot"); err != nil {
+		return r.failed(CodeRebootFailed, err.Error())
+	}
+	return r.succeeded(fmt.Sprintf("Перезагрузка через %d с", int(d.Seconds())))
+}
+
+func (e *Executor) applyServiceRestart(ctx context.Context, r *run) *agentv1.OperationResult {
+	if e.Security == nil {
+		return r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	unit := r.body.GetParams().GetServiceRestart().GetUnit()
+	if err := security.RestartService(ctx, e.Security, unit); err != nil {
+		return r.failed(CodeRestartFailed, err.Error())
+	}
+	return r.succeeded(unit + " перезапущена и работает")
 }
 
 // applyListUpdates — packages.list_updates: кэш apt без сети.

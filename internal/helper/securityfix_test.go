@@ -128,3 +128,22 @@ func readText(t *testing.T, p string) string {
 	}
 	return string(b)
 }
+
+// system.reboot — таймером systemd не раньше чем через 5 с (итог успевает уйти шлюзу).
+func TestSystemReboot(t *testing.T) {
+	f := newFixture(t)
+	b := f.body(ops.TypeSystemReboot, &agentv1.OperationParams{Params: &agentv1.OperationParams_SystemReboot{SystemReboot: &agentv1.SystemRebootParams{}}})
+	o := f.exec(sealed(b))
+	if o.result.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED || !strings.Contains(o.result.GetMessage(), "5 с") {
+		t.Fatalf("%+v", o.result)
+	}
+	f.services.mu.Lock()
+	defer f.services.mu.Unlock()
+	if len(f.services.scheduled) != 1 || f.services.scheduled[0].unit != "trassa-reboot" || strings.Join(f.services.scheduled[0].argv, " ") != "/usr/bin/systemctl reboot" {
+		t.Fatalf("%+v", f.services.scheduled)
+	}
+	long := f.body(ops.TypeSystemReboot, &agentv1.OperationParams{Params: &agentv1.OperationParams_SystemReboot{SystemReboot: &agentv1.SystemRebootParams{DelaySeconds: 3601}}})
+	if o := f.exec(sealed(long)); o.accepted || o.code != ops.CodeParamsInvalid {
+		t.Fatalf("%+v", o)
+	}
+}

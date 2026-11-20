@@ -16,6 +16,9 @@ const (
 	TypeSSHHarden           = "ssh.harden"
 	TypeFirewallPlan        = "firewall.plan"
 	TypeFirewallApply       = "firewall.apply"
+	TypePackagesUpgrade     = "packages.upgrade"
+	TypeSystemReboot        = "system.reboot"
+	TypeServiceRestart      = "service.restart"
 )
 
 // FixPrefix — тип исправления: security.fix.<код проверки>.
@@ -40,6 +43,35 @@ func securitySpecs() []Spec {
 		})
 	}
 	return append(fixes, []Spec{
+		{
+			// Откат обновления — снапшот (E12) или согласие человека; точки CONFIG нет.
+			Type: TypePackagesUpgrade, Class: Change, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+			match: func(p *agentv1.OperationParams) bool { return p.GetPackagesUpgrade() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				switch b.GetParams().GetPackagesUpgrade().GetScope() {
+				case agentv1.UpgradeScope_UPGRADE_SCOPE_SECURITY, agentv1.UpgradeScope_UPGRADE_SCOPE_ALL:
+					return nil
+				}
+				return errors.New("scope")
+			},
+		},
+		{
+			Type: TypeSystemReboot, Class: Destructive, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+			match: func(p *agentv1.OperationParams) bool { return p.GetSystemReboot() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				if b.GetParams().GetSystemReboot().GetDelaySeconds() > security.MaxRebootDelay {
+					return errors.New("delay_seconds: до 3600")
+				}
+				return nil
+			},
+		},
+		{
+			Type: TypeServiceRestart, Class: Change, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+			match: func(p *agentv1.OperationParams) bool { return p.GetServiceRestart() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				return security.ValidateServiceRestart(b.GetParams().GetServiceRestart())
+			},
+		},
 		{
 			Type: TypeFirewallPlan, Class: Read, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
 			match: func(p *agentv1.OperationParams) bool { return p.GetFirewallPlan() != nil },
