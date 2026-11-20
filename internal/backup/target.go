@@ -203,7 +203,10 @@ func (t *Target) Ensure(ctx context.Context, op string, p *agentv1.BackupTargetE
 		if out, err := t.Run(ctx, "useradd", "--system", "--user-group", "--no-create-home", "--home-dir", "/nonexistent", "--shell", targetShell, u); err != nil {
 			return nil, fmt.Errorf("useradd: %v %s", err, firstLine(out))
 		}
-	} else if out, err := t.Run(ctx, "usermod", "--shell", targetShell, "--lock", u); err != nil {
+	}
+	// Пароль «*» — входа по паролю нет, а по ключу есть. «!» (useradd без пароля, usermod --lock) при UsePAM no
+	// закрывает и вход по ключу (sshd считает учётную запись заблокированной).
+	if out, err := t.Run(ctx, "usermod", "--shell", targetShell, "--password", "*", u); err != nil {
 		return nil, fmt.Errorf("usermod: %v %s", err, firstLine(out))
 	}
 	uid, gid, err := lookupUser(u)
