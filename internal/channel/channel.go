@@ -26,6 +26,7 @@ import (
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/identity"
+	"github.com/NogMeer/trassa-agent/internal/logs"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/queue"
@@ -74,6 +75,8 @@ type Config struct {
 	Metrics *metrics.Buffer
 	// Events — события локальных порогов (E08-T12); nil — не отправляются.
 	Events *queue.Queue[*agentv1.Event]
+	// Logs — пачки журналов на диске (E08-T15); nil — не отправляются.
+	Logs *logs.Spool
 }
 
 var (
@@ -264,7 +267,7 @@ func (a *Agent) session(ctx context.Context) error {
 		}
 	}
 
-	errc := make(chan error, 4)
+	errc := make(chan error, 5)
 	go func() { errc <- a.heartbeat(sctx, c, hb) }()
 	go func() { errc <- a.readLoop(sctx, c) }()
 	if a.cfg.Metrics != nil {
@@ -275,6 +278,9 @@ func (a *Agent) session(ctx context.Context) error {
 				return &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Metrics{Metrics: b}}
 			})
 		}()
+	}
+	if a.cfg.Logs != nil {
+		go func() { errc <- a.sendLogs(sctx, c) }()
 	}
 	if a.cfg.Events != nil {
 		go func() {
@@ -539,6 +545,40 @@ func sendQueue[T any](ctx context.Context, c *conn, q *queue.Queue[T], frame fun
 		case <-ctx.Done():
 			return nil
 		case <-q.Notify():
+		}
+	}
+}
+
+// sendLogs отправляет пачки журналов с диска: как sendQueue, но пачка читается с диска только перед отправкой
+// (без связи их может быть до 50 МБ). Время записей — в часах шлюза.
+func (a *Agent) sendLogs(ctx context.Context, c *conn) error {
+	sent := map[uint32]bool{}
+	for {
+		for _, seq := range a.cfg.Logs.Pending() {
+			if sent[seq] {
+				continue
+			}
+			ch, err := a.cfg.Logs.Load(seq)
+			if err != nil {
+				a.cfg.Log.Warn("журналы: пачка не прочитана", "seq", seq, "err", err)
+				continue
+			}
+			if ch == nil {
+				continue
+			}
+			for _, r := range ch.GetRecords() {
+				r.TimeMs += c.skewMs
+			}
+			if _, err := c.sendTracked(ctx, &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_LogChunk{LogChunk: ch}},
+				&trackedFrame{ack: a.cfg.Logs.Ack, id: uint64(seq)}); err != nil {
+				return err
+			}
+			sent[seq] = true
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-a.cfg.Logs.Notify():
 		}
 	}
 }

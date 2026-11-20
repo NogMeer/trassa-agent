@@ -150,6 +150,8 @@ message OperationParams {
     AgentUpdateParams agent_update = 3;
     AgentUninstallParams agent_uninstall = 4;
     RollbackRestoreParams rollback_restore = 5;
+    LogsSubscribeParams logs_subscribe = 6;
+    LogsReadParams logs_read = 7;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }
@@ -189,6 +191,21 @@ message AgentUninstallParams {
 
 message RollbackRestoreParams {
   string target_operation_id = 1;
+}
+
+// Какие журналы отправлять (E08, S7). Пустой sources — сбор выключен. Не больше 20 источников.
+message LogsSubscribeParams {
+  repeated LogSource sources = 1;
+  LogLevel min_level = 2;
+}
+
+// Прямое чтение последних строк источника без записи в хранилище (E08, S8).
+message LogsReadParams {
+  LogSource source = 1;
+  // 1–500.
+  uint32 lines = 2;
+  // Подстрока, до 200 символов; пусто — без отбора.
+  string grep = 3;
 }
 
 message TestConfigWriteParams {
@@ -274,6 +291,8 @@ message OperationResult {
   oneof data {
     SystemInfoResult system_info = 20;
     SystemInventoryResult system_inventory = 21;
+    LogsSubscribeResult logs_subscribe = 22;
+    LogsReadResult logs_read = 23;
   }
 }
 
@@ -367,7 +386,7 @@ message MetricsBatch {
   repeated Metric metrics = 2;
 }
 
-// Имя и единица фиксируются здесь и в E08: например cpu.usage_percent, mem.used_bytes, disk.used_bytes.
+// Имена и единицы — каталог метрик E08 (раздел 4): cpu_usage_percent, mem_used_bytes, disk_used_percent и т. д.
 message Metric {
   string name = 1;
   double value = 2;
@@ -389,10 +408,75 @@ enum EventSeverity {
   EVENT_SEVERITY_CRIT = 3;
 }
 
+// Пачка журналов (E08): до 500 записей или 256 КиБ. seq — номер пачки у агента, растёт; квитанция — InboundAck
+// по seq кадра. Без квитанции пачка уйдёт снова (шлюз склеивает повтор по cursor записей).
 message LogChunk {
+  // operation_id последней logs.subscribe, по которой собраны записи.
   string subscription_id = 1;
   uint32 seq = 2;
-  string chunk = 3;
+  reserved 3;
+  reserved "chunk";
+  repeated LogRecord records = 4;
+  // Сколько записей пропущено перед этой пачкой: буфер агента без связи (50 МБ) переполнился.
+  uint64 dropped = 5;
+}
+
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_ERROR = 1;
+  LOG_LEVEL_WARN = 2;
+  LOG_LEVEL_INFO = 3;
+  LOG_LEVEL_DEBUG = 4;
+}
+
+enum LogSourceKind {
+  LOG_SOURCE_KIND_UNSPECIFIED = 0;
+  // Весь системный журнал.
+  LOG_SOURCE_KIND_SYSTEM = 1;
+  // Журнал ssh.service и sshd.service.
+  LOG_SOURCE_KIND_SSH = 2;
+  // Контейнер по имени.
+  LOG_SOURCE_KIND_DOCKER = 3;
+  // Служба systemd по имени.
+  LOG_SOURCE_KIND_UNIT = 4;
+  // Файл внутри /var/log/ без ссылок и «..».
+  LOG_SOURCE_KIND_FILE = 5;
+}
+
+message LogSource {
+  LogSourceKind kind = 1;
+  // UNIT — имя службы, DOCKER — имя контейнера, FILE — абсолютный путь; SYSTEM и SSH — пусто.
+  string name = 2;
+}
+
+// Запись журнала (E08, раздел 4). Секреты вычищены на сервере до отправки.
+message LogRecord {
+  int64 time_ms = 1;
+  LogLevel level = 2;
+  LogSource source = 3;
+  // До 8 КБ.
+  string message = 4;
+  // До 4 КБ вместе: unit, identifier, pid.
+  map<string, string> fields = 5;
+  // Позиция в источнике: курсор journald или «inode:смещение» файла.
+  string cursor = 6;
+}
+
+message LogSourceStatus {
+  LogSource source = 1;
+  bool opened = 2;
+  // Почему не открыт: PATH_FORBIDDEN, NOT_FOUND, NOT_REGULAR, SOURCE_UNSUPPORTED, DUPLICATE.
+  string reason = 3;
+}
+
+message LogsSubscribeResult {
+  repeated LogSourceStatus sources = 1;
+}
+
+// До 512 КБ.
+message LogsReadResult {
+  repeated LogRecord records = 1;
+  bool truncated = 2;
 }
 
 message Subscribe {

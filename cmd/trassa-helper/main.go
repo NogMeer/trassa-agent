@@ -26,6 +26,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/helper"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
+	"github.com/NogMeer/trassa-agent/internal/logsrc"
 	"github.com/NogMeer/trassa-agent/internal/nonce"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
@@ -142,6 +143,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		Services: helper.DefaultSystemdServices(),
 		Updater:  &updater,
 		Paths:    p,
+		Logs:     logsrc.New(),
 	}
 	if err := ex.CheckHandlers(); err != nil {
 		n.Close()

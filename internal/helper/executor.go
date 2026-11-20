@@ -19,6 +19,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
+	"github.com/NogMeer/trassa-agent/internal/logsrc"
 	"github.com/NogMeer/trassa-agent/internal/nonce"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/redact"
@@ -79,6 +80,8 @@ type Executor struct {
 	Services Services
 	Updater  *Updater
 	Paths    config.Paths
+	// Logs читает журналы (E08-T15); nil — logs.subscribe и logs.read завершаются LOGS_UNAVAILABLE.
+	Logs *logsrc.Reader
 
 	once     sync.Once
 	handlers map[string]handler
@@ -175,6 +178,8 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 			return
 		}
 		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})
+	case helperrpc.MethodLogsPoll:
+		e.pollLogs(ctx, req, send)
 	case helperrpc.MethodRunning:
 		_ = send(helperrpc.Response{Kind: helperrpc.KindRunning, Running: e.Running()})
 	default:

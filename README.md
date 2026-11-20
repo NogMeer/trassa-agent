@@ -113,6 +113,7 @@ Trassa не хостинг и не VPN. Серверы остаются ваши
 | `internal/helper`, `internal/helperrpc`, `internal/ops`, `internal/nonce` | Помощник: сокет с проверкой uid, зашитый список операций, проверки подписи, сроков и одноразовых номеров |
 | `internal/rollback`, `internal/autorollback` | Точка отката и автооткат по таймеру systemd |
 | `internal/metrics` | Метрики сервера из `/proc` и `statfs` без прав root: пачки раз в 15 с, без связи копятся до 10 минут |
+| `internal/logsrc`, `internal/logs` | Журналы по подписанной `logs.subscribe`: читает помощник (journald без оболочки, файлы только внутри `/var/log/` без ссылок), секреты вычищаются до выхода из root; агент копит пачки до 50 МБ и шлёт до квитанции. `logs.read` — последние строки по запросу |
 | `internal/events`, `internal/queue` | Локальные пороги (служба упала, диск от 90%, память от 95% дольше минуты) и доставка кадров с квитанцией шлюза |
 | `internal/update`, `internal/uninstall`, `internal/redact`, `internal/sysinfo` | Обновление по подписи minisign, удаление, очистка секретов в выводе, сведения о системе |
 | [`scripts/install.sh`](scripts/install.sh), [`packaging/systemd/`](packaging/systemd/) | Установщик и службы |

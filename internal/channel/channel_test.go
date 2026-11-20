@@ -20,6 +20,7 @@ import (
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/events"
+	"github.com/NogMeer/trassa-agent/internal/logs"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/verify"
 )
@@ -463,4 +464,44 @@ func TestEventsDelivery(t *testing.T) {
 		t.Fatal("событие не пришло")
 	}
 	waitFor(t, 5*time.Second, func() bool { return q.Len() == 0 }, "событие подтверждено")
+}
+
+// Журналы (E08-T15): пачки с диска уходят до квитанции и удаляются после неё.
+func TestLogsDelivery(t *testing.T) {
+	id := newIdentity(t)
+	spool, err := logs.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := spool.Append("op1", []*agentv1.LogRecord{{Message: "m", TimeMs: 1000}}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := make(chan *agentv1.LogChunk, 4)
+	g := newGateway(t, id.PublicKey(), func(ctx context.Context, c *gwConn) {
+		for {
+			m, err := c.read(ctx)
+			if err != nil {
+				return
+			}
+			if ch := m.GetLogChunk(); ch != nil {
+				got <- ch
+				_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_InboundAck{InboundAck: &agentv1.InboundAck{Seq: m.GetSeq()}}})
+			}
+		}
+	})
+	a := newAgent(t, id, g, newFakeHelper())
+	a.cfg.Logs = spool
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = a.Run(ctx) }()
+	waitFor(t, 5*time.Second, func() bool { return len(spool.Pending()) == 0 }, "пачки подтверждены")
+	if len(got) != 2 {
+		t.Fatalf("пришло %d пачек", len(got))
+	}
+	ch := <-got
+	if ch.GetSubscriptionId() != "op1" || ch.GetSeq() != 1 || len(ch.GetRecords()) != 1 {
+		t.Fatalf("%+v", ch)
+	}
 }

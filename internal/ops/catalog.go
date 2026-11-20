@@ -158,7 +158,7 @@ func builtinSpecs() []Spec {
 				return nil
 			},
 		},
-	}, extraSpecs()...)
+	}, append(logsSpecs(), extraSpecs()...)...)
 }
 
 // CheckParams — проверка 6: вариант oneof совпадает с типом, точка отката и автооткат — как у типа, значения

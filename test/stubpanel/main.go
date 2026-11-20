@@ -49,9 +49,11 @@ import (
 )
 
 const (
-	serverID   = "01a1f4b6-f327-7a5d-ac23-e95c272c0fe8"
-	operation  = "01a1f4b6-f2f2-7e66-85b4-000000000001"
-	panelKeyID = "stub"
+	serverID  = "01a1f4b6-f327-7a5d-ac23-e95c272c0fe8"
+	operation = "01a1f4b6-f2f2-7e66-85b4-000000000001"
+	// logsOperation — подписка на журналы после system.info.
+	logsOperation = "01a1f4b6-f2f2-7e66-85b4-000000000002"
+	panelKeyID    = "stub"
 )
 
 type panel struct {
@@ -387,14 +389,35 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if a := m.GetOperationAck(); a != nil && !a.GetAccepted() {
-			p.result(h, nil, nil, "отказ помощника: "+a.GetRejectCode())
+			p.result(h, nil, nil, "отказ помощника по "+a.GetOperationId()+": "+a.GetRejectCode())
 			return
 		}
-		if e := m.GetEvent(); e != nil {
-			p.event(e)
-		} else if r := m.GetOperationResult(); r != nil && r.GetOperationId() == operation {
-			res = r
-		} else if b := m.GetMetrics(); b != nil && names == nil {
+		switch {
+		case m.GetEvent() != nil:
+			p.event(m.GetEvent())
+		case m.GetLogChunk() != nil:
+			p.logChunk(m.GetLogChunk())
+		case m.GetOperationResult().GetOperationId() == operation:
+			res = m.GetOperationResult()
+			// После system.info — подписка на журналы (E08-T15): файл из /var/log и ссылка наружу, которую
+			// помощник обязан отклонить.
+			if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: p.sign(logsOperation, "logs.subscribe",
+				&agentv1.OperationParams{Params: &agentv1.OperationParams_LogsSubscribe{LogsSubscribe: &agentv1.LogsSubscribeParams{
+					MinLevel: agentv1.LogLevel_LOG_LEVEL_INFO,
+					Sources: []*agentv1.LogSource{
+						{Kind: agentv1.LogSourceKind_LOG_SOURCE_KIND_FILE, Name: "/var/log/ci-logs.log"},
+						{Kind: agentv1.LogSourceKind_LOG_SOURCE_KIND_FILE, Name: "/var/log/ci-evil.log"},
+					},
+				}}})}}); err != nil {
+				return
+			}
+		case m.GetOperationResult().GetOperationId() == logsOperation:
+			p.writeJSON("subscribe.json", m.GetOperationResult())
+		case m.GetMetrics() != nil:
+			if names != nil {
+				break
+			}
+			b := m.GetMetrics()
 			names = []string{}
 			for _, x := range b.GetMetrics() {
 				names = append(names, x.GetName())
@@ -403,7 +426,7 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 				p.result(h, nil, nil, fmt.Sprintf("время пачки метрик сбито на %s", d))
 				return
 			}
-		} else if m.GetMetrics() == nil {
+		default:
 			continue
 		}
 		_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_InboundAck{InboundAck: &agentv1.InboundAck{Seq: m.GetSeq()}}})
@@ -415,15 +438,42 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *panel) systemInfo() *agentv1.SignedOperation {
+	return p.sign(operation, "system.info", &agentv1.OperationParams{Params: &agentv1.OperationParams_SystemInfo{SystemInfo: &agentv1.SystemInfoParams{}}})
+}
+
+func (p *panel) sign(id, typ string, params *agentv1.OperationParams) *agentv1.SignedOperation {
 	now := time.Now()
 	n := make([]byte, 16)
 	_, _ = rand.Read(n)
 	body, _ := proto.Marshal(&agentv1.OperationBody{
-		OperationId: operation, ServerId: serverID, Type: "system.info", Nonce: n,
-		Params:     &agentv1.OperationParams{Params: &agentv1.OperationParams_SystemInfo{SystemInfo: &agentv1.SystemInfoParams{}}},
+		OperationId: id, ServerId: serverID, Type: typ, Nonce: n, Params: params,
 		NotAfterMs: now.Add(5 * time.Minute).UnixMilli(), IssuedAtMs: now.UnixMilli(), Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
 	})
 	return &agentv1.SignedOperation{Body: body, KeyId: panelKeyID, Signature: ed25519.Sign(p.panel, verify.Input(verify.ContextOperation, body))}
+}
+
+// writeJSON пишет сообщение в <out>/name (protojson: файл читает jq, а не grep).
+func (p *panel) writeJSON(name string, m proto.Message) {
+	b, _ := protojson.MarshalOptions{UseProtoNames: true}.Marshal(m)
+	if err := os.WriteFile(filepath.Join(p.out, name), append(b, '\n'), 0o600); err != nil {
+		log.Printf("%s: %v", name, err)
+	}
+}
+
+// logChunk дописывает записи пачки журналов строками JSON в <out>/logs.jsonl.
+func (p *panel) logChunk(ch *agentv1.LogChunk) {
+	f, err := os.OpenFile(filepath.Join(p.out, "logs.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		log.Printf("logs.jsonl: %v", err)
+		return
+	}
+	defer f.Close()
+	for _, r := range ch.GetRecords() {
+		b, _ := json.Marshal(map[string]any{"subscription": ch.GetSubscriptionId(), "seq": ch.GetSeq(), "level": r.GetLevel().String(),
+			"source": r.GetSource().GetName(), "message": r.GetMessage(), "time_ms": r.GetTimeMs()})
+		_, _ = f.Write(append(b, '\n'))
+	}
+	log.Printf("журналы: пачка %d, записей %d", ch.GetSeq(), len(ch.GetRecords()))
 }
 
 // result пишет итог прогона: hello, итог операции и ошибку, если была.

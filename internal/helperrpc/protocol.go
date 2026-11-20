@@ -20,12 +20,13 @@ const MaxFrame = 4 << 20
 
 // Методы.
 const (
-	MethodHello    = "hello"    // версия и список типов помощника
-	MethodExecute  = "execute"  // выполнить SignedOperation
-	MethodConfirm  = "confirm"  // SignedConfirm: снять автооткат
-	MethodReports  = "reports"  // итоги, ещё не подтверждённые шлюзом
-	MethodReported = "reported" // шлюз подтвердил приём итога operation_id
-	MethodRunning  = "running"  // операции, которые выполняются сейчас
+	MethodHello    = "hello"     // версия и список типов помощника
+	MethodExecute  = "execute"   // выполнить SignedOperation
+	MethodConfirm  = "confirm"   // SignedConfirm: снять автооткат
+	MethodReports  = "reports"   // итоги, ещё не подтверждённые шлюзом
+	MethodReported = "reported"  // шлюз подтвердил приём итога operation_id
+	MethodRunning  = "running"   // операции, которые выполняются сейчас
+	MethodLogsPoll = "logs.poll" // новые записи журналов по действующей подписке (E08-T15)
 )
 
 // Виды ответных кадров.
@@ -36,6 +37,7 @@ const (
 	KindResult   = "result"
 	KindReports  = "reports"
 	KindRunning  = "running"
+	KindLogs     = "logs"
 	KindOK       = "ok"
 	KindError    = "error"
 )
@@ -50,6 +52,9 @@ type Request struct {
 	OperationID string `json:"operation_id,omitempty"`
 	// Outcome — для reported: какой именно итог подтвердил шлюз. Итог мог смениться (автооткат), пока шёл ответ.
 	Outcome int32 `json:"outcome,omitempty"`
+	// Subscription и Positions — для logs.poll: какой подписке принадлежат позиции агента в источниках.
+	Subscription string            `json:"subscription,omitempty"`
+	Positions    map[string]string `json:"positions,omitempty"`
 }
 
 // Response — кадр ответа помощника. Execute отвечает кадрами ack, progress…, result.
@@ -63,6 +68,11 @@ type Response struct {
 	HelperVersion string   `json:"helper_version,omitempty"`
 	Capabilities  []string `json:"capabilities,omitempty"`
 	Running       []string `json:"running,omitempty"`
+	// logs.poll: записи LogRecord (protobuf), новые позиции, есть ли ещё.
+	Subscription string            `json:"subscription,omitempty"`
+	Records      [][]byte          `json:"records,omitempty"`
+	Positions    map[string]string `json:"positions,omitempty"`
+	More         bool              `json:"more,omitempty"`
 }
 
 // ErrFrameTooLarge — кадр больше MaxFrame.

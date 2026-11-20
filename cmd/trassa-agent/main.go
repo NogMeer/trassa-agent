@@ -36,6 +36,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/identity"
+	"github.com/NogMeer/trassa-agent/internal/logs"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo/sdunits"
@@ -109,11 +110,19 @@ func run(ctx context.Context, log *slog.Logger) int {
 				equeue.Add(e)
 			}
 		})
+	hc := &helperrpc.Client{Path: p.Socket, Timeout: 30 * time.Second}
+	// Журналы (E08-T15): читает помощник по подписке, агент копит пачки на диске до квитанции.
+	spool, err := logs.Open(p.LogsDir)
+	if err != nil {
+		log.Error("журналы: каталог пачек", "err", err)
+		return exitError
+	}
+	go logs.Run(ctx, hc, spool, logs.PollInterval, log)
 	a := channel.New(channel.Config{
 		GatewayURL: en.GatewayURL, ServerID: en.ServerID, Identity: id, PanelKeys: keys,
-		Helper:  &helperrpc.Client{Path: p.Socket, Timeout: 30 * time.Second},
+		Helper:  hc,
 		Version: config.Version, OS: osID, OSVersion: osVer, Arch: runtime.GOARCH,
-		HTTPClient: &http.Client{}, Log: log, UpdateDir: p.UpdateDir, Metrics: mbuf, Events: equeue,
+		HTTPClient: &http.Client{}, Log: log, UpdateDir: p.UpdateDir, Metrics: mbuf, Events: equeue, Logs: spool,
 	})
 	if err := a.Run(ctx); errors.Is(err, channel.ErrRevoked) {
 		return exitRevoked

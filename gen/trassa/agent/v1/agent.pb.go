@@ -523,6 +523,124 @@ func (EventSeverity) EnumDescriptor() ([]byte, []int) {
 	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{8}
 }
 
+type LogLevel int32
+
+const (
+	LogLevel_LOG_LEVEL_UNSPECIFIED LogLevel = 0
+	LogLevel_LOG_LEVEL_ERROR       LogLevel = 1
+	LogLevel_LOG_LEVEL_WARN        LogLevel = 2
+	LogLevel_LOG_LEVEL_INFO        LogLevel = 3
+	LogLevel_LOG_LEVEL_DEBUG       LogLevel = 4
+)
+
+// Enum value maps for LogLevel.
+var (
+	LogLevel_name = map[int32]string{
+		0: "LOG_LEVEL_UNSPECIFIED",
+		1: "LOG_LEVEL_ERROR",
+		2: "LOG_LEVEL_WARN",
+		3: "LOG_LEVEL_INFO",
+		4: "LOG_LEVEL_DEBUG",
+	}
+	LogLevel_value = map[string]int32{
+		"LOG_LEVEL_UNSPECIFIED": 0,
+		"LOG_LEVEL_ERROR":       1,
+		"LOG_LEVEL_WARN":        2,
+		"LOG_LEVEL_INFO":        3,
+		"LOG_LEVEL_DEBUG":       4,
+	}
+)
+
+func (x LogLevel) Enum() *LogLevel {
+	p := new(LogLevel)
+	*p = x
+	return p
+}
+
+func (x LogLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LogLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_agent_proto_enumTypes[9].Descriptor()
+}
+
+func (LogLevel) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_agent_proto_enumTypes[9]
+}
+
+func (x LogLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LogLevel.Descriptor instead.
+func (LogLevel) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{9}
+}
+
+type LogSourceKind int32
+
+const (
+	LogSourceKind_LOG_SOURCE_KIND_UNSPECIFIED LogSourceKind = 0
+	// Весь системный журнал.
+	LogSourceKind_LOG_SOURCE_KIND_SYSTEM LogSourceKind = 1
+	// Журнал ssh.service и sshd.service.
+	LogSourceKind_LOG_SOURCE_KIND_SSH LogSourceKind = 2
+	// Контейнер по имени.
+	LogSourceKind_LOG_SOURCE_KIND_DOCKER LogSourceKind = 3
+	// Служба systemd по имени.
+	LogSourceKind_LOG_SOURCE_KIND_UNIT LogSourceKind = 4
+	// Файл внутри /var/log/ без ссылок и «..».
+	LogSourceKind_LOG_SOURCE_KIND_FILE LogSourceKind = 5
+)
+
+// Enum value maps for LogSourceKind.
+var (
+	LogSourceKind_name = map[int32]string{
+		0: "LOG_SOURCE_KIND_UNSPECIFIED",
+		1: "LOG_SOURCE_KIND_SYSTEM",
+		2: "LOG_SOURCE_KIND_SSH",
+		3: "LOG_SOURCE_KIND_DOCKER",
+		4: "LOG_SOURCE_KIND_UNIT",
+		5: "LOG_SOURCE_KIND_FILE",
+	}
+	LogSourceKind_value = map[string]int32{
+		"LOG_SOURCE_KIND_UNSPECIFIED": 0,
+		"LOG_SOURCE_KIND_SYSTEM":      1,
+		"LOG_SOURCE_KIND_SSH":         2,
+		"LOG_SOURCE_KIND_DOCKER":      3,
+		"LOG_SOURCE_KIND_UNIT":        4,
+		"LOG_SOURCE_KIND_FILE":        5,
+	}
+)
+
+func (x LogSourceKind) Enum() *LogSourceKind {
+	p := new(LogSourceKind)
+	*p = x
+	return p
+}
+
+func (x LogSourceKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LogSourceKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_agent_proto_enumTypes[10].Descriptor()
+}
+
+func (LogSourceKind) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_agent_proto_enumTypes[10]
+}
+
+func (x LogSourceKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LogSourceKind.Descriptor instead.
+func (LogSourceKind) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{10}
+}
+
 // Агент → шлюз.
 type AgentMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1436,6 +1554,8 @@ type OperationParams struct {
 	//	*OperationParams_AgentUpdate
 	//	*OperationParams_AgentUninstall
 	//	*OperationParams_RollbackRestore
+	//	*OperationParams_LogsSubscribe
+	//	*OperationParams_LogsRead
 	//	*OperationParams_TestConfigWrite
 	Params        isOperationParams_Params `protobuf_oneof:"params"`
 	unknownFields protoimpl.UnknownFields
@@ -1524,6 +1644,24 @@ func (x *OperationParams) GetRollbackRestore() *RollbackRestoreParams {
 	return nil
 }
 
+func (x *OperationParams) GetLogsSubscribe() *LogsSubscribeParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_LogsSubscribe); ok {
+			return x.LogsSubscribe
+		}
+	}
+	return nil
+}
+
+func (x *OperationParams) GetLogsRead() *LogsReadParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_LogsRead); ok {
+			return x.LogsRead
+		}
+	}
+	return nil
+}
+
 func (x *OperationParams) GetTestConfigWrite() *TestConfigWriteParams {
 	if x != nil {
 		if x, ok := x.Params.(*OperationParams_TestConfigWrite); ok {
@@ -1557,6 +1695,14 @@ type OperationParams_RollbackRestore struct {
 	RollbackRestore *RollbackRestoreParams `protobuf:"bytes,5,opt,name=rollback_restore,json=rollbackRestore,proto3,oneof"`
 }
 
+type OperationParams_LogsSubscribe struct {
+	LogsSubscribe *LogsSubscribeParams `protobuf:"bytes,6,opt,name=logs_subscribe,json=logsSubscribe,proto3,oneof"`
+}
+
+type OperationParams_LogsRead struct {
+	LogsRead *LogsReadParams `protobuf:"bytes,7,opt,name=logs_read,json=logsRead,proto3,oneof"`
+}
+
 type OperationParams_TestConfigWrite struct {
 	// Только в сборке с тегом testops.
 	TestConfigWrite *TestConfigWriteParams `protobuf:"bytes,100,opt,name=test_config_write,json=testConfigWrite,proto3,oneof"`
@@ -1571,6 +1717,10 @@ func (*OperationParams_AgentUpdate) isOperationParams_Params() {}
 func (*OperationParams_AgentUninstall) isOperationParams_Params() {}
 
 func (*OperationParams_RollbackRestore) isOperationParams_Params() {}
+
+func (*OperationParams_LogsSubscribe) isOperationParams_Params() {}
+
+func (*OperationParams_LogsRead) isOperationParams_Params() {}
 
 func (*OperationParams_TestConfigWrite) isOperationParams_Params() {}
 
@@ -1872,6 +2022,122 @@ func (x *RollbackRestoreParams) GetTargetOperationId() string {
 	return ""
 }
 
+// Какие журналы отправлять (E08, S7). Пустой sources — сбор выключен. Не больше 20 источников.
+type LogsSubscribeParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sources       []*LogSource           `protobuf:"bytes,1,rep,name=sources,proto3" json:"sources,omitempty"`
+	MinLevel      LogLevel               `protobuf:"varint,2,opt,name=min_level,json=minLevel,proto3,enum=trassa.agent.v1.LogLevel" json:"min_level,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogsSubscribeParams) Reset() {
+	*x = LogsSubscribeParams{}
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogsSubscribeParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogsSubscribeParams) ProtoMessage() {}
+
+func (x *LogsSubscribeParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogsSubscribeParams.ProtoReflect.Descriptor instead.
+func (*LogsSubscribeParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *LogsSubscribeParams) GetSources() []*LogSource {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+func (x *LogsSubscribeParams) GetMinLevel() LogLevel {
+	if x != nil {
+		return x.MinLevel
+	}
+	return LogLevel_LOG_LEVEL_UNSPECIFIED
+}
+
+// Прямое чтение последних строк источника без записи в хранилище (E08, S8).
+type LogsReadParams struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Source *LogSource             `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// 1–500.
+	Lines uint32 `protobuf:"varint,2,opt,name=lines,proto3" json:"lines,omitempty"`
+	// Подстрока, до 200 символов; пусто — без отбора.
+	Grep          string `protobuf:"bytes,3,opt,name=grep,proto3" json:"grep,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogsReadParams) Reset() {
+	*x = LogsReadParams{}
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogsReadParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogsReadParams) ProtoMessage() {}
+
+func (x *LogsReadParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogsReadParams.ProtoReflect.Descriptor instead.
+func (*LogsReadParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *LogsReadParams) GetSource() *LogSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *LogsReadParams) GetLines() uint32 {
+	if x != nil {
+		return x.Lines
+	}
+	return 0
+}
+
+func (x *LogsReadParams) GetGrep() string {
+	if x != nil {
+		return x.Grep
+	}
+	return ""
+}
+
 type TestConfigWriteParams struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
@@ -1884,7 +2150,7 @@ type TestConfigWriteParams struct {
 
 func (x *TestConfigWriteParams) Reset() {
 	*x = TestConfigWriteParams{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1896,7 +2162,7 @@ func (x *TestConfigWriteParams) String() string {
 func (*TestConfigWriteParams) ProtoMessage() {}
 
 func (x *TestConfigWriteParams) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1909,7 +2175,7 @@ func (x *TestConfigWriteParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestConfigWriteParams.ProtoReflect.Descriptor instead.
 func (*TestConfigWriteParams) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TestConfigWriteParams) GetPath() string {
@@ -1953,7 +2219,7 @@ type SignedConfirm struct {
 
 func (x *SignedConfirm) Reset() {
 	*x = SignedConfirm{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1965,7 +2231,7 @@ func (x *SignedConfirm) String() string {
 func (*SignedConfirm) ProtoMessage() {}
 
 func (x *SignedConfirm) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1978,7 +2244,7 @@ func (x *SignedConfirm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignedConfirm.ProtoReflect.Descriptor instead.
 func (*SignedConfirm) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SignedConfirm) GetBody() []byte {
@@ -2014,7 +2280,7 @@ type ConfirmBody struct {
 
 func (x *ConfirmBody) Reset() {
 	*x = ConfirmBody{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2026,7 +2292,7 @@ func (x *ConfirmBody) String() string {
 func (*ConfirmBody) ProtoMessage() {}
 
 func (x *ConfirmBody) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2039,7 +2305,7 @@ func (x *ConfirmBody) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmBody.ProtoReflect.Descriptor instead.
 func (*ConfirmBody) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{18}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ConfirmBody) GetOperationId() string {
@@ -2084,7 +2350,7 @@ type OperationAck struct {
 
 func (x *OperationAck) Reset() {
 	*x = OperationAck{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2096,7 +2362,7 @@ func (x *OperationAck) String() string {
 func (*OperationAck) ProtoMessage() {}
 
 func (x *OperationAck) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2109,7 +2375,7 @@ func (x *OperationAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OperationAck.ProtoReflect.Descriptor instead.
 func (*OperationAck) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{19}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *OperationAck) GetOperationId() string {
@@ -2147,7 +2413,7 @@ type OperationProgress struct {
 
 func (x *OperationProgress) Reset() {
 	*x = OperationProgress{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2159,7 +2425,7 @@ func (x *OperationProgress) String() string {
 func (*OperationProgress) ProtoMessage() {}
 
 func (x *OperationProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2172,7 +2438,7 @@ func (x *OperationProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OperationProgress.ProtoReflect.Descriptor instead.
 func (*OperationProgress) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{20}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *OperationProgress) GetOperationId() string {
@@ -2227,6 +2493,8 @@ type OperationResult struct {
 	//
 	//	*OperationResult_SystemInfo
 	//	*OperationResult_SystemInventory
+	//	*OperationResult_LogsSubscribe
+	//	*OperationResult_LogsRead
 	Data          isOperationResult_Data `protobuf_oneof:"data"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2234,7 +2502,7 @@ type OperationResult struct {
 
 func (x *OperationResult) Reset() {
 	*x = OperationResult{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2246,7 +2514,7 @@ func (x *OperationResult) String() string {
 func (*OperationResult) ProtoMessage() {}
 
 func (x *OperationResult) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2259,7 +2527,7 @@ func (x *OperationResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OperationResult.ProtoReflect.Descriptor instead.
 func (*OperationResult) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{21}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *OperationResult) GetOperationId() string {
@@ -2343,6 +2611,24 @@ func (x *OperationResult) GetSystemInventory() *SystemInventoryResult {
 	return nil
 }
 
+func (x *OperationResult) GetLogsSubscribe() *LogsSubscribeResult {
+	if x != nil {
+		if x, ok := x.Data.(*OperationResult_LogsSubscribe); ok {
+			return x.LogsSubscribe
+		}
+	}
+	return nil
+}
+
+func (x *OperationResult) GetLogsRead() *LogsReadResult {
+	if x != nil {
+		if x, ok := x.Data.(*OperationResult_LogsRead); ok {
+			return x.LogsRead
+		}
+	}
+	return nil
+}
+
 type isOperationResult_Data interface {
 	isOperationResult_Data()
 }
@@ -2355,9 +2641,21 @@ type OperationResult_SystemInventory struct {
 	SystemInventory *SystemInventoryResult `protobuf:"bytes,21,opt,name=system_inventory,json=systemInventory,proto3,oneof"`
 }
 
+type OperationResult_LogsSubscribe struct {
+	LogsSubscribe *LogsSubscribeResult `protobuf:"bytes,22,opt,name=logs_subscribe,json=logsSubscribe,proto3,oneof"`
+}
+
+type OperationResult_LogsRead struct {
+	LogsRead *LogsReadResult `protobuf:"bytes,23,opt,name=logs_read,json=logsRead,proto3,oneof"`
+}
+
 func (*OperationResult_SystemInfo) isOperationResult_Data() {}
 
 func (*OperationResult_SystemInventory) isOperationResult_Data() {}
+
+func (*OperationResult_LogsSubscribe) isOperationResult_Data() {}
+
+func (*OperationResult_LogsRead) isOperationResult_Data() {}
 
 // Подтверждение приёма кадра агента: агент перестаёт досылать результат после InboundAck с этим seq.
 type InboundAck struct {
@@ -2369,7 +2667,7 @@ type InboundAck struct {
 
 func (x *InboundAck) Reset() {
 	*x = InboundAck{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2381,7 +2679,7 @@ func (x *InboundAck) String() string {
 func (*InboundAck) ProtoMessage() {}
 
 func (x *InboundAck) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2394,7 +2692,7 @@ func (x *InboundAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InboundAck.ProtoReflect.Descriptor instead.
 func (*InboundAck) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{22}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *InboundAck) GetSeq() uint64 {
@@ -2416,7 +2714,7 @@ type Preview struct {
 
 func (x *Preview) Reset() {
 	*x = Preview{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2428,7 +2726,7 @@ func (x *Preview) String() string {
 func (*Preview) ProtoMessage() {}
 
 func (x *Preview) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2441,7 +2739,7 @@ func (x *Preview) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Preview.ProtoReflect.Descriptor instead.
 func (*Preview) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{23}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Preview) GetSummary() string {
@@ -2484,7 +2782,7 @@ type FileChange struct {
 
 func (x *FileChange) Reset() {
 	*x = FileChange{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[24]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2496,7 +2794,7 @@ func (x *FileChange) String() string {
 func (*FileChange) ProtoMessage() {}
 
 func (x *FileChange) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[24]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2509,7 +2807,7 @@ func (x *FileChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileChange.ProtoReflect.Descriptor instead.
 func (*FileChange) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{24}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *FileChange) GetPath() string {
@@ -2546,7 +2844,7 @@ type RollbackPoint struct {
 
 func (x *RollbackPoint) Reset() {
 	*x = RollbackPoint{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[25]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2558,7 +2856,7 @@ func (x *RollbackPoint) String() string {
 func (*RollbackPoint) ProtoMessage() {}
 
 func (x *RollbackPoint) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[25]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2571,7 +2869,7 @@ func (x *RollbackPoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackPoint.ProtoReflect.Descriptor instead.
 func (*RollbackPoint) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{25}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RollbackPoint) GetKind() RollbackKind {
@@ -2625,7 +2923,7 @@ type SystemInfoResult struct {
 
 func (x *SystemInfoResult) Reset() {
 	*x = SystemInfoResult{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[26]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2637,7 +2935,7 @@ func (x *SystemInfoResult) String() string {
 func (*SystemInfoResult) ProtoMessage() {}
 
 func (x *SystemInfoResult) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[26]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2650,7 +2948,7 @@ func (x *SystemInfoResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemInfoResult.ProtoReflect.Descriptor instead.
 func (*SystemInfoResult) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{26}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SystemInfoResult) GetHostname() string {
@@ -2770,7 +3068,7 @@ type SystemInventoryResult struct {
 
 func (x *SystemInventoryResult) Reset() {
 	*x = SystemInventoryResult{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[27]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2782,7 +3080,7 @@ func (x *SystemInventoryResult) String() string {
 func (*SystemInventoryResult) ProtoMessage() {}
 
 func (x *SystemInventoryResult) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[27]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2795,7 +3093,7 @@ func (x *SystemInventoryResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemInventoryResult.ProtoReflect.Descriptor instead.
 func (*SystemInventoryResult) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{27}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SystemInventoryResult) GetServices() []*ServiceEntry {
@@ -2830,7 +3128,7 @@ type ServiceEntry struct {
 
 func (x *ServiceEntry) Reset() {
 	*x = ServiceEntry{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[28]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2842,7 +3140,7 @@ func (x *ServiceEntry) String() string {
 func (*ServiceEntry) ProtoMessage() {}
 
 func (x *ServiceEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[28]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2855,7 +3153,7 @@ func (x *ServiceEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceEntry.ProtoReflect.Descriptor instead.
 func (*ServiceEntry) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{28}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ServiceEntry) GetName() string {
@@ -2884,7 +3182,7 @@ type ContainerEntry struct {
 
 func (x *ContainerEntry) Reset() {
 	*x = ContainerEntry{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[29]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2896,7 +3194,7 @@ func (x *ContainerEntry) String() string {
 func (*ContainerEntry) ProtoMessage() {}
 
 func (x *ContainerEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[29]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2909,7 +3207,7 @@ func (x *ContainerEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerEntry.ProtoReflect.Descriptor instead.
 func (*ContainerEntry) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{29}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ContainerEntry) GetName() string {
@@ -2952,7 +3250,7 @@ type PortEntry struct {
 
 func (x *PortEntry) Reset() {
 	*x = PortEntry{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[30]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2964,7 +3262,7 @@ func (x *PortEntry) String() string {
 func (*PortEntry) ProtoMessage() {}
 
 func (x *PortEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[30]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2977,7 +3275,7 @@ func (x *PortEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PortEntry.ProtoReflect.Descriptor instead.
 func (*PortEntry) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{30}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *PortEntry) GetAddress() string {
@@ -3018,7 +3316,7 @@ type MetricsBatch struct {
 
 func (x *MetricsBatch) Reset() {
 	*x = MetricsBatch{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[31]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3030,7 +3328,7 @@ func (x *MetricsBatch) String() string {
 func (*MetricsBatch) ProtoMessage() {}
 
 func (x *MetricsBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[31]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3043,7 +3341,7 @@ func (x *MetricsBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricsBatch.ProtoReflect.Descriptor instead.
 func (*MetricsBatch) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{31}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *MetricsBatch) GetCollectedAtMs() int64 {
@@ -3060,7 +3358,7 @@ func (x *MetricsBatch) GetMetrics() []*Metric {
 	return nil
 }
 
-// Имя и единица фиксируются здесь и в E08: например cpu.usage_percent, mem.used_bytes, disk.used_bytes.
+// Имена и единицы — каталог метрик E08 (раздел 4): cpu_usage_percent, mem_used_bytes, disk_used_percent и т. д.
 type Metric struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -3072,7 +3370,7 @@ type Metric struct {
 
 func (x *Metric) Reset() {
 	*x = Metric{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[32]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3084,7 +3382,7 @@ func (x *Metric) String() string {
 func (*Metric) ProtoMessage() {}
 
 func (x *Metric) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[32]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3097,7 +3395,7 @@ func (x *Metric) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Metric.ProtoReflect.Descriptor instead.
 func (*Metric) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{32}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Metric) GetName() string {
@@ -3134,7 +3432,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[33]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3146,7 +3444,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[33]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3159,7 +3457,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{33}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *Event) GetKind() string {
@@ -3197,18 +3495,23 @@ func (x *Event) GetAttributes() map[string]string {
 	return nil
 }
 
+// Пачка журналов (E08): до 500 записей или 256 КиБ. seq — номер пачки у агента, растёт; квитанция — InboundAck
+// по seq кадра. Без квитанции пачка уйдёт снова (шлюз склеивает повтор по cursor записей).
 type LogChunk struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SubscriptionId string                 `protobuf:"bytes,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
-	Seq            uint32                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
-	Chunk          string                 `protobuf:"bytes,3,opt,name=chunk,proto3" json:"chunk,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// operation_id последней logs.subscribe, по которой собраны записи.
+	SubscriptionId string       `protobuf:"bytes,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
+	Seq            uint32       `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
+	Records        []*LogRecord `protobuf:"bytes,4,rep,name=records,proto3" json:"records,omitempty"`
+	// Сколько записей пропущено перед этой пачкой: буфер агента без связи (50 МБ) переполнился.
+	Dropped       uint64 `protobuf:"varint,5,opt,name=dropped,proto3" json:"dropped,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LogChunk) Reset() {
 	*x = LogChunk{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[34]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3220,7 +3523,7 @@ func (x *LogChunk) String() string {
 func (*LogChunk) ProtoMessage() {}
 
 func (x *LogChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[34]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3233,7 +3536,7 @@ func (x *LogChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogChunk.ProtoReflect.Descriptor instead.
 func (*LogChunk) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{34}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *LogChunk) GetSubscriptionId() string {
@@ -3250,11 +3553,317 @@ func (x *LogChunk) GetSeq() uint32 {
 	return 0
 }
 
-func (x *LogChunk) GetChunk() string {
+func (x *LogChunk) GetRecords() []*LogRecord {
 	if x != nil {
-		return x.Chunk
+		return x.Records
+	}
+	return nil
+}
+
+func (x *LogChunk) GetDropped() uint64 {
+	if x != nil {
+		return x.Dropped
+	}
+	return 0
+}
+
+type LogSource struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  LogSourceKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=trassa.agent.v1.LogSourceKind" json:"kind,omitempty"`
+	// UNIT — имя службы, DOCKER — имя контейнера, FILE — абсолютный путь; SYSTEM и SSH — пусто.
+	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogSource) Reset() {
+	*x = LogSource{}
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogSource) ProtoMessage() {}
+
+func (x *LogSource) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogSource.ProtoReflect.Descriptor instead.
+func (*LogSource) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *LogSource) GetKind() LogSourceKind {
+	if x != nil {
+		return x.Kind
+	}
+	return LogSourceKind_LOG_SOURCE_KIND_UNSPECIFIED
+}
+
+func (x *LogSource) GetName() string {
+	if x != nil {
+		return x.Name
 	}
 	return ""
+}
+
+// Запись журнала (E08, раздел 4). Секреты вычищены на сервере до отправки.
+type LogRecord struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	TimeMs int64                  `protobuf:"varint,1,opt,name=time_ms,json=timeMs,proto3" json:"time_ms,omitempty"`
+	Level  LogLevel               `protobuf:"varint,2,opt,name=level,proto3,enum=trassa.agent.v1.LogLevel" json:"level,omitempty"`
+	Source *LogSource             `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	// До 8 КБ.
+	Message string `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	// До 4 КБ вместе: unit, identifier, pid.
+	Fields map[string]string `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Позиция в источнике: курсор journald или «inode:смещение» файла.
+	Cursor        string `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogRecord) Reset() {
+	*x = LogRecord{}
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogRecord) ProtoMessage() {}
+
+func (x *LogRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogRecord.ProtoReflect.Descriptor instead.
+func (*LogRecord) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *LogRecord) GetTimeMs() int64 {
+	if x != nil {
+		return x.TimeMs
+	}
+	return 0
+}
+
+func (x *LogRecord) GetLevel() LogLevel {
+	if x != nil {
+		return x.Level
+	}
+	return LogLevel_LOG_LEVEL_UNSPECIFIED
+}
+
+func (x *LogRecord) GetSource() *LogSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *LogRecord) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *LogRecord) GetFields() map[string]string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+func (x *LogRecord) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
+type LogSourceStatus struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Source *LogSource             `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	Opened bool                   `protobuf:"varint,2,opt,name=opened,proto3" json:"opened,omitempty"`
+	// Почему не открыт: PATH_FORBIDDEN, NOT_FOUND, NOT_REGULAR, SOURCE_UNSUPPORTED, DUPLICATE.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogSourceStatus) Reset() {
+	*x = LogSourceStatus{}
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogSourceStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogSourceStatus) ProtoMessage() {}
+
+func (x *LogSourceStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogSourceStatus.ProtoReflect.Descriptor instead.
+func (*LogSourceStatus) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *LogSourceStatus) GetSource() *LogSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *LogSourceStatus) GetOpened() bool {
+	if x != nil {
+		return x.Opened
+	}
+	return false
+}
+
+func (x *LogSourceStatus) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type LogsSubscribeResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sources       []*LogSourceStatus     `protobuf:"bytes,1,rep,name=sources,proto3" json:"sources,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogsSubscribeResult) Reset() {
+	*x = LogsSubscribeResult{}
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogsSubscribeResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogsSubscribeResult) ProtoMessage() {}
+
+func (x *LogsSubscribeResult) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogsSubscribeResult.ProtoReflect.Descriptor instead.
+func (*LogsSubscribeResult) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *LogsSubscribeResult) GetSources() []*LogSourceStatus {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+// До 512 КБ.
+type LogsReadResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Records       []*LogRecord           `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+	Truncated     bool                   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogsReadResult) Reset() {
+	*x = LogsReadResult{}
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogsReadResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogsReadResult) ProtoMessage() {}
+
+func (x *LogsReadResult) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogsReadResult.ProtoReflect.Descriptor instead.
+func (*LogsReadResult) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *LogsReadResult) GetRecords() []*LogRecord {
+	if x != nil {
+		return x.Records
+	}
+	return nil
+}
+
+func (x *LogsReadResult) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 type Subscribe struct {
@@ -3268,7 +3877,7 @@ type Subscribe struct {
 
 func (x *Subscribe) Reset() {
 	*x = Subscribe{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[35]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3280,7 +3889,7 @@ func (x *Subscribe) String() string {
 func (*Subscribe) ProtoMessage() {}
 
 func (x *Subscribe) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[35]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3293,7 +3902,7 @@ func (x *Subscribe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Subscribe.ProtoReflect.Descriptor instead.
 func (*Subscribe) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{35}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *Subscribe) GetSubscriptionId() string {
@@ -3326,7 +3935,7 @@ type Unsubscribe struct {
 
 func (x *Unsubscribe) Reset() {
 	*x = Unsubscribe{}
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[36]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3338,7 +3947,7 @@ func (x *Unsubscribe) String() string {
 func (*Unsubscribe) ProtoMessage() {}
 
 func (x *Unsubscribe) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_agent_proto_msgTypes[36]
+	mi := &file_trassa_agent_v1_agent_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3351,7 +3960,7 @@ func (x *Unsubscribe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Unsubscribe.ProtoReflect.Descriptor instead.
 func (*Unsubscribe) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{36}
+	return file_trassa_agent_v1_agent_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *Unsubscribe) GetSubscriptionId() string {
@@ -3435,14 +4044,16 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\adry_run\x18\t \x01(\bR\x06dryRun\x12 \n" +
 	"\fissued_at_ms\x18\n" +
 	" \x01(\x03R\n" +
-	"issuedAtMs\"\xfc\x03\n" +
+	"issuedAtMs\"\x8b\x05\n" +
 	"\x0fOperationParams\x12D\n" +
 	"\vsystem_info\x18\x01 \x01(\v2!.trassa.agent.v1.SystemInfoParamsH\x00R\n" +
 	"systemInfo\x12S\n" +
 	"\x10system_inventory\x18\x02 \x01(\v2&.trassa.agent.v1.SystemInventoryParamsH\x00R\x0fsystemInventory\x12G\n" +
 	"\fagent_update\x18\x03 \x01(\v2\".trassa.agent.v1.AgentUpdateParamsH\x00R\vagentUpdate\x12P\n" +
 	"\x0fagent_uninstall\x18\x04 \x01(\v2%.trassa.agent.v1.AgentUninstallParamsH\x00R\x0eagentUninstall\x12S\n" +
-	"\x10rollback_restore\x18\x05 \x01(\v2&.trassa.agent.v1.RollbackRestoreParamsH\x00R\x0frollbackRestore\x12T\n" +
+	"\x10rollback_restore\x18\x05 \x01(\v2&.trassa.agent.v1.RollbackRestoreParamsH\x00R\x0frollbackRestore\x12M\n" +
+	"\x0elogs_subscribe\x18\x06 \x01(\v2$.trassa.agent.v1.LogsSubscribeParamsH\x00R\rlogsSubscribe\x12>\n" +
+	"\tlogs_read\x18\a \x01(\v2\x1f.trassa.agent.v1.LogsReadParamsH\x00R\blogsRead\x12T\n" +
 	"\x11test_config_write\x18d \x01(\v2&.trassa.agent.v1.TestConfigWriteParamsH\x00R\x0ftestConfigWriteB\b\n" +
 	"\x06params\"\x12\n" +
 	"\x10SystemInfoParams\"Q\n" +
@@ -3460,7 +4071,14 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x14AgentUninstallParams\x12%\n" +
 	"\x0epurge_rollback\x18\x01 \x01(\bR\rpurgeRollback\"G\n" +
 	"\x15RollbackRestoreParams\x12.\n" +
-	"\x13target_operation_id\x18\x01 \x01(\tR\x11targetOperationId\"\x8f\x01\n" +
+	"\x13target_operation_id\x18\x01 \x01(\tR\x11targetOperationId\"\x83\x01\n" +
+	"\x13LogsSubscribeParams\x124\n" +
+	"\asources\x18\x01 \x03(\v2\x1a.trassa.agent.v1.LogSourceR\asources\x126\n" +
+	"\tmin_level\x18\x02 \x01(\x0e2\x19.trassa.agent.v1.LogLevelR\bminLevel\"n\n" +
+	"\x0eLogsReadParams\x122\n" +
+	"\x06source\x18\x01 \x01(\v2\x1a.trassa.agent.v1.LogSourceR\x06source\x12\x14\n" +
+	"\x05lines\x18\x02 \x01(\rR\x05lines\x12\x12\n" +
+	"\x04grep\x18\x03 \x01(\tR\x04grep\"\x8f\x01\n" +
 	"\x15TestConfigWriteParams\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12!\n" +
@@ -3486,7 +4104,7 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x03seq\x18\x02 \x01(\rR\x03seq\x125\n" +
 	"\x05phase\x18\x03 \x01(\x0e2\x1f.trassa.agent.v1.OperationPhaseR\x05phase\x122\n" +
 	"\x06stream\x18\x04 \x01(\x0e2\x1a.trassa.agent.v1.LogStreamR\x06stream\x12\x14\n" +
-	"\x05chunk\x18\x05 \x01(\tR\x05chunk\"\x92\x04\n" +
+	"\x05chunk\x18\x05 \x01(\tR\x05chunk\"\xa1\x05\n" +
 	"\x0fOperationResult\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12;\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2!.trassa.agent.v1.OperationOutcomeR\aoutcome\x12\x1d\n" +
@@ -3499,7 +4117,9 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x0erollback_point\x18\b \x01(\v2\x1e.trassa.agent.v1.RollbackPointR\rrollbackPoint\x12D\n" +
 	"\vsystem_info\x18\x14 \x01(\v2!.trassa.agent.v1.SystemInfoResultH\x00R\n" +
 	"systemInfo\x12S\n" +
-	"\x10system_inventory\x18\x15 \x01(\v2&.trassa.agent.v1.SystemInventoryResultH\x00R\x0fsystemInventoryB\x06\n" +
+	"\x10system_inventory\x18\x15 \x01(\v2&.trassa.agent.v1.SystemInventoryResultH\x00R\x0fsystemInventory\x12M\n" +
+	"\x0elogs_subscribe\x18\x16 \x01(\v2$.trassa.agent.v1.LogsSubscribeResultH\x00R\rlogsSubscribe\x12>\n" +
+	"\tlogs_read\x18\x17 \x01(\v2\x1f.trassa.agent.v1.LogsReadResultH\x00R\blogsReadB\x06\n" +
 	"\x04data\"\x1e\n" +
 	"\n" +
 	"InboundAck\x12\x10\n" +
@@ -3580,11 +4200,34 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"attributes\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"[\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa2\x01\n" +
 	"\bLogChunk\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x10\n" +
-	"\x03seq\x18\x02 \x01(\rR\x03seq\x12\x14\n" +
-	"\x05chunk\x18\x03 \x01(\tR\x05chunk\"\xc7\x01\n" +
+	"\x03seq\x18\x02 \x01(\rR\x03seq\x124\n" +
+	"\arecords\x18\x04 \x03(\v2\x1a.trassa.agent.v1.LogRecordR\arecords\x12\x18\n" +
+	"\adropped\x18\x05 \x01(\x04R\adroppedJ\x04\b\x03\x10\x04R\x05chunk\"S\n" +
+	"\tLogSource\x122\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1e.trassa.agent.v1.LogSourceKindR\x04kind\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\xb6\x02\n" +
+	"\tLogRecord\x12\x17\n" +
+	"\atime_ms\x18\x01 \x01(\x03R\x06timeMs\x12/\n" +
+	"\x05level\x18\x02 \x01(\x0e2\x19.trassa.agent.v1.LogLevelR\x05level\x122\n" +
+	"\x06source\x18\x03 \x01(\v2\x1a.trassa.agent.v1.LogSourceR\x06source\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12>\n" +
+	"\x06fields\x18\x05 \x03(\v2&.trassa.agent.v1.LogRecord.FieldsEntryR\x06fields\x12\x16\n" +
+	"\x06cursor\x18\x06 \x01(\tR\x06cursor\x1a9\n" +
+	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"u\n" +
+	"\x0fLogSourceStatus\x122\n" +
+	"\x06source\x18\x01 \x01(\v2\x1a.trassa.agent.v1.LogSourceR\x06source\x12\x16\n" +
+	"\x06opened\x18\x02 \x01(\bR\x06opened\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"Q\n" +
+	"\x13LogsSubscribeResult\x12:\n" +
+	"\asources\x18\x01 \x03(\v2 .trassa.agent.v1.LogSourceStatusR\asources\"d\n" +
+	"\x0eLogsReadResult\x124\n" +
+	"\arecords\x18\x01 \x03(\v2\x1a.trassa.agent.v1.LogRecordR\arecords\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"\xc7\x01\n" +
 	"\tSubscribe\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12A\n" +
@@ -3645,7 +4288,20 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x1aEVENT_SEVERITY_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13EVENT_SEVERITY_INFO\x10\x01\x12\x17\n" +
 	"\x13EVENT_SEVERITY_WARN\x10\x02\x12\x17\n" +
-	"\x13EVENT_SEVERITY_CRIT\x10\x03B=Z;github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1b\x06proto3"
+	"\x13EVENT_SEVERITY_CRIT\x10\x03*w\n" +
+	"\bLogLevel\x12\x19\n" +
+	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x01\x12\x12\n" +
+	"\x0eLOG_LEVEL_WARN\x10\x02\x12\x12\n" +
+	"\x0eLOG_LEVEL_INFO\x10\x03\x12\x13\n" +
+	"\x0fLOG_LEVEL_DEBUG\x10\x04*\xb5\x01\n" +
+	"\rLogSourceKind\x12\x1f\n" +
+	"\x1bLOG_SOURCE_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16LOG_SOURCE_KIND_SYSTEM\x10\x01\x12\x17\n" +
+	"\x13LOG_SOURCE_KIND_SSH\x10\x02\x12\x1a\n" +
+	"\x16LOG_SOURCE_KIND_DOCKER\x10\x03\x12\x18\n" +
+	"\x14LOG_SOURCE_KIND_UNIT\x10\x04\x12\x18\n" +
+	"\x14LOG_SOURCE_KIND_FILE\x10\x05B=Z;github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1b\x06proto3"
 
 var (
 	file_trassa_agent_v1_agent_proto_rawDescOnce sync.Once
@@ -3659,8 +4315,8 @@ func file_trassa_agent_v1_agent_proto_rawDescGZIP() []byte {
 	return file_trassa_agent_v1_agent_proto_rawDescData
 }
 
-var file_trassa_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_trassa_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
+var file_trassa_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
+var file_trassa_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_trassa_agent_v1_agent_proto_goTypes = []any{
 	(ProtocolVersion)(0),          // 0: trassa.agent.v1.ProtocolVersion
 	(CloseReason)(0),              // 1: trassa.agent.v1.CloseReason
@@ -3671,101 +4327,126 @@ var file_trassa_agent_v1_agent_proto_goTypes = []any{
 	(OperationOutcome)(0),         // 6: trassa.agent.v1.OperationOutcome
 	(FileChangeKind)(0),           // 7: trassa.agent.v1.FileChangeKind
 	(EventSeverity)(0),            // 8: trassa.agent.v1.EventSeverity
-	(*AgentMessage)(nil),          // 9: trassa.agent.v1.AgentMessage
-	(*GatewayMessage)(nil),        // 10: trassa.agent.v1.GatewayMessage
-	(*Challenge)(nil),             // 11: trassa.agent.v1.Challenge
-	(*Hello)(nil),                 // 12: trassa.agent.v1.Hello
-	(*Welcome)(nil),               // 13: trassa.agent.v1.Welcome
-	(*Heartbeat)(nil),             // 14: trassa.agent.v1.Heartbeat
-	(*Close)(nil),                 // 15: trassa.agent.v1.Close
-	(*SignedOperation)(nil),       // 16: trassa.agent.v1.SignedOperation
-	(*OperationBody)(nil),         // 17: trassa.agent.v1.OperationBody
-	(*OperationParams)(nil),       // 18: trassa.agent.v1.OperationParams
-	(*SystemInfoParams)(nil),      // 19: trassa.agent.v1.SystemInfoParams
-	(*SystemInventoryParams)(nil), // 20: trassa.agent.v1.SystemInventoryParams
-	(*AgentUpdateParams)(nil),     // 21: trassa.agent.v1.AgentUpdateParams
-	(*ReleaseArtifact)(nil),       // 22: trassa.agent.v1.ReleaseArtifact
-	(*AgentUninstallParams)(nil),  // 23: trassa.agent.v1.AgentUninstallParams
-	(*RollbackRestoreParams)(nil), // 24: trassa.agent.v1.RollbackRestoreParams
-	(*TestConfigWriteParams)(nil), // 25: trassa.agent.v1.TestConfigWriteParams
-	(*SignedConfirm)(nil),         // 26: trassa.agent.v1.SignedConfirm
-	(*ConfirmBody)(nil),           // 27: trassa.agent.v1.ConfirmBody
-	(*OperationAck)(nil),          // 28: trassa.agent.v1.OperationAck
-	(*OperationProgress)(nil),     // 29: trassa.agent.v1.OperationProgress
-	(*OperationResult)(nil),       // 30: trassa.agent.v1.OperationResult
-	(*InboundAck)(nil),            // 31: trassa.agent.v1.InboundAck
-	(*Preview)(nil),               // 32: trassa.agent.v1.Preview
-	(*FileChange)(nil),            // 33: trassa.agent.v1.FileChange
-	(*RollbackPoint)(nil),         // 34: trassa.agent.v1.RollbackPoint
-	(*SystemInfoResult)(nil),      // 35: trassa.agent.v1.SystemInfoResult
-	(*SystemInventoryResult)(nil), // 36: trassa.agent.v1.SystemInventoryResult
-	(*ServiceEntry)(nil),          // 37: trassa.agent.v1.ServiceEntry
-	(*ContainerEntry)(nil),        // 38: trassa.agent.v1.ContainerEntry
-	(*PortEntry)(nil),             // 39: trassa.agent.v1.PortEntry
-	(*MetricsBatch)(nil),          // 40: trassa.agent.v1.MetricsBatch
-	(*Metric)(nil),                // 41: trassa.agent.v1.Metric
-	(*Event)(nil),                 // 42: trassa.agent.v1.Event
-	(*LogChunk)(nil),              // 43: trassa.agent.v1.LogChunk
-	(*Subscribe)(nil),             // 44: trassa.agent.v1.Subscribe
-	(*Unsubscribe)(nil),           // 45: trassa.agent.v1.Unsubscribe
-	nil,                           // 46: trassa.agent.v1.Metric.LabelsEntry
-	nil,                           // 47: trassa.agent.v1.Event.AttributesEntry
-	nil,                           // 48: trassa.agent.v1.Subscribe.OptionsEntry
+	(LogLevel)(0),                 // 9: trassa.agent.v1.LogLevel
+	(LogSourceKind)(0),            // 10: trassa.agent.v1.LogSourceKind
+	(*AgentMessage)(nil),          // 11: trassa.agent.v1.AgentMessage
+	(*GatewayMessage)(nil),        // 12: trassa.agent.v1.GatewayMessage
+	(*Challenge)(nil),             // 13: trassa.agent.v1.Challenge
+	(*Hello)(nil),                 // 14: trassa.agent.v1.Hello
+	(*Welcome)(nil),               // 15: trassa.agent.v1.Welcome
+	(*Heartbeat)(nil),             // 16: trassa.agent.v1.Heartbeat
+	(*Close)(nil),                 // 17: trassa.agent.v1.Close
+	(*SignedOperation)(nil),       // 18: trassa.agent.v1.SignedOperation
+	(*OperationBody)(nil),         // 19: trassa.agent.v1.OperationBody
+	(*OperationParams)(nil),       // 20: trassa.agent.v1.OperationParams
+	(*SystemInfoParams)(nil),      // 21: trassa.agent.v1.SystemInfoParams
+	(*SystemInventoryParams)(nil), // 22: trassa.agent.v1.SystemInventoryParams
+	(*AgentUpdateParams)(nil),     // 23: trassa.agent.v1.AgentUpdateParams
+	(*ReleaseArtifact)(nil),       // 24: trassa.agent.v1.ReleaseArtifact
+	(*AgentUninstallParams)(nil),  // 25: trassa.agent.v1.AgentUninstallParams
+	(*RollbackRestoreParams)(nil), // 26: trassa.agent.v1.RollbackRestoreParams
+	(*LogsSubscribeParams)(nil),   // 27: trassa.agent.v1.LogsSubscribeParams
+	(*LogsReadParams)(nil),        // 28: trassa.agent.v1.LogsReadParams
+	(*TestConfigWriteParams)(nil), // 29: trassa.agent.v1.TestConfigWriteParams
+	(*SignedConfirm)(nil),         // 30: trassa.agent.v1.SignedConfirm
+	(*ConfirmBody)(nil),           // 31: trassa.agent.v1.ConfirmBody
+	(*OperationAck)(nil),          // 32: trassa.agent.v1.OperationAck
+	(*OperationProgress)(nil),     // 33: trassa.agent.v1.OperationProgress
+	(*OperationResult)(nil),       // 34: trassa.agent.v1.OperationResult
+	(*InboundAck)(nil),            // 35: trassa.agent.v1.InboundAck
+	(*Preview)(nil),               // 36: trassa.agent.v1.Preview
+	(*FileChange)(nil),            // 37: trassa.agent.v1.FileChange
+	(*RollbackPoint)(nil),         // 38: trassa.agent.v1.RollbackPoint
+	(*SystemInfoResult)(nil),      // 39: trassa.agent.v1.SystemInfoResult
+	(*SystemInventoryResult)(nil), // 40: trassa.agent.v1.SystemInventoryResult
+	(*ServiceEntry)(nil),          // 41: trassa.agent.v1.ServiceEntry
+	(*ContainerEntry)(nil),        // 42: trassa.agent.v1.ContainerEntry
+	(*PortEntry)(nil),             // 43: trassa.agent.v1.PortEntry
+	(*MetricsBatch)(nil),          // 44: trassa.agent.v1.MetricsBatch
+	(*Metric)(nil),                // 45: trassa.agent.v1.Metric
+	(*Event)(nil),                 // 46: trassa.agent.v1.Event
+	(*LogChunk)(nil),              // 47: trassa.agent.v1.LogChunk
+	(*LogSource)(nil),             // 48: trassa.agent.v1.LogSource
+	(*LogRecord)(nil),             // 49: trassa.agent.v1.LogRecord
+	(*LogSourceStatus)(nil),       // 50: trassa.agent.v1.LogSourceStatus
+	(*LogsSubscribeResult)(nil),   // 51: trassa.agent.v1.LogsSubscribeResult
+	(*LogsReadResult)(nil),        // 52: trassa.agent.v1.LogsReadResult
+	(*Subscribe)(nil),             // 53: trassa.agent.v1.Subscribe
+	(*Unsubscribe)(nil),           // 54: trassa.agent.v1.Unsubscribe
+	nil,                           // 55: trassa.agent.v1.Metric.LabelsEntry
+	nil,                           // 56: trassa.agent.v1.Event.AttributesEntry
+	nil,                           // 57: trassa.agent.v1.LogRecord.FieldsEntry
+	nil,                           // 58: trassa.agent.v1.Subscribe.OptionsEntry
 }
 var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
-	12, // 0: trassa.agent.v1.AgentMessage.hello:type_name -> trassa.agent.v1.Hello
-	14, // 1: trassa.agent.v1.AgentMessage.heartbeat:type_name -> trassa.agent.v1.Heartbeat
-	28, // 2: trassa.agent.v1.AgentMessage.operation_ack:type_name -> trassa.agent.v1.OperationAck
-	29, // 3: trassa.agent.v1.AgentMessage.operation_progress:type_name -> trassa.agent.v1.OperationProgress
-	30, // 4: trassa.agent.v1.AgentMessage.operation_result:type_name -> trassa.agent.v1.OperationResult
-	40, // 5: trassa.agent.v1.AgentMessage.metrics:type_name -> trassa.agent.v1.MetricsBatch
-	42, // 6: trassa.agent.v1.AgentMessage.event:type_name -> trassa.agent.v1.Event
-	43, // 7: trassa.agent.v1.AgentMessage.log_chunk:type_name -> trassa.agent.v1.LogChunk
-	11, // 8: trassa.agent.v1.GatewayMessage.challenge:type_name -> trassa.agent.v1.Challenge
-	13, // 9: trassa.agent.v1.GatewayMessage.welcome:type_name -> trassa.agent.v1.Welcome
-	16, // 10: trassa.agent.v1.GatewayMessage.operation:type_name -> trassa.agent.v1.SignedOperation
-	26, // 11: trassa.agent.v1.GatewayMessage.confirm:type_name -> trassa.agent.v1.SignedConfirm
-	31, // 12: trassa.agent.v1.GatewayMessage.inbound_ack:type_name -> trassa.agent.v1.InboundAck
-	44, // 13: trassa.agent.v1.GatewayMessage.subscribe:type_name -> trassa.agent.v1.Subscribe
-	45, // 14: trassa.agent.v1.GatewayMessage.unsubscribe:type_name -> trassa.agent.v1.Unsubscribe
-	15, // 15: trassa.agent.v1.GatewayMessage.close:type_name -> trassa.agent.v1.Close
+	14, // 0: trassa.agent.v1.AgentMessage.hello:type_name -> trassa.agent.v1.Hello
+	16, // 1: trassa.agent.v1.AgentMessage.heartbeat:type_name -> trassa.agent.v1.Heartbeat
+	32, // 2: trassa.agent.v1.AgentMessage.operation_ack:type_name -> trassa.agent.v1.OperationAck
+	33, // 3: trassa.agent.v1.AgentMessage.operation_progress:type_name -> trassa.agent.v1.OperationProgress
+	34, // 4: trassa.agent.v1.AgentMessage.operation_result:type_name -> trassa.agent.v1.OperationResult
+	44, // 5: trassa.agent.v1.AgentMessage.metrics:type_name -> trassa.agent.v1.MetricsBatch
+	46, // 6: trassa.agent.v1.AgentMessage.event:type_name -> trassa.agent.v1.Event
+	47, // 7: trassa.agent.v1.AgentMessage.log_chunk:type_name -> trassa.agent.v1.LogChunk
+	13, // 8: trassa.agent.v1.GatewayMessage.challenge:type_name -> trassa.agent.v1.Challenge
+	15, // 9: trassa.agent.v1.GatewayMessage.welcome:type_name -> trassa.agent.v1.Welcome
+	18, // 10: trassa.agent.v1.GatewayMessage.operation:type_name -> trassa.agent.v1.SignedOperation
+	30, // 11: trassa.agent.v1.GatewayMessage.confirm:type_name -> trassa.agent.v1.SignedConfirm
+	35, // 12: trassa.agent.v1.GatewayMessage.inbound_ack:type_name -> trassa.agent.v1.InboundAck
+	53, // 13: trassa.agent.v1.GatewayMessage.subscribe:type_name -> trassa.agent.v1.Subscribe
+	54, // 14: trassa.agent.v1.GatewayMessage.unsubscribe:type_name -> trassa.agent.v1.Unsubscribe
+	17, // 15: trassa.agent.v1.GatewayMessage.close:type_name -> trassa.agent.v1.Close
 	0,  // 16: trassa.agent.v1.Challenge.protocol_versions:type_name -> trassa.agent.v1.ProtocolVersion
 	0,  // 17: trassa.agent.v1.Hello.protocol_version:type_name -> trassa.agent.v1.ProtocolVersion
 	0,  // 18: trassa.agent.v1.Welcome.protocol_version:type_name -> trassa.agent.v1.ProtocolVersion
 	1,  // 19: trassa.agent.v1.Close.reason:type_name -> trassa.agent.v1.CloseReason
-	18, // 20: trassa.agent.v1.OperationBody.params:type_name -> trassa.agent.v1.OperationParams
+	20, // 20: trassa.agent.v1.OperationBody.params:type_name -> trassa.agent.v1.OperationParams
 	2,  // 21: trassa.agent.v1.OperationBody.rollback:type_name -> trassa.agent.v1.RollbackKind
-	19, // 22: trassa.agent.v1.OperationParams.system_info:type_name -> trassa.agent.v1.SystemInfoParams
-	20, // 23: trassa.agent.v1.OperationParams.system_inventory:type_name -> trassa.agent.v1.SystemInventoryParams
-	21, // 24: trassa.agent.v1.OperationParams.agent_update:type_name -> trassa.agent.v1.AgentUpdateParams
-	23, // 25: trassa.agent.v1.OperationParams.agent_uninstall:type_name -> trassa.agent.v1.AgentUninstallParams
-	24, // 26: trassa.agent.v1.OperationParams.rollback_restore:type_name -> trassa.agent.v1.RollbackRestoreParams
-	25, // 27: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
-	3,  // 28: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
-	22, // 29: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
-	4,  // 30: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
-	5,  // 31: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
-	6,  // 32: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
-	32, // 33: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
-	34, // 34: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
-	35, // 35: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
-	36, // 36: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
-	33, // 37: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
-	7,  // 38: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
-	2,  // 39: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
-	37, // 40: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
-	38, // 41: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
-	39, // 42: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
-	41, // 43: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
-	46, // 44: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
-	8,  // 45: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
-	47, // 46: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
-	48, // 47: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
-	48, // [48:48] is the sub-list for method output_type
-	48, // [48:48] is the sub-list for method input_type
-	48, // [48:48] is the sub-list for extension type_name
-	48, // [48:48] is the sub-list for extension extendee
-	0,  // [0:48] is the sub-list for field type_name
+	21, // 22: trassa.agent.v1.OperationParams.system_info:type_name -> trassa.agent.v1.SystemInfoParams
+	22, // 23: trassa.agent.v1.OperationParams.system_inventory:type_name -> trassa.agent.v1.SystemInventoryParams
+	23, // 24: trassa.agent.v1.OperationParams.agent_update:type_name -> trassa.agent.v1.AgentUpdateParams
+	25, // 25: trassa.agent.v1.OperationParams.agent_uninstall:type_name -> trassa.agent.v1.AgentUninstallParams
+	26, // 26: trassa.agent.v1.OperationParams.rollback_restore:type_name -> trassa.agent.v1.RollbackRestoreParams
+	27, // 27: trassa.agent.v1.OperationParams.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeParams
+	28, // 28: trassa.agent.v1.OperationParams.logs_read:type_name -> trassa.agent.v1.LogsReadParams
+	29, // 29: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
+	3,  // 30: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
+	24, // 31: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
+	48, // 32: trassa.agent.v1.LogsSubscribeParams.sources:type_name -> trassa.agent.v1.LogSource
+	9,  // 33: trassa.agent.v1.LogsSubscribeParams.min_level:type_name -> trassa.agent.v1.LogLevel
+	48, // 34: trassa.agent.v1.LogsReadParams.source:type_name -> trassa.agent.v1.LogSource
+	4,  // 35: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
+	5,  // 36: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
+	6,  // 37: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
+	36, // 38: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
+	38, // 39: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
+	39, // 40: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
+	40, // 41: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
+	51, // 42: trassa.agent.v1.OperationResult.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeResult
+	52, // 43: trassa.agent.v1.OperationResult.logs_read:type_name -> trassa.agent.v1.LogsReadResult
+	37, // 44: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
+	7,  // 45: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
+	2,  // 46: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
+	41, // 47: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
+	42, // 48: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
+	43, // 49: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
+	45, // 50: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
+	55, // 51: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
+	8,  // 52: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
+	56, // 53: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
+	49, // 54: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
+	10, // 55: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
+	9,  // 56: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
+	48, // 57: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
+	57, // 58: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
+	48, // 59: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
+	50, // 60: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
+	49, // 61: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
+	58, // 62: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
+	63, // [63:63] is the sub-list for method output_type
+	63, // [63:63] is the sub-list for method input_type
+	63, // [63:63] is the sub-list for extension type_name
+	63, // [63:63] is the sub-list for extension extendee
+	0,  // [0:63] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_agent_proto_init() }
@@ -3799,19 +4480,23 @@ func file_trassa_agent_v1_agent_proto_init() {
 		(*OperationParams_AgentUpdate)(nil),
 		(*OperationParams_AgentUninstall)(nil),
 		(*OperationParams_RollbackRestore)(nil),
+		(*OperationParams_LogsSubscribe)(nil),
+		(*OperationParams_LogsRead)(nil),
 		(*OperationParams_TestConfigWrite)(nil),
 	}
-	file_trassa_agent_v1_agent_proto_msgTypes[21].OneofWrappers = []any{
+	file_trassa_agent_v1_agent_proto_msgTypes[23].OneofWrappers = []any{
 		(*OperationResult_SystemInfo)(nil),
 		(*OperationResult_SystemInventory)(nil),
+		(*OperationResult_LogsSubscribe)(nil),
+		(*OperationResult_LogsRead)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_trassa_agent_v1_agent_proto_rawDesc), len(file_trassa_agent_v1_agent_proto_rawDesc)),
-			NumEnums:      9,
-			NumMessages:   40,
+			NumEnums:      11,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -139,3 +139,11 @@ func (c *Client) Execute(ctx context.Context, signed []byte, onAck func(accepted
 		}
 	}
 }
+
+// LogsPoll — новые записи журналов по действующей подписке с позиций agent (E08-T15). Возвращает подписку,
+// записи (LogRecord, protobuf), новые позиции и есть ли ещё.
+func (c *Client) LogsPoll(ctx context.Context, subscription string, positions map[string]string) (string, [][]byte, map[string]string, bool, error) {
+	r, err := c.call(ctx, Request{Method: MethodLogsPoll, Subscription: subscription, Positions: positions}, KindLogs)
+	return r.Subscription, r.Records, r.Positions, r.More, err
+}
+

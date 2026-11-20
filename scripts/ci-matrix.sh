@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-only
 # Матрица ОС (E05-T28): чистая система в контейнере с systemd (decisions п. 12) → команда установки как в панели
-# → регистрация на заглушке → «Сервер на связи», операция system.info и пачка метрик → повторная установка → удаление.
+# → регистрация на заглушке → «Сервер на связи», system.info, метрики, журналы, события → повторная установка → удаление.
 # Перед этим — установка с испорченной подписью: отказ с кодом 3, на системе ничего не появилось.
 # Только для одноразового раннера CI. Запуск: sudo sh scripts/ci-matrix.sh <образ, например ubuntu:24.04> <каталог отчёта>
 # Нужны dist/ после «make build» и dist/stubpanel (заглушка панели той же архитектуры).
@@ -75,7 +75,8 @@ set -e
 x sh -c 'test ! -e /usr/local/bin/trassa-agent && test ! -e /etc/trassa && test ! -e /etc/systemd/system/trassa-agent.service && ! id trassa' ||
 	fail "после отказа по подписи на системе остались следы установки"
 
-# 2. Установка и регистрация.
+# 2. Установка и регистрация. Журнал для подписки E08-T15 и ссылка из /var/log наружу — её читать нельзя.
+x sh -c 'printf "before subscribe\n" >/var/log/ci-logs.log && ln -sf /etc/shadow /var/log/ci-evil.log'
 stub
 start=$(date +%s)
 install_cmd || fail "установка не удалась"
@@ -94,6 +95,19 @@ jq -e --arg os "$want_os" --arg v "$want_ver" '.hello.os == $os and .hello.os_ve
 for m in mem_used_percent mem_used_bytes load1 uptime_seconds procs_total tcp_connections; do
 	jq -e --arg m "$m" '.metrics | index($m) != null' "$ctx/result.json" >/dev/null || fail "в пачке метрик нет $m: $(jq -c .metrics "$ctx/result.json")"
 done
+# Журналы (E08-T15): подписка открыла файл и отказала ссылке наружу; новые строки приходят пачкой без секретов.
+for _ in $(seq 1 30); do x test -s "$STUB/subscribe.json" && break; sleep 1; done
+podman cp "$NAME:$STUB/subscribe.json" "$ctx/subscribe.json" 2>/dev/null || fail "нет итога logs.subscribe"
+jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED" and .logs_subscribe.sources[0].opened == true and .logs_subscribe.sources[1].reason == "PATH_FORBIDDEN"' \
+	"$ctx/subscribe.json" >/dev/null || fail "logs.subscribe: $(cat "$ctx/subscribe.json")"
+x sh -c 'printf "ci line one\nERROR db password=hunter2hunter2\n" >>/var/log/ci-logs.log'
+for _ in $(seq 1 30); do x grep -qF "ERROR db" "$STUB/logs.jsonl" 2>/dev/null && break; sleep 1; done
+x grep -qF '"message":"ci line one"' "$STUB/logs.jsonl" || fail "строки журнала не пришли: $(x cat "$STUB/logs.jsonl" 2>&1)"
+! x grep -qF "before subscribe" "$STUB/logs.jsonl" || fail "ушли строки до подписки"
+! x grep -qF "hunter2hunter2" "$STUB/logs.jsonl" || fail "секрет ушёл в журналы"
+! x grep -qF "root:" "$STUB/logs.jsonl" || fail "прочитан файл вне /var/log"
+x grep -F '"level":"LOG_LEVEL_ERROR"' "$STUB/logs.jsonl" | grep -qF "ERROR db" || fail "уровень строки ERROR"
+
 # События (E08-T12): упавшая служба даёт service.down за 30 с, сброс — resolved.
 x systemd-run --quiet --unit=ci-broken --property=Type=oneshot /bin/false || true
 event_seen() {
@@ -126,7 +140,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "events", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"
 echo "OK $osid $arch: установка ${installed} с, на связи через ${online} с"
