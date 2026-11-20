@@ -115,7 +115,7 @@ func TestFail2banFix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.State.Packages) != 1 || p.State.Packages[0] != "fail2ban" {
+	if strings.Join(p.State.Packages, ",") != "fail2ban,python3-systemd" {
 		t.Fatalf("пакет не помечен к удалению при откате: %+v", p.State)
 	}
 	if err := p.Apply(context.Background()); err != nil {
@@ -128,7 +128,7 @@ func TestFail2banFix(t *testing.T) {
 	if err := p.Verify(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(rec.calls[len(rec.calls)-4], "apt-get install -y -q --no-install-recommends fail2ban") {
+	if !strings.HasPrefix(rec.calls[len(rec.calls)-4], "apt-get install -y -q --no-install-recommends fail2ban python3-systemd") {
 		t.Fatalf("%v", rec.calls)
 	}
 }

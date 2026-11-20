@@ -16,7 +16,7 @@ STUB=/root/stub
 
 fail() {
 	echo "FAIL ($IMAGE): $*" >&2
-	podman exec "$NAME" journalctl -u trassa-helper -u trassa-agent --no-pager -n 80 >&2 || true
+	podman exec "$NAME" journalctl -u trassa-helper -u trassa-agent -u fail2ban --no-pager -n 120 >&2 || true
 	podman exec "$NAME" journalctl -u ci-stubpanel --no-pager -n 40 >&2 || true
 	exit 1
 }

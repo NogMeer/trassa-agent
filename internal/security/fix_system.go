@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
@@ -166,24 +167,30 @@ func planFail2ban(ctx context.Context, s *Scan, subjects []string) (*FixPlan, er
 	if _, err := pick(ctx, s, "BRUTEFORCE_NO_PROTECTION", subjects); err != nil {
 		return nil, err
 	}
-	have, err := installed(s.sys, "fail2ban")
-	if err != nil {
-		return nil, err
+	// backend = systemd читает журнал через python3-systemd: без него сервер fail2ban не стартует.
+	var missing []string
+	for _, pkg := range []string{"fail2ban", "python3-systemd"} {
+		ok, err := installed(s.sys, pkg)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			missing = append(missing, pkg)
+		}
 	}
-	st := rollback.State{}
-	if !have {
-		st.Packages = []string{"fail2ban"}
-	}
+	have := len(missing) == 0
+	st := rollback.State{Packages: missing}
 	st.Units = []rollback.UnitState{unitState(ctx, s.sys, "fail2ban.service")}
 	p := fileWritePlan(s.sys, Fail2banJail, "", "Защита от перебора: fail2ban для SSH", nil, st)
 	p.Notes = []string{"Только fail2ban из репозитория системы (decisions E10, п. 12)"}
 	if !have {
-		p.Notes = append(p.Notes, "Будет установлен пакет fail2ban")
+		p.Notes = append(p.Notes, "Будут установлены пакеты: "+strings.Join(missing, ", "))
 	}
 	p.Apply = func(ctx context.Context) error {
 		if !have {
-			if out, err := s.sys.run(ctx, "apt-get", "install", "-y", "-q", "--no-install-recommends", "fail2ban"); err != nil {
-				return fmt.Errorf("apt-get install fail2ban: %v %s", err, tail(out))
+			args := append([]string{"install", "-y", "-q", "--no-install-recommends"}, missing...)
+			if out, err := s.sys.run(ctx, "apt-get", args...); err != nil {
+				return fmt.Errorf("apt-get install %v: %v %s", missing, err, tail(out))
 			}
 		}
 		content, err := fail2banJail(s.sys)
@@ -205,11 +212,22 @@ func planFail2ban(ctx context.Context, s *Scan, subjects []string) (*FixPlan, er
 		}
 		return nil
 	}
+	// Сервер fail2ban поднимается несколько секунд после restart: ждём до 30 с.
 	p.Verify = func(ctx context.Context) error {
-		if out, err := s.sys.run(ctx, "fail2ban-client", "status", "sshd"); err != nil {
-			return fmt.Errorf("fail2ban-client status sshd: %v %s", err, tail(out))
+		var last string
+		for i := 0; i < 30; i++ {
+			out, err := s.sys.run(ctx, "fail2ban-client", "status", "sshd")
+			if err == nil {
+				return nil
+			}
+			last = fmt.Sprintf("%v %s", err, tail(out))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(fail2banPoll):
+			}
 		}
-		return nil
+		return fmt.Errorf("fail2ban-client status sshd: %s", last)
 	}
 	if content, err := fail2banJail(s.sys); err == nil {
 		p.Changes[0].Diff = lineDiff("", content)
@@ -232,6 +250,9 @@ func fail2banJail(sys *System) (string, error) {
 	}
 	return b.String(), nil
 }
+
+// fail2banPoll — шаг ожидания сервера fail2ban (переменная: тест сокращает).
+var fail2banPoll = time.Second
 
 func tail(b []byte) string {
 	s := strings.TrimSpace(string(b))
