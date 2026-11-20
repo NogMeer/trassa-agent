@@ -22,6 +22,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
 )
@@ -113,6 +115,53 @@ type State struct {
 	// Commands — команды после возврата файлов (последними): помощник приводит систему к возвращённым файлам
 	// (например, `trassa-helper wireguard-sync <iface>`). Только абсолютный путь программы.
 	Commands [][]string `json:"commands,omitempty"`
+	// Confirm — операция ждала подтверждения связи (автооткат): её возврат меняет то же (SSH, firewall, сеть) и
+	// тоже идёт только с автооткатом. Действия не задаёт.
+	Confirm bool `json:"confirm,omitempty"`
+}
+
+// NeedsConfirm — возврат этой точки может отрезать связь с сервером: только с автооткатом. Точки без флага
+// Confirm (созданы до него) узнаются по набору nftables и командам приведения системы.
+func (m *Manifest) NeedsConfirm() bool {
+	return m.State.Confirm || m.State.NftFile != "" || len(m.State.Commands) > 0
+}
+
+// Inverse — состояние для точки отката самого возврата m: текущие значения тех же параметров ядра и служб, те же
+// перечитывание юнитов, набор nftables и команды приведения (они приводят систему к файлам, какие бы ни были).
+// Пакеты, которые удалит возврат, обратно не ставятся — они в notes.
+func (s *Store) Inverse(m *Manifest) (st State, notes []string, err error) {
+	if !m.State.Empty() && s.Exec == nil {
+		return State{}, nil, unavailable("откат состояния системы на этой сборке недоступен")
+	}
+	st = State{DaemonReload: m.State.DaemonReload, NftFile: m.State.NftFile, Commands: m.State.Commands, Confirm: m.State.Confirm}
+	if len(m.State.Sysctl) > 0 {
+		st.Sysctl = map[string]string{}
+		for n := range m.State.Sysctl {
+			p, ok := SysctlPath(s.ProcSys, n)
+			if !ok {
+				return State{}, nil, unavailable("параметр %q", n)
+			}
+			raw, err := fsutil.ReadLimited(p, 4096)
+			if err != nil {
+				return State{}, nil, unavailable("%s: %v", n, err)
+			}
+			st.Sysctl[n] = strings.TrimSpace(string(raw))
+		}
+	}
+	for _, u := range m.State.Units {
+		if !validUnit(u.Name) {
+			return State{}, nil, unavailable("служба %q", u.Name)
+		}
+		st.Units = append(st.Units, UnitState{
+			Name:    u.Name,
+			Enabled: s.Exec("systemctl", "is-enabled", "--quiet", "--", u.Name) == nil,
+			Active:  s.Exec("systemctl", "is-active", "--quiet", "--", u.Name) == nil,
+		})
+	}
+	if len(m.State.Packages) > 0 {
+		notes = append(notes, "Пакеты "+strings.Join(m.State.Packages, ", ")+" будут удалены; откат возврата их не поставит")
+	}
+	return st, notes, nil
 }
 
 // UnitState — служба до операции.
@@ -201,38 +250,27 @@ func (s *Store) CreateState(op string, paths, services []string, state State) (m
 			continue
 		}
 		seen[p] = true
-		st, lerr := os.Lstat(p)
-		if errors.Is(lerr, os.ErrNotExist) {
+		// Файл открывается без ссылок ни в одном компоненте, сведения и копия — по тому же дескриптору: подмена
+		// ссылкой между проверкой и копией не уводит root читать чужой файл (его содержимое потом вернулось бы
+		// владельцу подменённого пути).
+		fh, oerr := fsutil.OpenNoFollow(p, unix.O_RDONLY)
+		if errors.Is(oerr, os.ErrNotExist) {
 			m.Files = append(m.Files, File{Path: p})
 			continue
 		}
-		if lerr != nil {
-			return nil, unavailable("%v", lerr)
+		if oerr != nil {
+			return nil, unavailable("%v", oerr)
 		}
-		if st.IsDir() {
-			f := File{Path: p, Existed: true, Dir: true, Mode: uint32(st.Mode().Perm()), Special: specialBits(st.Mode())}
-			if sys, ok := st.Sys().(*syscall.Stat_t); ok {
-				f.UID, f.GID = int(sys.Uid), int(sys.Gid)
-			}
-			m.Files = append(m.Files, f)
-			continue
+		f, size, cerr := s.capture(fh, i, filepath.Join(dir, "files"))
+		fh.Close()
+		if cerr != nil {
+			return nil, unavailable("%s: %v", p, cerr)
 		}
-		if !st.Mode().IsRegular() {
-			return nil, unavailable("%s: не обычный файл", p)
-		}
-		m.TotalBytes += st.Size()
+		f.Path = p
+		m.TotalBytes += size
 		if m.TotalBytes > limit {
 			return nil, unavailable("больше %d байт", limit)
 		}
-		f := File{Path: p, Existed: true, Mode: uint32(st.Mode().Perm()), Special: specialBits(st.Mode()), Size: st.Size(), Copy: strconv.Itoa(i)}
-		if sys, ok := st.Sys().(*syscall.Stat_t); ok {
-			f.UID, f.GID = int(sys.Uid), int(sys.Gid)
-		}
-		sum, cerr := copyFile(p, filepath.Join(dir, "files", f.Copy), st.Size())
-		if cerr != nil {
-			return nil, unavailable("копия %s: %v", p, cerr)
-		}
-		f.SHA256 = sum
 		m.Files = append(m.Files, f)
 	}
 	if err := fsutil.SyncDir(filepath.Join(dir, "files")); err != nil {
@@ -248,13 +286,42 @@ func (s *Store) CreateState(op string, paths, services []string, state State) (m
 	return m, nil
 }
 
-// copyFile копирует ровно size байт (файл мог вырасти во время копии — тогда ошибка) и возвращает sha256.
-func copyFile(src, dst string, size int64) (string, error) {
-	in, err := os.Open(src)
+// capture — запись манифеста и копия открытого файла (каталог — без копии). Обычный файл копируется ровно
+// по размеру из fstat (вырос во время копии — ошибка).
+func (s *Store) capture(fh *os.File, i int, filesDir string) (File, int64, error) {
+	st, err := fh.Stat()
 	if err != nil {
-		return "", err
+		return File{}, 0, err
 	}
-	defer in.Close()
+	f := File{Existed: true, Mode: uint32(st.Mode().Perm()), Special: specialBits(st.Mode())}
+	if sys, ok := st.Sys().(*syscall.Stat_t); ok {
+		f.UID, f.GID = int(sys.Uid), int(sys.Gid)
+	}
+	if st.IsDir() {
+		f.Dir = true
+		return f, 0, nil
+	}
+	if !st.Mode().IsRegular() {
+		return File{}, 0, fmt.Errorf("не обычный файл")
+	}
+	limit := s.MaxBytes
+	if limit <= 0 {
+		limit = DefaultMaxBytes
+	}
+	if st.Size() > limit {
+		return File{}, 0, fmt.Errorf("больше %d байт", limit)
+	}
+	f.Size, f.Copy = st.Size(), strconv.Itoa(i)
+	sum, err := copyFile(fh, filepath.Join(filesDir, f.Copy), st.Size())
+	if err != nil {
+		return File{}, 0, fmt.Errorf("копия: %v", err)
+	}
+	f.SHA256 = sum
+	return f, st.Size(), nil
+}
+
+// copyFile копирует ровно size байт (файл мог вырасти во время копии — тогда ошибка) и возвращает sha256.
+func copyFile(in *os.File, dst string, size int64) (string, error) {
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return "", err

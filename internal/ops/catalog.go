@@ -148,8 +148,9 @@ func builtinSpecs() []Spec {
 			Validate: func(*agentv1.OperationBody) error { return nil },
 		},
 		{
-			// Класс — как у исходной операции; для очереди помощника это всегда изменение.
-			Type: TypeRollbackRestore, Class: Change, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG,
+			// Класс — как у исходной операции; для очереди помощника это всегда изменение. Автооткат — если он был у
+			// исходной операции (помощник требует его по точке отката).
+			Type: TypeRollbackRestore, Class: Change, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG, AutoRollback: true,
 			match: func(p *agentv1.OperationParams) bool { return p.GetRollbackRestore() != nil },
 			Validate: func(b *agentv1.OperationBody) error {
 				if !config.IsUUID(b.GetParams().GetRollbackRestore().GetTargetOperationId()) {

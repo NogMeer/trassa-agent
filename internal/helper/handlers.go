@@ -99,6 +99,9 @@ type configChange struct {
 func (e *Executor) runConfigChange(ctx context.Context, r *run, c configChange) *agentv1.OperationResult {
 	op := strings.ToLower(r.body.GetOperationId())
 	r.phase = agentv1.OperationPhase_OPERATION_PHASE_ROLLBACK_POINT
+	cw := time.Duration(r.body.GetConfirmWithinSec()) * time.Second
+	// Изменение с автооткатом: его возврат (rollback.restore) тоже только с автооткатом.
+	c.state.Confirm = cw > 0
 	m, err := e.Rollback.CreateState(op, c.paths, c.services, c.state)
 	if err != nil {
 		r.system("Точка отката не создана: %v", err)
@@ -109,7 +112,6 @@ func (e *Executor) runConfigChange(ctx context.Context, r *run, c configChange) 
 		Files: uint32(len(m.Files)), Bytes: uint64(m.TotalBytes),
 	}
 	r.system("Сохранена копия: файлов %d", len(m.Files))
-	cw := time.Duration(r.body.GetConfirmWithinSec()) * time.Second
 	if cw > 0 {
 		if err := e.armAuto(ctx, op, autorollback.KindConfig, cw); err != nil {
 			r.system("Таймер автооткатa не заведён: %v", err)
@@ -177,6 +179,11 @@ func (e *Executor) restoreTarget(r *run) (*rollback.Manifest, *agentv1.Operation
 	if err != nil {
 		return nil, r.failed(CodeRollbackNotAvailable, err.Error())
 	}
+	// Возврат SSH, firewall или приватной сети может отрезать связь, как и сама операция: без таймера автооткатa
+	// сервер остался бы недоступным.
+	if m.NeedsConfirm() && r.body.GetConfirmWithinSec() == 0 {
+		return nil, r.failed(ops.CodeParamsInvalid, "возврат этой операции — только с автооткатом (confirm_within_sec)")
+	}
 	return m, nil
 }
 
@@ -185,7 +192,14 @@ func (e *Executor) previewRestore(_ context.Context, r *run) (*agentv1.Preview, 
 	if fail != nil {
 		return nil, fail
 	}
-	p := &agentv1.Preview{Summary: fmt.Sprintf("Вернутся файлов: %d", len(m.Files)), Services: m.Services}
+	_, notes, err := e.Rollback.Inverse(m)
+	if err != nil {
+		return nil, r.failed(CodeRollbackUnavailable, err.Error())
+	}
+	p := &agentv1.Preview{Summary: fmt.Sprintf("Вернутся файлов: %d", len(m.Files)), Services: m.Services, Notes: notes}
+	if r.body.GetConfirmWithinSec() > 0 {
+		p.Notes = append(p.Notes, fmt.Sprintf("Если связь не подтвердится за %d с, возврат отменится", r.body.GetConfirmWithinSec()))
+	}
 	for _, f := range m.Files {
 		kind := agentv1.FileChangeKind_FILE_CHANGE_KIND_MODIFY
 		if !f.Existed {
@@ -205,8 +219,17 @@ func (e *Executor) applyRestore(ctx context.Context, r *run) *agentv1.OperationR
 	for _, f := range m.Files {
 		paths = append(paths, f.Path)
 	}
+	// Точка отката самого возврата — с тем же состоянием вне файлов (набор nftables, команды приведения, текущие
+	// параметры ядра и службы): её откат приводит систему к файлам, а не только кладёт их обратно.
+	state, notes, err := e.Rollback.Inverse(m)
+	if err != nil {
+		return r.failed(CodeRollbackUnavailable, err.Error())
+	}
+	for _, n := range notes {
+		r.system("%s", n)
+	}
 	return e.runConfigChange(ctx, r, configChange{
-		paths: paths, services: m.Services,
+		paths: paths, services: m.Services, state: state,
 		apply: func() error {
 			_, err := e.Rollback.Restore(m.OperationID)
 			return err

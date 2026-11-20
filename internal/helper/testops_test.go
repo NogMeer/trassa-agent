@@ -295,3 +295,41 @@ func TestConfirmWithinAboveMax(t *testing.T) {
 	b.GetParams().GetTestConfigWrite().ConfirmWithin = 30 // предел — по полю тела, а не по параметрам типа
 	expectReject(t, f, sealed(b), ops.CodeParamsInvalid)
 }
+
+// Возврат операции с автооткатом — тоже только с автооткатом; у точки возврата флаг Confirm.
+func TestRollbackRestoreNeedsConfirm(t *testing.T) {
+	f := newFixture(t)
+	p := f.target("old\n")
+	w := f.configWrite(p, "new\n", false, 30)
+	if o := f.exec(sealed(w)); o.result.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_AWAITING_CONFIRM {
+		t.Fatalf("%+v", o.result)
+	}
+	if _, code := f.confirm(w.GetOperationId()); code != "" {
+		t.Fatal(code)
+	}
+	restore := func(cw uint32) *agentv1.OperationBody {
+		b := f.body(ops.TypeRollbackRestore, &agentv1.OperationParams{Params: &agentv1.OperationParams_RollbackRestore{
+			RollbackRestore: &agentv1.RollbackRestoreParams{TargetOperationId: w.GetOperationId()}}})
+		b.Rollback = agentv1.RollbackKind_ROLLBACK_KIND_CONFIG
+		b.ConfirmWithinSec = cw
+		return b
+	}
+	if o := f.exec(sealed(restore(0))); o.result.GetErrorCode() != ops.CodeParamsInvalid || readFile(t, p) != "new\n" {
+		t.Fatalf("возврат без автооткатa: %+v", o.result)
+	}
+	rb := restore(30)
+	if o := f.exec(sealed(rb)); o.result.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_AWAITING_CONFIRM || readFile(t, p) != "old\n" {
+		t.Fatalf("возврат с автооткатом: %+v", o.result)
+	}
+	m, err := f.e.Rollback.Load(rb.GetOperationId())
+	if err != nil || !m.State.Confirm {
+		t.Fatalf("точка возврата: %+v %v", m, err)
+	}
+	// Связь не подтверждена — автооткат возврата: файл снова как после операции.
+	if err := f.e.AutoRollback(context.Background(), rb.GetOperationId()); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, p) != "new\n" {
+		t.Fatalf("автооткат возврата: %q", readFile(t, p))
+	}
+}
