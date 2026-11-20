@@ -54,7 +54,8 @@ const (
 		"30 22 252:5 / /var/lib/docker/volumes rw - ext4 /dev/vdc rw\n" +
 		"31 22 0:41 / /mnt/nfs rw - nfs4 srv:/x rw\n" +
 		"32 22 252:6 / /mnt/my\\040disk rw - ext4 /dev/vdd rw\n" +
-		"33 25 0:5 /systemd/inaccessible/dir /home ro - tmpfs tmpfs rw\n"
+		"33 25 0:5 /systemd/inaccessible/dir /home ro - tmpfs tmpfs rw\n" +
+		"34 22 252:7 /x/hostname /etc/hostname rw - ext4 /dev/vde rw\n"
 )
 
 func writeTree(t *testing.T, files map[string]string) string {
@@ -102,7 +103,7 @@ func TestCollect(t *testing.T) {
 		"1/stat": "", "42/stat": "", "self/x": "", "sys/x": "",
 	})
 	sys := writeTree(t, map[string]string{"class/net/eth0/device/x": "", "class/net/docker0/x": ""})
-	c := &Collector{Proc: proc, Sys: sys, Statfs: fakeStatfs}
+	c := &Collector{Proc: proc, Sys: sys, Statfs: fakeStatfs, IsDir: func(p string) bool { return p != "/etc/hostname" }}
 	t0 := time.Unix(1_700_000_000, 0)
 
 	first, errs := c.Collect(t0)
@@ -129,7 +130,7 @@ func TestCollect(t *testing.T) {
 			t.Errorf("%v = %v (есть: %v), ждали %v", k, g, ok, v)
 		}
 	}
-	for _, m := range []string{"/home", "/srv/data", "/run", "/proc", "/var/lib/docker/volumes", "/var/lib/docker/overlay2/x/merged", "/mnt/nfs"} {
+	for _, m := range []string{"/home", "/srv/data", "/run", "/proc", "/var/lib/docker/volumes", "/var/lib/docker/overlay2/x/merged", "/mnt/nfs", "/etc/hostname"} {
 		if _, ok := got[point{"disk_used_percent", m}]; ok {
 			t.Errorf("раздел %s не должен отправляться", m)
 		}

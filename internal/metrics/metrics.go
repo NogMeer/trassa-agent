@@ -39,6 +39,9 @@ type Collector struct {
 	Proc   string
 	Sys    string
 	Statfs func(path string) (FS, error)
+	// IsDir — точка монтирования каталог; файлы, смонтированные поверх файлов (/etc/hostname в контейнере),
+	// не разделы. nil — не проверять.
+	IsDir func(path string) bool
 
 	prevCPU  *cpuTimes
 	prevNet  map[string][2]uint64
@@ -46,7 +49,12 @@ type Collector struct {
 }
 
 // New — сборщик реальной системы.
-func New() *Collector { return &Collector{Proc: "/proc", Sys: "/sys", Statfs: statfs} }
+func New() *Collector { return &Collector{Proc: "/proc", Sys: "/sys", Statfs: statfs, IsDir: isDir} }
+
+func isDir(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.IsDir()
+}
 
 // Collect снимает одну пачку. Скорости (CPU, сеть) появляются со второго вызова: им нужна разность счётчиков.
 // Источник, который не прочитался, пропускается: его метрик в пачке нет, остальные уходят; ошибки — в errs.
@@ -331,7 +339,7 @@ func (c *Collector) mounts() ([]string, error) {
 	var out []string
 	for _, mp := range order {
 		e := last[mp]
-		if !diskFS[e.fstype] || devs[e.dev] || skipped(mp) || len(mp) > maxLabelValue {
+		if !diskFS[e.fstype] || devs[e.dev] || skipped(mp) || len(mp) > maxLabelValue || (c.IsDir != nil && !c.IsDir(mp)) {
 			continue
 		}
 		devs[e.dev] = true
