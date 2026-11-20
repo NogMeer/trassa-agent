@@ -1,0 +1,355 @@
+// SPDX-License-Identifier: Apache-2.0
+// Деплой (E17, раздел 6): Docker, прокси Caddy, сборка, релизы. Секреты — только SealedSecret (HPKE на ключ
+// помощника, как в E13); в info на месте plan_id — app_id. Решения — decisions/E17-deploy.md.
+syntax = "proto3";
+
+package trassa.agent.v1;
+
+import "trassa/agent/v1/backup.proto";
+
+option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
+
+enum BuildKind {
+  BUILD_KIND_UNSPECIFIED = 0;
+  BUILD_KIND_DOCKERFILE = 1;
+  BUILD_KIND_RAILPACK = 2;
+}
+
+enum ReleaseKind {
+  RELEASE_KIND_UNSPECIFIED = 0;
+  RELEASE_KIND_CONTAINER = 1;
+  RELEASE_KIND_COMPOSE = 2;
+}
+
+enum ReleaseStrategy {
+  RELEASE_STRATEGY_UNSPECIFIED = 0;
+  RELEASE_STRATEGY_ROLLING = 1;
+  RELEASE_STRATEGY_RECREATE = 2;
+}
+
+enum ControlAction {
+  CONTROL_ACTION_UNSPECIFIED = 0;
+  CONTROL_ACTION_RESTART = 1;
+  CONTROL_ACTION_STOP = 2;
+  CONTROL_ACTION_START = 3;
+}
+
+enum DeployStep {
+  DEPLOY_STEP_UNSPECIFIED = 0;
+  DEPLOY_STEP_FETCH = 1;
+  DEPLOY_STEP_BUILD = 2;
+  DEPLOY_STEP_PUSH = 3;
+  DEPLOY_STEP_PULL = 4;
+  DEPLOY_STEP_START = 5;
+  DEPLOY_STEP_PRE_DEPLOY = 6;
+  DEPLOY_STEP_HEALTHCHECK = 7;
+  // После SWITCH отмена отклоняется (CANCEL_TOO_LATE).
+  DEPLOY_STEP_SWITCH = 8;
+  DEPLOY_STEP_DRAIN = 9;
+  DEPLOY_STEP_STOP_OLD = 10;
+}
+
+enum CertState {
+  CERT_STATE_UNSPECIFIED = 0;
+  CERT_STATE_ISSUING = 1;
+  CERT_STATE_ACTIVE = 2;
+  CERT_STATE_ERROR = 3;
+}
+
+// Программа для сервера: имя из таблицы помощника (caddy, docker-compose, docker-buildx, railpack), версия,
+// sha256 архива или бинарника выпуска и адрес загрузки (скачивает агент; сумма обязана совпасть с таблицей).
+message DeployTool {
+  string name = 1;
+  string version = 2;
+  string sha256 = 3;
+  string url = 4;
+}
+
+// Реестр: адрес без схемы. Учётные данные раздельные: pull — у рабочих серверов (DeployReleaseParams), push —
+// только у сборщика (DeployBuildParams).
+message RegistryAuth {
+  // host[:port], как serveraddress в X-Registry-Auth.
+  string server = 1;
+  string username = 2;
+  // info: поле "registry_password".
+  SealedSecret password = 3;
+}
+
+message GitSource {
+  // https, без user:pass@.
+  string repo_url = 1;
+  // 40 или 64 hex.
+  string commit_sha = 2;
+  // x-access-token или имя deploy token.
+  string username = 3;
+  // info: поле "git_credential".
+  SealedSecret token = 4;
+  // Относительный, без "..".
+  string root_dir = 5;
+}
+
+message HealthCheck {
+  // Начинается с "/".
+  string path = 1;
+  // Общий срок (по плану 120).
+  uint32 timeout_sec = 2;
+  uint32 interval_ms = 3;
+  // Успехов подряд (по плану 3).
+  uint32 successes = 4;
+}
+
+message ContainerLimits {
+  uint32 memory_mb = 1;
+  uint32 milli_cpus = 2;
+}
+
+// Только именованный том.
+message AppVolume {
+  string name = 1;
+  string mount_path = 2;
+}
+
+// Маршрут: адрес назначения подставляет агент по своему состоянию (127.0.0.1:<порт>), панель порта не знает.
+message ProxyRoute {
+  string app_id = 1;
+  repeated string hosts = 2;
+  // Для COMPOSE — имя сервиса; пусто — единственный контейнер.
+  string service = 3;
+  // Вместо проксирования.
+  string redirect_to = 4;
+}
+
+// docker.ensure: Docker не ниже 28.0.0 (иначе DOCKER_TOO_OLD); чужой Docker не переустанавливается.
+message DockerEnsureParams {
+  // "29.9.3"; помощник сверяет с таблицей поддерживаемых.
+  string docker_version = 1;
+  // "20m".
+  string log_max_size = 2;
+  uint32 log_max_files = 3;
+  // Ключ apt Docker (armored), скачан агентом; помощник сверяет отпечаток с зашитым.
+  bytes apt_key = 4;
+  // Плагины для хостов с docker.io: docker-compose, docker-buildx (из таблицы помощника).
+  repeated DeployTool plugins = 5;
+}
+
+// proxy.ensure: Caddy бинарником с systemd под trassa-caddy.
+message ProxyEnsureParams {
+  DeployTool caddy = 1;
+  string acme_email = 2;
+  bool acme_staging = 3;
+}
+
+message ProxyRouteApplyParams {
+  // Полное состояние; пустое — отказ (R1).
+  repeated ProxyRoute routes = 1;
+  // Хэш документа маршрутов, по которому панель собрала routes: не совпал — DEPLOY_ROUTES_STALE.
+  string base_hash = 2;
+}
+
+message DeployBuildParams {
+  string app_id = 1;
+  string release_id = 2;
+  GitSource source = 3;
+  BuildKind build_kind = 4;
+  string dockerfile_path = 5;
+  // info: поле "build_env:<KEY>"; значения — только через --secret.
+  map<string, SealedSecret> build_secrets = 6;
+  // Несекретные; имена из build_secrets запрещены.
+  map<string, string> build_args = 7;
+  uint32 memory_limit_mb = 8;
+  // Учётные данные с правом push — только у сборщика.
+  RegistryAuth push_to = 9;
+  // Куда тегировать (без тега).
+  string image_repo = 10;
+  // Исполнение ограничено им, а не not_after_ms.
+  int64 deadline_ms = 11;
+  // Для BUILD_KIND_RAILPACK.
+  DeployTool railpack = 12;
+}
+
+message DeployReleaseParams {
+  string app_id = 1;
+  string release_id = 2;
+  ReleaseKind kind = 3;
+  // Только @sha256:.
+  string image_ref = 4;
+  // Учётные данные только для pull.
+  RegistryAuth pull_from = 5;
+  // Для COMPOSE: шаблон после подстановки; проверяется белым списком ключей до любого вызова compose.
+  string compose = 6;
+  // info: поле "env:<KEY>".
+  map<string, SealedSecret> env = 7;
+  map<string, string> env_plain = 8;
+  uint32 container_port = 9;
+  HealthCheck healthcheck = 10;
+  // argv в новом образе; пусто — нет команды.
+  repeated string pre_deploy_command = 11;
+  uint32 pre_deploy_timeout_sec = 12;
+  ReleaseStrategy strategy = 13;
+  ContainerLimits limits = 14;
+  repeated AppVolume volumes = 15;
+  // Маршруты этого приложения; агент сливает их с прочими.
+  repeated ProxyRoute routes = 16;
+  uint32 drain_seconds = 17;
+  int64 deadline_ms = 18;
+  // Образы релизов, которые нельзя удалять (точки отката).
+  repeated string keep_images = 19;
+}
+
+message DeployRollbackParams {
+  // Целевой image_ref — в release.image_ref.
+  DeployReleaseParams release = 1;
+  string target_release_id = 2;
+}
+
+message DeployControlParams {
+  string app_id = 1;
+  ControlAction action = 2;
+  int64 deadline_ms = 3;
+}
+
+// Маршрут приложения убирает агент.
+message DeployRemoveParams {
+  string app_id = 1;
+  bool remove_data = 2;
+}
+
+// Пусто — все приложения.
+message DeployInspectParams {
+  string app_id = 1;
+}
+
+message DeployImagesPruneParams {
+  string app_id = 1;
+  repeated string keep_images = 2;
+}
+
+// Ход релиза и сборки (OperationProgress.deploy).
+message DeployProgress {
+  string release_id = 1;
+  DeployStep step = 2;
+  // Для HEALTHCHECK.
+  uint32 attempt = 3;
+  // Для PULL и PUSH.
+  uint64 bytes_done = 4;
+  uint64 bytes_total = 5;
+}
+
+message DockerEnsureResult {
+  string docker_version = 1;
+  string api_version = 2;
+  string compose_version = 3;
+  string buildx_version = 4;
+  bool installed = 5;
+  bool daemon_json_written = 6;
+  string git_version = 7;
+}
+
+message ProxyEnsureResult {
+  string version = 1;
+  bool admin_ok = 2;
+  bool listening_80 = 3;
+  bool listening_443 = 4;
+}
+
+message RouteCheck {
+  string host = 1;
+  bool ok = 2;
+  uint32 status = 3;
+}
+
+message CertStatus {
+  string host = 1;
+  CertState state = 2;
+  int64 not_after_ms = 3;
+  string issuer = 4;
+  string error = 5;
+}
+
+message ProxyRouteApplyResult {
+  string routes_hash = 1;
+  repeated RouteCheck checks = 2;
+  repeated CertStatus certs = 3;
+}
+
+message DeployBuildResult {
+  string image_ref = 1;
+  string image_id = 2;
+  uint64 size_bytes = 3;
+  bool pushed = 4;
+  uint32 duration_sec = 5;
+  bool oom = 6;
+}
+
+// Итог deploy.release и deploy.rollback.
+message DeployReleaseResult {
+  repeated string container_ids = 1;
+  uint32 host_port = 2;
+  string image_ref = 3;
+  string previous_release_id = 4;
+  uint32 health_attempts = 5;
+  DeployStep failed_step = 6;
+  // До 100 строк, секреты вычищены.
+  string log_tail = 7;
+  string routes_hash = 8;
+}
+
+message AppContainer {
+  string id = 1;
+  string name = 2;
+  string service = 3;
+  string state = 4;
+  string health = 5;
+  uint32 host_port = 6;
+  bool oom_killed = 7;
+  int64 started_at_ms = 8;
+}
+
+message AppRuntime {
+  string app_id = 1;
+  string release_id = 2;
+  string image_ref = 3;
+  repeated AppContainer containers = 4;
+  uint64 disk_bytes = 5;
+  bool drift = 6;
+  // CONFIG_HASH, MISSING, EXTRA.
+  string drift_reason = 7;
+  repeated string images = 8;
+}
+
+// Итог deploy.inspect и deploy.control.
+message DeployInspectResult {
+  repeated AppRuntime apps = 1;
+  string docker_version = 2;
+  string compose_version = 3;
+  string buildx_version = 4;
+  string proxy_version = 5;
+  repeated CertStatus certs = 6;
+}
+
+message DeployRemoveResult {
+  uint32 removed_containers = 1;
+  uint32 removed_images = 2;
+  uint32 removed_volumes = 3;
+  uint64 freed_bytes = 4;
+}
+
+message DeployImagesPruneResult {
+  repeated string removed = 1;
+  uint64 freed_bytes = 2;
+}
+
+// Отмена релиза или сборки до SWITCH: подпись Ed25519 на "trassa-cancel-v1" || 0x00 || body (CancelBody).
+// После SWITCH — CANCEL_TOO_LATE; отменённая операция — ROLLED_BACK с error_code CANCELLED.
+message SignedCancel {
+  bytes body = 1;
+  bytes signature = 2;
+  string key_id = 3;
+}
+
+message CancelBody {
+  string operation_id = 1;
+  string server_id = 2;
+  bytes nonce = 3;
+  int64 not_after_ms = 4;
+}

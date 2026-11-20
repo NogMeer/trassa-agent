@@ -1,0 +1,236 @@
+// SPDX-License-Identifier: Apache-2.0
+// Доступ (E16, раздел 6): доверие к CA пространства, пользователи по принципалам, терминал через помощник,
+// аварийный вход trassa-rescue. Секретов нет: ключи CA — открытые. Пути файлов зашиты в помощник.
+// Решения — decisions/E16-access.md.
+syntax = "proto3";
+
+package trassa.agent.v1;
+
+option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
+
+// sshca.trust: полный желаемый набор CA ("ssh-ed25519 AAAA…", без опций и комментария), 1–4 ключа.
+message SshCaTrustParams {
+  repeated string ca_public_keys = 1;
+}
+
+// sshca.untrust: отпечатки SHA256:… снимаемых CA; пустой список — отказ (R1). Не осталось ни одного CA —
+// помощник удаляет файл доступа целиком.
+message SshCaUntrustParams {
+  repeated string ca_fingerprints = 1;
+}
+
+message SshCaTrustResult {
+  repeated string ca_fingerprints = 1;
+  // Действующие значения из sshd -T после применения.
+  string effective_trusted_user_ca_keys = 2;
+  string effective_authorized_principals_file = 3;
+}
+
+// Строка файла принципалов: "restrict,pty[,expiry-time=…] <name>".
+message AccessPrincipal {
+  // trassa:<workspaceId>:<memberId>; без пробелов, запятых и кавычек, до 128 символов.
+  string name = 1;
+  // 0 — без срока; иначе expiry-time в UTC: выдача кончается и без связи с панелью.
+  int64 expires_at_ms = 2;
+}
+
+enum AccessShell {
+  ACCESS_SHELL_UNSPECIFIED = 0;
+  ACCESS_SHELL_BASH = 1;
+  ACCESS_SHELL_SH = 2;
+  ACCESS_SHELL_ZSH = 3;
+}
+
+// access.user.ensure: класс по параметрам — новый пользователь или sudo — DESTRUCTIVE, иначе CHANGE.
+message AccessUserEnsureParams {
+  string unix_user = 1;
+  bool sudo = 2;
+  // 1–64 принципала; пустой список — отказ (снятие — access.user.remove).
+  repeated AccessPrincipal principals = 3;
+  AccessShell shell = 4;
+}
+
+message AccessUserEnsureResult {
+  bool created = 1;
+  uint32 uid = 2;
+  uint32 principals = 3;
+  bool sudo = 4;
+}
+
+// access.user.remove (CHANGE: сужение).
+message AccessUserRemoveParams {
+  string unix_user = 1;
+  // По умолчанию false: домашний каталог остаётся.
+  bool delete_home = 2;
+}
+
+message AccessUserRemoveResult {
+  uint32 processes_killed = 1;
+  bool home_kept = 2;
+}
+
+// access.sessions.terminate (CHANGE).
+message AccessSessionsTerminateParams {
+  // session_id терминалов через помощник.
+  repeated string session_ids = 1;
+  // keyId сертификатов прямых сессий (trassa:<ws>:<member>:<serial>).
+  repeated string cert_key_ids = 2;
+}
+
+message AccessSessionsTerminateResult {
+  repeated string terminated = 1;
+  repeated string not_found = 2;
+}
+
+// access.rescue.grant (DESTRUCTIVE, второй фактор): пользователь trassa-rescue с sudo получает один принципал
+// на минуты; вход — только по короткому сертификату с этим принципалом. Выдача, вход и сеанс — в журнал.
+message AccessRescueGrantParams {
+  // trassa:<workspaceId>:rescue:<grantId>.
+  string principal = 1;
+  // Конец выдачи: не позже 30 минут от issued_at_ms операции.
+  int64 expires_at_ms = 2;
+}
+
+message AccessRescueGrantResult {
+  string unix_user = 1;
+  int64 expires_at_ms = 2;
+}
+
+// access.rescue.revoke (CHANGE): принципалов у trassa-rescue не остаётся, его сеансы завершаются.
+message AccessRescueRevokeParams {}
+
+message AccessStateReadParams {}
+
+message AccessManagedUser {
+  string name = 1;
+  uint32 uid = 2;
+  bool sudo = 3;
+  repeated AccessPrincipal principals = 4;
+  AccessShell shell = 5;
+}
+
+message AccessStateResult {
+  repeated string ca_fingerprints = 1;
+  repeated AccessManagedUser users = 2;
+  // Ключи хоста из sshd -T hostkey → .pub ("ssh-ed25519 AAAA…").
+  repeated string host_keys = 3;
+  // Конец действующей выдачи trassa-rescue; 0 — выдачи нет.
+  int64 rescue_expires_at_ms = 4;
+  repeated uint32 ssh_ports = 5;
+  bool socket_activated = 6;
+  // Из dpkg-query, например "1:9.6p1-3ubuntu13.20".
+  string openssh_version = 7;
+  // Действующий sshd -T совпадает с файлами Trassa для root и всех управляемых.
+  bool trust_effective = 8;
+  // Коды расхождений: FOREIGN_TRUSTED_CA, FOREIGN_PRINCIPALS, MATCH_OVERRIDE:<user>, CERT_ALG_DISABLED.
+  repeated string conflicts = 9;
+  bool sudo_available = 10;
+  repeated string locales = 11;
+}
+
+// terminal.open: подписан worker, not_after ≤ 60 с от issued_at. PTY открывает помощник и передаёт ведущую
+// сторону агенту (SCM_RIGHTS); сроки — у помощника.
+message TerminalOpenParams {
+  // UUID.
+  string session_id = 1;
+  string unix_user = 2;
+  uint32 cols = 3;
+  uint32 rows = 4;
+  // 60–3600.
+  uint32 idle_timeout_sec = 5;
+  // 60–28800.
+  uint32 max_duration_sec = 6;
+  // Белый список: ru_RU.UTF-8, en_US.UTF-8, C.UTF-8.
+  string env_lang = 7;
+}
+
+enum TerminalEndReason {
+  TERMINAL_END_REASON_UNSPECIFIED = 0;
+  TERMINAL_END_REASON_CLIENT = 1;
+  TERMINAL_END_REASON_IDLE = 2;
+  TERMINAL_END_REASON_MAX_DURATION = 3;
+  TERMINAL_END_REASON_NOT_RENEWED = 4;
+  TERMINAL_END_REASON_REVOKED = 5;
+  TERMINAL_END_REASON_SHELL_EXIT = 6;
+  TERMINAL_END_REASON_AGENT_RESTART = 7;
+  TERMINAL_END_REASON_ERROR = 8;
+}
+
+// Итог терминала (OperationResult после закрытия).
+message TerminalSessionResult {
+  TerminalEndReason reason = 1;
+  int32 exit_code = 2;
+  uint64 bytes_out = 3;
+  // Применённая локаль после проверки по locale -a.
+  string lang = 4;
+  int64 started_at_ms = 5;
+}
+
+// Шлюз → агент. Данных в кадре до 64 КиБ. Кадры терминала идут мимо очереди InboundAck: у них свои смещения и
+// квитанции. Байты терминала не попадают в OperationProgress, LogChunk и журналы (R20).
+message TerminalClientFrame {
+  string session_id = 1;
+  oneof frame {
+    TerminalData input = 2;
+    TerminalResize resize = 3;
+    TerminalClose close = 4;
+    TerminalAck ack = 5;
+  }
+}
+
+// Агент → шлюз.
+message TerminalServerFrame {
+  string session_id = 1;
+  oneof frame {
+    TerminalReady ready = 2;
+    TerminalData output = 3;
+    TerminalExit exit = 4;
+    TerminalAck ack = 5;
+  }
+}
+
+message TerminalData {
+  // Смещение первого байта в потоке сессии: повтор после обрыва склеивается без дублей.
+  uint64 offset = 1;
+  bytes data = 2;
+}
+
+message TerminalResize {
+  uint32 cols = 1;
+  uint32 rows = 2;
+}
+
+message TerminalClose {
+  TerminalEndReason reason = 1;
+}
+
+// Квитанция: принято байтов от начала потока; без неё отправитель не уходит дальше чем на 256 КиБ.
+message TerminalAck {
+  uint64 received = 1;
+}
+
+message TerminalReady {
+  string unix_user = 1;
+  string lang = 2;
+}
+
+message TerminalExit {
+  TerminalEndReason reason = 1;
+  int32 exit_code = 2;
+}
+
+// Продление терминала: подпись Ed25519 на "trassa-terminal-renew-v1" || 0x00 || body (TerminalRenewBody).
+message SignedTerminalRenew {
+  bytes body = 1;
+  bytes signature = 2;
+  string key_id = 3;
+}
+
+message TerminalRenewBody {
+  string operation_id = 1;
+  string server_id = 2;
+  string session_id = 3;
+  bytes nonce = 4;
+  int64 issued_at_ms = 5;
+  int64 not_after_ms = 6;
+}

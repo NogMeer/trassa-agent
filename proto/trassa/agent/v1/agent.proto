@@ -9,7 +9,9 @@ syntax = "proto3";
 
 package trassa.agent.v1;
 
+import "trassa/agent/v1/access.proto";
 import "trassa/agent/v1/backup.proto";
+import "trassa/agent/v1/deploy.proto";
 import "trassa/agent/v1/security.proto";
 import "trassa/agent/v1/wireguard.proto";
 
@@ -36,6 +38,8 @@ message AgentMessage {
     MetricsBatch metrics = 15;
     Event event = 16;
     LogChunk log_chunk = 17;
+    // Терминал через помощник (E16): кадры мимо очереди InboundAck, свои смещения и квитанции.
+    TerminalServerFrame terminal = 18;
   }
 }
 
@@ -51,6 +55,11 @@ message GatewayMessage {
     Subscribe subscribe = 15;
     Unsubscribe unsubscribe = 16;
     Close close = 17;
+    // Терминал (E16): ввод, размер, закрытие, квитанции; продление — подписанное worker.
+    TerminalClientFrame terminal = 18;
+    SignedTerminalRenew terminal_renew = 19;
+    // Отмена релиза или сборки до SWITCH (E17).
+    SignedCancel cancel = 20;
   }
 }
 
@@ -149,6 +158,9 @@ enum RollbackKind {
   ROLLBACK_KIND_SNAPSHOT = 3;
   // Локальная копия заменяемых путей и дамп базы до 72 часов (E13, backup.restore).
   ROLLBACK_KIND_LOCAL_COPY = 4;
+  // Возврат прежнего релиза внутри операции (E17): до SWITCH удаляется новый контейнер, после — возвращаются
+  // маршрут и прежний контейнер. rollback.restore к нему неприменим.
+  ROLLBACK_KIND_RELEASE = 5;
 }
 
 // Параметры по типу. Тип и вариант oneof обязаны совпадать (иначе PARAMS_INVALID).
@@ -187,7 +199,28 @@ message OperationParams {
     BackupTargetEnsureParams backup_target_ensure = 31;
     BackupTargetRemoveParams backup_target_remove = 32;
     BackupUnconfigureParams backup_unconfigure = 33;
-    // 34–49 — E16, 50–69 — E17 (decisions E16, E17).
+    // E16 (34–49).
+    SshCaTrustParams sshca_trust = 34;
+    SshCaUntrustParams sshca_untrust = 35;
+    AccessUserEnsureParams access_user_ensure = 36;
+    AccessUserRemoveParams access_user_remove = 37;
+    TerminalOpenParams terminal_open = 38;
+    AccessSessionsTerminateParams access_sessions_terminate = 39;
+    AccessRescueGrantParams access_rescue_grant = 40;
+    AccessStateReadParams access_state_read = 41;
+    AccessRescueRevokeParams access_rescue_revoke = 42;
+    // E17 (50–69).
+    DockerEnsureParams docker_ensure = 50;
+    ProxyEnsureParams proxy_ensure = 51;
+    ProxyRouteApplyParams proxy_route_apply = 52;
+    DeployBuildParams deploy_build = 53;
+    DeployReleaseParams deploy_release = 54;
+    DeployRollbackParams deploy_rollback = 55;
+    DeployControlParams deploy_control = 56;
+    DeployRemoveParams deploy_remove = 57;
+    DeployInspectParams deploy_inspect = 58;
+    DeployImagesPruneParams deploy_images_prune = 59;
+    // E13, после блоков E16 и E17.
     BackupTargetRevokeReaderParams backup_target_revoke_reader = 70;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
@@ -304,6 +337,8 @@ message OperationProgress {
   string chunk = 5;
   // Ход бэкапа и восстановления (E13).
   BackupProgress backup = 6;
+  // Ход релиза и сборки (E17).
+  DeployProgress deploy = 7;
 }
 
 enum OperationOutcome {
@@ -320,6 +355,13 @@ message OperationResult {
   OperationOutcome outcome = 2;
   // VERIFY_FAILED, ROLLBACK_UNAVAILABLE, ROLLBACK_FAILED, AUTO_ROLLBACK_NO_CONFIRM, UPDATE_SIGNATURE_INVALID,
   // UPDATE_ROLLED_BACK и коды отказа помощника.
+  // E16: ACCESS_USER_FOREIGN, ACCESS_UNIX_USER_FORBIDDEN, ACCESS_USER_NOT_MANAGED, ACCESS_SSHD_INVALID,
+  // ACCESS_SSHD_CONFLICT, ACCESS_INCLUDE_MISSING, ACCESS_SUDO_UNAVAILABLE, ACCESS_SUDO_INCLUDE_MISSING,
+  // ACCESS_SESSION_LIMIT, TERMINAL_RENEW_INVALID.
+  // E17: BUILD_OOM, BUILD_TIMEOUT, BUILD_UNSUPPORTED, DISK_FULL, PRE_DEPLOY_FAILED, HEALTHCHECK_FAILED,
+  // PROXY_PORT_BUSY, TLS_ISSUE_FAILED, GIT_ACCESS_DENIED, GIT_COMMIT_MISMATCH, REGISTRY_UNAVAILABLE,
+  // REGISTRY_AUTH_FAILED, DOCKER_TOO_OLD, DOCKER_KEY_MISMATCH, DEPLOY_TOOL_UNKNOWN, DEPLOY_COMPOSE_FORBIDDEN,
+  // DEPLOY_PORT_FORBIDDEN, DEPLOY_IMAGE_NOT_PINNED, DEPLOY_ROUTES_STALE, CANCELLED, CANCEL_TOO_LATE.
   string error_code = 3;
   string message = 4;
   int64 started_at_ms = 5;
@@ -348,6 +390,26 @@ message OperationResult {
     BackupBrowseResult backup_browse = 37;
     BackupPruneResult backup_prune = 38;
     BackupTargetEnsureResult backup_target_ensure = 39;
+    // E16 (40–59).
+    AccessStateResult access_state = 40;
+    SshCaTrustResult sshca_trust = 41;
+    SshCaTrustResult sshca_untrust = 42;
+    AccessUserEnsureResult access_user_ensure = 43;
+    AccessUserRemoveResult access_user_remove = 44;
+    AccessSessionsTerminateResult access_sessions_terminate = 45;
+    AccessRescueGrantResult access_rescue_grant = 46;
+    TerminalSessionResult terminal_open = 47;
+    // E17 (60–79).
+    DockerEnsureResult docker_ensure = 60;
+    ProxyEnsureResult proxy_ensure = 61;
+    ProxyRouteApplyResult proxy_route_apply = 62;
+    DeployBuildResult deploy_build = 63;
+    // И для deploy.rollback.
+    DeployReleaseResult deploy_release = 64;
+    // И итог deploy.control.
+    DeployInspectResult deploy_inspect = 65;
+    DeployRemoveResult deploy_remove = 66;
+    DeployImagesPruneResult deploy_images_prune = 67;
   }
 }
 
@@ -496,6 +558,8 @@ enum LogSourceKind {
   LOG_SOURCE_KIND_UNIT = 4;
   // Файл внутри /var/log/ без ссылок и «..».
   LOG_SOURCE_KIND_FILE = 5;
+  // Контейнеры приложения по app_id (E17: имена меняются с релизом); name — app_id, UUID.
+  LOG_SOURCE_KIND_APP = 6;
 }
 
 message LogSource {
