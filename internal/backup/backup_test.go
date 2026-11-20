@@ -881,3 +881,33 @@ func TestRemoteRestic(t *testing.T) {
 		t.Fatal("пара ключей осталась после успешного восстановления")
 	}
 }
+
+// Перенос на другой сервер снимает setuid и setgid; откат локальной копии их сохраняет.
+func TestMoveIntoStripsSpecialBits(t *testing.T) {
+	root := tmp(t)
+	src := filepath.Join(root, "staging", "app")
+	_ = os.MkdirAll(src, 0o755)
+	tool := filepath.Join(src, "tool")
+	_ = os.WriteFile(tool, []byte("bin"), 0o755)
+	if err := os.Chmod(tool, 0o755|os.ModeSetuid|os.ModeSetgid); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(root, "dest", "app")
+	if err := moveInto(src, dst, true); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := os.Stat(filepath.Join(dst, "tool"))
+	if st.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 || st.Mode().Perm() != 0o755 {
+		t.Fatalf("особые биты остались: %v", st.Mode())
+	}
+	src2 := filepath.Join(root, "copy", "app")
+	_ = os.MkdirAll(src2, 0o755)
+	_ = os.WriteFile(filepath.Join(src2, "tool"), []byte("bin"), 0o755)
+	_ = os.Chmod(filepath.Join(src2, "tool"), 0o755|os.ModeSetgid)
+	if err := copyBack(src2, filepath.Join(root, "back", "app")); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(filepath.Join(root, "back", "app", "tool")); st.Mode()&os.ModeSetgid == 0 {
+		t.Fatal("откат потерял setgid")
+	}
+}

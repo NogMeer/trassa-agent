@@ -187,7 +187,9 @@ func (e *Env) restoreFiles(ctx context.Context, r *Restic, snap *Snapshot, j Res
 	verr := err
 	if verr == nil && inPlace {
 		for _, x := range paths {
-			if verr = copyBack(filepath.Join(staging, x), dest(x)); verr != nil {
+			// На другой сервер — без setuid и setgid: снимок мог прийти от взломанного источника.
+			strip := p.GetMode() == agentv1.RestoreMode_RESTORE_MODE_OTHER_SERVER
+			if verr = moveInto(filepath.Join(staging, x), dest(x), strip); verr != nil {
 				break
 			}
 		}

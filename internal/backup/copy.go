@@ -52,13 +52,20 @@ func copyTree(src, dst string) error {
 		return err
 	}
 	defer unix.Close(dp)
-	return copyAt(sp, filepath.Base(src), dp, filepath.Base(dst))
+	return copyAt(sp, filepath.Base(src), dp, filepath.Base(dst), false)
 }
 
-func unixMode(st *unix.Stat_t) uint32 { return uint32(st.Mode) & 0o7777 }
+func unixMode(st *unix.Stat_t, strip bool) uint32 {
+	m := uint32(st.Mode) & 0o7777
+	if strip {
+		m &^= unix.S_ISUID | unix.S_ISGID
+	}
+	return m
+}
 
-// copyAt — srcName из каталога sdir в dstName каталога ddir.
-func copyAt(sdir int, srcName string, ddir int, dstName string) error {
+// copyAt — srcName из каталога sdir в dstName каталога ddir. strip — снять setuid и setgid (файлы из чужого
+// снимка на другом сервере: взломанный источник не подложит получателю setuid-бинарник root).
+func copyAt(sdir int, srcName string, ddir int, dstName string, strip bool) error {
 	var st unix.Stat_t
 	if err := unix.Fstatat(sdir, srcName, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
@@ -84,7 +91,7 @@ func copyAt(sdir int, srcName string, ddir int, dstName string) error {
 			return err
 		}
 		for _, n := range names {
-			if err := copyAt(sfd, n, dfd, n); err != nil {
+			if err := copyAt(sfd, n, dfd, n, strip); err != nil {
 				return err
 			}
 		}
@@ -93,7 +100,7 @@ func copyAt(sdir int, srcName string, ddir int, dstName string) error {
 		if err := unix.Fstat(sfd, &cur); err != nil {
 			return err
 		}
-		return applyMetaFd(dfd, &cur)
+		return applyMetaFd(dfd, &cur, strip)
 	case unix.S_IFREG:
 		sfd, err := unix.Openat(sdir, srcName, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
 		if err != nil {
@@ -114,7 +121,7 @@ func copyAt(sdir int, srcName string, ddir int, dstName string) error {
 		if _, err := io.Copy(out, in); err != nil {
 			return err
 		}
-		return applyMetaFd(dfd, &cur)
+		return applyMetaFd(dfd, &cur, strip)
 	case unix.S_IFLNK:
 		buf := make([]byte, 4096)
 		n, err := unix.Readlinkat(sdir, srcName, buf)
@@ -133,11 +140,11 @@ func copyAt(sdir int, srcName string, ddir int, dstName string) error {
 }
 
 // applyMetaFd — владелец (до прав: chown снимает setuid), права с особыми битами и время — по дескриптору.
-func applyMetaFd(fd int, st *unix.Stat_t) error {
+func applyMetaFd(fd int, st *unix.Stat_t, strip bool) error {
 	if err := unix.Fchown(fd, int(st.Uid), int(st.Gid)); err != nil && !errors.Is(err, unix.EPERM) {
 		return err
 	}
-	if err := unix.Fchmod(fd, unixMode(st)); err != nil {
+	if err := unix.Fchmod(fd, unixMode(st, strip)); err != nil {
 		return err
 	}
 	mt := unix.NsecToTimeval(unix.TimespecToNsec(statMtime(st)))
@@ -146,7 +153,10 @@ func applyMetaFd(fd int, st *unix.Stat_t) error {
 
 // copyBack возвращает копию на место: прежнее содержимое пути удаляется, копия переносится (renameat) или,
 // на другой файловой системе, копируется. Всё — относительно дескриптора каталога-родителя без ссылок.
-func copyBack(copyPath, dst string) error {
+func copyBack(copyPath, dst string) error { return moveInto(copyPath, dst, false) }
+
+// moveInto — copyBack с выбором: strip снимает setuid и setgid (и при переносе renameat — по дескриптору).
+func moveInto(copyPath, dst string, strip bool) error {
 	dp, err := fsutil.MkdirAllNoFollow(filepath.Dir(dst), 0o755)
 	if err != nil {
 		return err
@@ -161,12 +171,14 @@ func copyBack(copyPath, dst string) error {
 		return err
 	}
 	defer unix.Close(sp)
-	if err := unix.Renameat(sp, filepath.Base(copyPath), dp, name); err == nil {
-		return nil
-	} else if !errors.Is(err, unix.EXDEV) {
-		return fmt.Errorf("возврат %s: %w", dst, err)
+	if !strip {
+		if err := unix.Renameat(sp, filepath.Base(copyPath), dp, name); err == nil {
+			return nil
+		} else if !errors.Is(err, unix.EXDEV) {
+			return fmt.Errorf("возврат %s: %w", dst, err)
+		}
 	}
-	if err := copyAt(sp, filepath.Base(copyPath), dp, name); err != nil {
+	if err := copyAt(sp, filepath.Base(copyPath), dp, name, strip); err != nil {
 		return fmt.Errorf("возврат %s: %w", dst, err)
 	}
 	return nil
