@@ -106,7 +106,7 @@ type Executor struct {
 	once     sync.Once
 	handlers map[string]handler
 	mutating chan struct{}
-	long     chan struct{}
+	long     map[string]chan struct{}
 	reads    chan struct{}
 	mu       sync.Mutex
 	running  map[string]chan struct{}
@@ -133,7 +133,7 @@ func (e *Executor) init() {
 	e.once.Do(func() {
 		e.handlers = e.builtinHandlers()
 		e.mutating = make(chan struct{}, 1)
-		e.long = make(chan struct{}, 1)
+		e.long = map[string]chan struct{}{"": make(chan struct{}, 1), ops.QueueDeploy: make(chan struct{}, 1)}
 		e.reads = make(chan struct{}, MaxParallelReads)
 		e.running = map[string]chan struct{}{}
 	})
@@ -299,7 +299,7 @@ func (e *Executor) Execute(ctx context.Context, raw []byte, send func(helperrpc.
 	if checked.Spec.Session && !b.GetDryRun() {
 		release, err = func() {}, nil
 	} else if mutating && checked.Spec.Long {
-		release, err = e.acquireLong(ctx)
+		release, err = e.acquireLong(ctx, checked.Spec.Queue)
 	} else {
 		release, err = e.acquire(ctx, mutating)
 	}
@@ -358,10 +358,14 @@ func (e *Executor) acquire(ctx context.Context, mutating bool) (func(), error) {
 
 // acquireLong — очередь долгих операций (бэкапы, Spec.Long): по одной, без общей блокировки изменений системы —
 // автооткат SSH или firewall не ждёт конца многочасового бэкапа.
-func (e *Executor) acquireLong(ctx context.Context) (func(), error) {
+func (e *Executor) acquireLong(ctx context.Context, queue string) (func(), error) {
+	q, ok := e.long[queue]
+	if !ok {
+		return nil, fmt.Errorf("очередь %q", queue)
+	}
 	select {
-	case e.long <- struct{}{}:
-		return func() { <-e.long }, nil
+	case q <- struct{}{}:
+		return func() { <-q }, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

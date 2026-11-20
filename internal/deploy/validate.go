@@ -266,6 +266,15 @@ func ValidateRelease(p *agentv1.DeployReleaseParams, issuedAtMs int64) error {
 		if p.GetImageRef() != "" || p.GetCompose() == "" || len(p.GetCompose()) > 256<<10 {
 			return errors.New("compose: только compose, без image_ref")
 		}
+		// Команда перед переключением у compose не исполняется (сервисы обновляются на месте): отказ, а не пропуск.
+		if len(p.GetPreDeployCommand()) > 0 || len(p.GetVolumes()) > 0 {
+			return errors.New("compose: pre_deploy_command и volumes задаются в документе")
+		}
+		for _, r := range p.GetRoutes() {
+			if r.GetRedirectTo() == "" && (r.GetService() == "" || p.GetContainerPort() < 1 || p.GetContainerPort() > 65535) {
+				return errors.New("compose: маршруту нужны service и container_port")
+			}
+		}
 	default:
 		return errors.New("kind")
 	}

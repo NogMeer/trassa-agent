@@ -69,6 +69,8 @@ type Spec struct {
 	// Long — долгая операция (бэкап, часы), которая не меняет файлы системы: не берёт общую блокировку
 	// изменений, иначе автооткат SSH или firewall ждал бы её конца. Такие операции идут своей очередью по одной.
 	Long bool
+	// Queue — очередь долгой операции: "" — бэкапы, QueueDeploy — деплой (релиз не ждёт многочасового бэкапа).
+	Queue string
 	// Session — сеанс (терминал, часы): ни блокировки изменений, ни очереди; предел числа — у обработчика.
 	Session bool
 	// Validate проверяет параметры (oneof уже совпал с типом).
@@ -76,6 +78,9 @@ type Spec struct {
 	// match — вариант oneof, обязательный для типа.
 	match func(*agentv1.OperationParams) bool
 }
+
+// QueueDeploy — очередь долгих операций деплоя.
+const QueueDeploy = "deploy"
 
 // Catalog — неизменяемый список типов.
 type Catalog struct{ specs map[string]Spec }

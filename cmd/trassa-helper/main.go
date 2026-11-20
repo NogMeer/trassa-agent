@@ -342,5 +342,6 @@ func wgEnv(p config.Paths) *wireguard.Env {
 // deployEnv — деплой (E17): Docker, прокси Caddy; программы скачивает агент в каталог операции.
 func deployEnv(p config.Paths) *deploy.Env {
 	return &deploy.Env{Root: "/", Docker: &dockerapi.Client{}, Run: backup.RunCommand,
-		Stage: func(op string) string { return helper.StageDir(p, op) }, StateDir: filepath.Join(p.StateDir, "deploy")}
+		Stage: func(op string) string { return helper.StageDir(p, op) }, StateDir: filepath.Join(p.StateDir, "deploy"),
+		AppsDir: filepath.Join(p.StateDir, "apps")}
 }

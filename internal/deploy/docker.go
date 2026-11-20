@@ -55,6 +55,11 @@ type Env struct {
 	Run      func(ctx context.Context, name string, args ...string) ([]byte, error)
 	Stage    func(op string) string // каталог, куда агент скачал программы операции
 	StateDir string                 // /var/lib/trassa/deploy
+	AppsDir  string                 // /var/lib/trassa/apps (решение E17 п. 6)
+	// RouteLock — общая блокировка помощника для долгих операций деплоя (nil — вызывающий уже держит её).
+	RouteLock func(ctx context.Context) (func(), error)
+	// Exec — программа с заданным окружением (compose, git, buildx); nil — RunEnv.
+	Exec func(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
 }
 
 func (e *Env) path(p string) string { return filepath.Join(e.Root, p) }

@@ -269,7 +269,7 @@ func TestCatalogNotConfigurable(t *testing.T) {
 		"access.user.ensure", "access.user.remove", "agent.uninstall", "agent.update",
 		"backup.init", "backup.prune", "backup.restore", "backup.run", "backup.snapshot.browse", "backup.snapshots.list",
 		"backup.sources.discover", "backup.target.ensure", "backup.target.remove", "backup.target.revoke_reader", "backup.unconfigure", "backup.verify",
-		"deploy.inspect", "docker.ensure",
+		"deploy.control", "deploy.images.prune", "deploy.inspect", "deploy.release", "deploy.remove", "deploy.rollback", "docker.ensure",
 		"firewall.apply", "firewall.plan", "logs.read", "logs.subscribe", "packages.list_updates", "packages.upgrade", "proxy.ensure", "proxy.route.apply", "rollback.restore",
 		"security.baseline.accept", "security.fix.BRUTEFORCE_NO_PROTECTION", "security.fix.KERNEL_ASLR_OFF", "security.fix.PERM_CRON", "security.fix.PERM_SYSTEM_FILES",
 		"security.fix.PERM_USER_SSH_DIR", "security.fix.PERM_WORLD_WRITABLE", "security.fix.SSH_CONFIG_PERMS", "security.fix.SYSCTL_NETWORK",
@@ -389,5 +389,24 @@ func TestRedactPreview(t *testing.T) {
 	}
 	if redactPreview(nil) != nil {
 		t.Fatal("nil")
+	}
+}
+
+// Каждая долгая операция идёт известной очередью: неизвестная дала бы INTERNAL на каждом вызове.
+func TestLongQueuesKnown(t *testing.T) {
+	f := newFixture(t)
+	f.e.init()
+	cat := ops.Builtin()
+	for _, typ := range cat.Types() {
+		s, _ := cat.Lookup(typ)
+		if !s.Long {
+			if s.Queue != "" {
+				t.Errorf("%s: очередь без Long", typ)
+			}
+			continue
+		}
+		if _, ok := f.e.long[s.Queue]; !ok {
+			t.Errorf("%s: очередь %q", typ, s.Queue)
+		}
 	}
 }

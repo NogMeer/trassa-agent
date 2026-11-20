@@ -6,9 +6,13 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"time"
+
+	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/deploy"
+	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
 )
@@ -22,6 +26,11 @@ func (e *Executor) deployHandlers() map[string]handler {
 		ops.TypeProxyEnsure:     {apply: e.applyProxyEnsure},
 		ops.TypeProxyRouteApply: {apply: e.applyRouteApply},
 		ops.TypeDeployInspect:   {apply: e.applyDeployInspect},
+		ops.TypeDeployRelease:   {apply: e.applyDeployRelease},
+		ops.TypeDeployRollback:  {apply: e.applyDeployRollback},
+		ops.TypeDeployControl:   {apply: e.applyDeployControl},
+		ops.TypeDeployRemove:    {apply: e.applyDeployRemove},
+		ops.TypeDeployPrune:     {apply: e.applyDeployPrune},
 	}
 }
 
@@ -122,5 +131,137 @@ func (e *Executor) applyDeployInspect(ctx context.Context, r *run) *agentv1.Oper
 	}
 	res := r.succeeded("")
 	res.Data = &agentv1.OperationResult_DeployInspect{DeployInspect: out}
+	return res
+}
+
+// deployRunEnv — окружение долгой операции деплоя: маршруты пишутся под общей блокировкой помощника.
+func (e *Executor) deployRunEnv(r *run) (*deploy.Env, *agentv1.OperationResult) {
+	env, fail := e.deployEnv(r)
+	if fail != nil {
+		return nil, fail
+	}
+	cp := *env
+	cp.RouteLock = e.Lock.Lock
+	return &cp, nil
+}
+
+// deployProgress — кадр хода релиза (OperationProgress.deploy) на каждый шаг; попытки проверки — не чаще progressEvery.
+func (r *run) deployProgress(release string) deploy.Step {
+	var last time.Time
+	var lastStep agentv1.DeployStep
+	return func(step agentv1.DeployStep, attempt uint32) {
+		now := time.Now()
+		if step == lastStep && now.Sub(last) < progressEvery {
+			return
+		}
+		last, lastStep = now, step
+		r.seq++
+		raw, _ := proto.Marshal(&agentv1.OperationProgress{
+			OperationId: r.body.GetOperationId(), Seq: r.seq, Phase: r.phase,
+			Deploy: &agentv1.DeployProgress{ReleaseId: release, Step: step, Attempt: attempt},
+		})
+		_ = r.send(helperrpc.Response{Kind: helperrpc.KindProgress, Progress: raw})
+	}
+}
+
+func (e *Executor) runRelease(ctx context.Context, r *run, p *agentv1.DeployReleaseParams) *agentv1.OperationResult {
+	env, fail := e.deployRunEnv(r)
+	if fail != nil {
+		return fail
+	}
+	if e.Secrets == nil && (len(p.GetEnv()) > 0 || p.GetPullFrom() != nil) {
+		return r.failed(CodeDeployUnavailable, "нет ключа секретов помощника")
+	}
+	ctx, cancel := context.WithDeadline(ctx, time.UnixMilli(p.GetDeadlineMs()))
+	defer cancel()
+	job := deploy.ReleaseJob{
+		Params: p, Open: &deploy.Opener{Key: e.Secrets, Body: r.body, App: p.GetAppId()},
+		Step: r.deployProgress(p.GetReleaseId()),
+		Log:  func(s string) { r.log(agentv1.LogStream_LOG_STREAM_STDERR, s) },
+	}
+	out, rolledBack, err := env.Release(ctx, job)
+	var res *agentv1.OperationResult
+	switch {
+	case err == nil:
+		res = r.succeeded("")
+	case rolledBack:
+		res = r.rolledBack(releaseCode(ctx, err), err.Error())
+	default:
+		res = r.failed(releaseCode(ctx, err), err.Error())
+	}
+	if out != nil {
+		res.Data = &agentv1.OperationResult_DeployRelease{DeployRelease: out}
+	}
+	return res
+}
+
+// releaseCode — код итога релиза; срок операции — DEPLOY_TIMEOUT.
+func releaseCode(ctx context.Context, err error) string {
+	for _, known := range []error{
+		deploy.ErrRegistry, deploy.ErrRegistryAuth, deploy.ErrImageGone, deploy.ErrPreDeploy, deploy.ErrHealthcheck,
+		deploy.ErrNoFreePort, deploy.ErrReleaseTimeout, deploy.ErrComposeDenied, deploy.ErrAppMissing,
+	} {
+		if errors.Is(err, known) {
+			return known.Error()
+		}
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return deploy.ErrReleaseTimeout.Error()
+	}
+	return deployCode(err)
+}
+
+func (e *Executor) applyDeployRelease(ctx context.Context, r *run) *agentv1.OperationResult {
+	return e.runRelease(ctx, r, r.body.GetParams().GetDeployRelease())
+}
+
+func (e *Executor) applyDeployRollback(ctx context.Context, r *run) *agentv1.OperationResult {
+	return e.runRelease(ctx, r, r.body.GetParams().GetDeployRollback().GetRelease())
+}
+
+func (e *Executor) applyDeployControl(ctx context.Context, r *run) *agentv1.OperationResult {
+	env, fail := e.deployRunEnv(r)
+	if fail != nil {
+		return fail
+	}
+	p := r.body.GetParams().GetDeployControl()
+	ctx, cancel := context.WithDeadline(ctx, time.UnixMilli(p.GetDeadlineMs()))
+	defer cancel()
+	out, err := env.Control(ctx, p)
+	if err != nil {
+		return r.failed(releaseCode(ctx, err), err.Error())
+	}
+	res := r.succeeded("")
+	res.Data = &agentv1.OperationResult_DeployInspect{DeployInspect: out}
+	return res
+}
+
+func (e *Executor) applyDeployRemove(ctx context.Context, r *run) *agentv1.OperationResult {
+	env, fail := e.deployRunEnv(r)
+	if fail != nil {
+		return fail
+	}
+	out, err := env.Remove(ctx, r.body.GetParams().GetDeployRemove())
+	res := r.succeeded("")
+	if err != nil {
+		res = r.failed(releaseCode(ctx, err), err.Error())
+	}
+	if out != nil {
+		res.Data = &agentv1.OperationResult_DeployRemove{DeployRemove: out}
+	}
+	return res
+}
+
+func (e *Executor) applyDeployPrune(ctx context.Context, r *run) *agentv1.OperationResult {
+	env, fail := e.deployRunEnv(r)
+	if fail != nil {
+		return fail
+	}
+	out, err := env.PruneImages(ctx, r.body.GetParams().GetDeployImagesPrune())
+	if err != nil {
+		return r.failed(deployCode(err), err.Error())
+	}
+	res := r.succeeded("")
+	res.Data = &agentv1.OperationResult_DeployImagesPrune{DeployImagesPrune: out}
 	return res
 }
