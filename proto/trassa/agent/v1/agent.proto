@@ -156,6 +156,13 @@ message OperationParams {
     LogsReadParams logs_read = 7;
     SecurityScanParams security_scan = 8;
     PackagesListUpdatesParams packages_list_updates = 9;
+    SecurityFixParams security_fix = 10;
+    SshHardenParams ssh_harden = 11;
+    FirewallPlanParams firewall_plan = 12;
+    FirewallApplyParams firewall_apply = 13;
+    PackagesUpgradeParams packages_upgrade = 14;
+    SystemRebootParams system_reboot = 15;
+    ServiceRestartParams service_restart = 16;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }
@@ -299,6 +306,7 @@ message OperationResult {
     LogsReadResult logs_read = 23;
     SecurityScanResult security_scan = 24;
     PackagesListUpdatesResult packages_list_updates = 25;
+    FirewallPlanResult firewall_plan = 26;
   }
 }
 

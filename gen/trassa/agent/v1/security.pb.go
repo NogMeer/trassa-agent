@@ -82,6 +82,310 @@ func (CheckState) EnumDescriptor() ([]byte, []int) {
 	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{0}
 }
 
+type RootLogin int32
+
+const (
+	// Не менять.
+	RootLogin_ROOT_LOGIN_UNSPECIFIED RootLogin = 0
+	// root по SSH не входит.
+	RootLogin_ROOT_LOGIN_NO RootLogin = 1
+	// root входит только по ключу (prohibit-password).
+	RootLogin_ROOT_LOGIN_KEY_ONLY RootLogin = 2
+)
+
+// Enum value maps for RootLogin.
+var (
+	RootLogin_name = map[int32]string{
+		0: "ROOT_LOGIN_UNSPECIFIED",
+		1: "ROOT_LOGIN_NO",
+		2: "ROOT_LOGIN_KEY_ONLY",
+	}
+	RootLogin_value = map[string]int32{
+		"ROOT_LOGIN_UNSPECIFIED": 0,
+		"ROOT_LOGIN_NO":          1,
+		"ROOT_LOGIN_KEY_ONLY":    2,
+	}
+)
+
+func (x RootLogin) Enum() *RootLogin {
+	p := new(RootLogin)
+	*p = x
+	return p
+}
+
+func (x RootLogin) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RootLogin) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_security_proto_enumTypes[1].Descriptor()
+}
+
+func (RootLogin) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_security_proto_enumTypes[1]
+}
+
+func (x RootLogin) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RootLogin.Descriptor instead.
+func (RootLogin) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{1}
+}
+
+type CryptoPreset int32
+
+const (
+	// Не менять.
+	CryptoPreset_CRYPTO_PRESET_UNSPECIFIED CryptoPreset = 0
+	// Строгий набор по ssh-audit (decisions E10, п. 4).
+	CryptoPreset_CRYPTO_PRESET_STRICT CryptoPreset = 1
+)
+
+// Enum value maps for CryptoPreset.
+var (
+	CryptoPreset_name = map[int32]string{
+		0: "CRYPTO_PRESET_UNSPECIFIED",
+		1: "CRYPTO_PRESET_STRICT",
+	}
+	CryptoPreset_value = map[string]int32{
+		"CRYPTO_PRESET_UNSPECIFIED": 0,
+		"CRYPTO_PRESET_STRICT":      1,
+	}
+)
+
+func (x CryptoPreset) Enum() *CryptoPreset {
+	p := new(CryptoPreset)
+	*p = x
+	return p
+}
+
+func (x CryptoPreset) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CryptoPreset) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_security_proto_enumTypes[2].Descriptor()
+}
+
+func (CryptoPreset) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_security_proto_enumTypes[2]
+}
+
+func (x CryptoPreset) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CryptoPreset.Descriptor instead.
+func (CryptoPreset) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{2}
+}
+
+type FirewallTarget int32
+
+const (
+	FirewallTarget_FIREWALL_TARGET_UNSPECIFIED FirewallTarget = 0
+	// Трафик к самому серверу (цепочка input).
+	FirewallTarget_FIREWALL_TARGET_HOST FirewallTarget = 1
+	// Опубликованные порты контейнеров (цепочка forward).
+	FirewallTarget_FIREWALL_TARGET_CONTAINERS FirewallTarget = 2
+	FirewallTarget_FIREWALL_TARGET_BOTH       FirewallTarget = 3
+)
+
+// Enum value maps for FirewallTarget.
+var (
+	FirewallTarget_name = map[int32]string{
+		0: "FIREWALL_TARGET_UNSPECIFIED",
+		1: "FIREWALL_TARGET_HOST",
+		2: "FIREWALL_TARGET_CONTAINERS",
+		3: "FIREWALL_TARGET_BOTH",
+	}
+	FirewallTarget_value = map[string]int32{
+		"FIREWALL_TARGET_UNSPECIFIED": 0,
+		"FIREWALL_TARGET_HOST":        1,
+		"FIREWALL_TARGET_CONTAINERS":  2,
+		"FIREWALL_TARGET_BOTH":        3,
+	}
+)
+
+func (x FirewallTarget) Enum() *FirewallTarget {
+	p := new(FirewallTarget)
+	*p = x
+	return p
+}
+
+func (x FirewallTarget) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FirewallTarget) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_security_proto_enumTypes[3].Descriptor()
+}
+
+func (FirewallTarget) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_security_proto_enumTypes[3]
+}
+
+func (x FirewallTarget) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FirewallTarget.Descriptor instead.
+func (FirewallTarget) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{3}
+}
+
+type FirewallPlanMode int32
+
+const (
+	FirewallPlanMode_FIREWALL_PLAN_MODE_UNSPECIFIED FirewallPlanMode = 0
+	// Разница с загруженным набором.
+	FirewallPlanMode_FIREWALL_PLAN_MODE_DIFF FirewallPlanMode = 1
+	// Правила ufw и чужих таблиц в формате Trassa; на сервер ничего не пишется.
+	FirewallPlanMode_FIREWALL_PLAN_MODE_IMPORT FirewallPlanMode = 2
+)
+
+// Enum value maps for FirewallPlanMode.
+var (
+	FirewallPlanMode_name = map[int32]string{
+		0: "FIREWALL_PLAN_MODE_UNSPECIFIED",
+		1: "FIREWALL_PLAN_MODE_DIFF",
+		2: "FIREWALL_PLAN_MODE_IMPORT",
+	}
+	FirewallPlanMode_value = map[string]int32{
+		"FIREWALL_PLAN_MODE_UNSPECIFIED": 0,
+		"FIREWALL_PLAN_MODE_DIFF":        1,
+		"FIREWALL_PLAN_MODE_IMPORT":      2,
+	}
+)
+
+func (x FirewallPlanMode) Enum() *FirewallPlanMode {
+	p := new(FirewallPlanMode)
+	*p = x
+	return p
+}
+
+func (x FirewallPlanMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FirewallPlanMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_security_proto_enumTypes[4].Descriptor()
+}
+
+func (FirewallPlanMode) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_security_proto_enumTypes[4]
+}
+
+func (x FirewallPlanMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FirewallPlanMode.Descriptor instead.
+func (FirewallPlanMode) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{4}
+}
+
+type FirewallApplyMode int32
+
+const (
+	FirewallApplyMode_FIREWALL_APPLY_MODE_UNSPECIFIED FirewallApplyMode = 0
+	FirewallApplyMode_FIREWALL_APPLY_MODE_APPLY       FirewallApplyMode = 1
+	// Снять таблицу Trassa.
+	FirewallApplyMode_FIREWALL_APPLY_MODE_REMOVE FirewallApplyMode = 2
+)
+
+// Enum value maps for FirewallApplyMode.
+var (
+	FirewallApplyMode_name = map[int32]string{
+		0: "FIREWALL_APPLY_MODE_UNSPECIFIED",
+		1: "FIREWALL_APPLY_MODE_APPLY",
+		2: "FIREWALL_APPLY_MODE_REMOVE",
+	}
+	FirewallApplyMode_value = map[string]int32{
+		"FIREWALL_APPLY_MODE_UNSPECIFIED": 0,
+		"FIREWALL_APPLY_MODE_APPLY":       1,
+		"FIREWALL_APPLY_MODE_REMOVE":      2,
+	}
+)
+
+func (x FirewallApplyMode) Enum() *FirewallApplyMode {
+	p := new(FirewallApplyMode)
+	*p = x
+	return p
+}
+
+func (x FirewallApplyMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FirewallApplyMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_security_proto_enumTypes[5].Descriptor()
+}
+
+func (FirewallApplyMode) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_security_proto_enumTypes[5]
+}
+
+func (x FirewallApplyMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FirewallApplyMode.Descriptor instead.
+func (FirewallApplyMode) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{5}
+}
+
+type UpgradeScope int32
+
+const (
+	UpgradeScope_UPGRADE_SCOPE_UNSPECIFIED UpgradeScope = 0
+	UpgradeScope_UPGRADE_SCOPE_SECURITY    UpgradeScope = 1
+	UpgradeScope_UPGRADE_SCOPE_ALL         UpgradeScope = 2
+)
+
+// Enum value maps for UpgradeScope.
+var (
+	UpgradeScope_name = map[int32]string{
+		0: "UPGRADE_SCOPE_UNSPECIFIED",
+		1: "UPGRADE_SCOPE_SECURITY",
+		2: "UPGRADE_SCOPE_ALL",
+	}
+	UpgradeScope_value = map[string]int32{
+		"UPGRADE_SCOPE_UNSPECIFIED": 0,
+		"UPGRADE_SCOPE_SECURITY":    1,
+		"UPGRADE_SCOPE_ALL":         2,
+	}
+)
+
+func (x UpgradeScope) Enum() *UpgradeScope {
+	p := new(UpgradeScope)
+	*p = x
+	return p
+}
+
+func (x UpgradeScope) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (UpgradeScope) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_security_proto_enumTypes[6].Descriptor()
+}
+
+func (UpgradeScope) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_security_proto_enumTypes[6]
+}
+
+func (x UpgradeScope) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use UpgradeScope.Descriptor instead.
+func (UpgradeScope) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{6}
+}
+
 // security.scan (READ). checks — коды из каталога E10; пустой список отклоняется (R1).
 type SecurityScanParams struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -725,6 +1029,604 @@ func (x *PackagesListUpdatesResult) GetRebootPackages() []string {
 	return nil
 }
 
+// security.fix.<код>: исправление одной проверки каталога. Код — в типе операции. subjects — объекты из
+// результата скана (файлы, пользователи, параметры ядра); пустой список отклоняется (R1).
+type SecurityFixParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Subjects      []string               `protobuf:"bytes,1,rep,name=subjects,proto3" json:"subjects,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SecurityFixParams) Reset() {
+	*x = SecurityFixParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SecurityFixParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SecurityFixParams) ProtoMessage() {}
+
+func (x *SecurityFixParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SecurityFixParams.ProtoReflect.Descriptor instead.
+func (*SecurityFixParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SecurityFixParams) GetSubjects() []string {
+	if x != nil {
+		return x.Subjects
+	}
+	return nil
+}
+
+// ssh.harden (DESTRUCTIVE, CONFIG + автооткат, confirm_within_sec = 300). Ноль и отсутствие значения — не менять.
+type SshHardenParams struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	PasswordAuth   *bool                  `protobuf:"varint,1,opt,name=password_auth,json=passwordAuth,proto3,oneof" json:"password_auth,omitempty"`
+	RootLogin      RootLogin              `protobuf:"varint,2,opt,name=root_login,json=rootLogin,proto3,enum=trassa.agent.v1.RootLogin" json:"root_login,omitempty"`
+	Port           uint32                 `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	MaxAuthTries   uint32                 `protobuf:"varint,4,opt,name=max_auth_tries,json=maxAuthTries,proto3" json:"max_auth_tries,omitempty"`
+	CryptoPreset   CryptoPreset           `protobuf:"varint,5,opt,name=crypto_preset,json=cryptoPreset,proto3,enum=trassa.agent.v1.CryptoPreset" json:"crypto_preset,omitempty"`
+	EmptyPasswords *bool                  `protobuf:"varint,6,opt,name=empty_passwords,json=emptyPasswords,proto3,oneof" json:"empty_passwords,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SshHardenParams) Reset() {
+	*x = SshHardenParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SshHardenParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SshHardenParams) ProtoMessage() {}
+
+func (x *SshHardenParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SshHardenParams.ProtoReflect.Descriptor instead.
+func (*SshHardenParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *SshHardenParams) GetPasswordAuth() bool {
+	if x != nil && x.PasswordAuth != nil {
+		return *x.PasswordAuth
+	}
+	return false
+}
+
+func (x *SshHardenParams) GetRootLogin() RootLogin {
+	if x != nil {
+		return x.RootLogin
+	}
+	return RootLogin_ROOT_LOGIN_UNSPECIFIED
+}
+
+func (x *SshHardenParams) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *SshHardenParams) GetMaxAuthTries() uint32 {
+	if x != nil {
+		return x.MaxAuthTries
+	}
+	return 0
+}
+
+func (x *SshHardenParams) GetCryptoPreset() CryptoPreset {
+	if x != nil {
+		return x.CryptoPreset
+	}
+	return CryptoPreset_CRYPTO_PRESET_UNSPECIFIED
+}
+
+func (x *SshHardenParams) GetEmptyPasswords() bool {
+	if x != nil && x.EmptyPasswords != nil {
+		return *x.EmptyPasswords
+	}
+	return false
+}
+
+// Разрешающее правило: всё, что не разрешено, на внешних интерфейсах закрыто.
+type FirewallRule struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Target FirewallTarget         `protobuf:"varint,1,opt,name=target,proto3,enum=trassa.agent.v1.FirewallTarget" json:"target,omitempty"`
+	// tcp или udp.
+	Protocol string `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	Port     uint32 `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	// Конец диапазона; 0 — один порт.
+	PortTo uint32 `protobuf:"varint,4,opt,name=port_to,json=portTo,proto3" json:"port_to,omitempty"`
+	// Источники в виде CIDR; пусто — любые.
+	Sources       []string `protobuf:"bytes,5,rep,name=sources,proto3" json:"sources,omitempty"`
+	Comment       string   `protobuf:"bytes,6,opt,name=comment,proto3" json:"comment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FirewallRule) Reset() {
+	*x = FirewallRule{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FirewallRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FirewallRule) ProtoMessage() {}
+
+func (x *FirewallRule) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FirewallRule.ProtoReflect.Descriptor instead.
+func (*FirewallRule) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *FirewallRule) GetTarget() FirewallTarget {
+	if x != nil {
+		return x.Target
+	}
+	return FirewallTarget_FIREWALL_TARGET_UNSPECIFIED
+}
+
+func (x *FirewallRule) GetProtocol() string {
+	if x != nil {
+		return x.Protocol
+	}
+	return ""
+}
+
+func (x *FirewallRule) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *FirewallRule) GetPortTo() uint32 {
+	if x != nil {
+		return x.PortTo
+	}
+	return 0
+}
+
+func (x *FirewallRule) GetSources() []string {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+func (x *FirewallRule) GetComment() string {
+	if x != nil {
+		return x.Comment
+	}
+	return ""
+}
+
+// Набор Trassa целиком. ruleset_hash — sha256 (hex) канонического JSON набора по RFC 8785, как planHash.
+type FirewallRuleset struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rules         []*FirewallRule        `protobuf:"bytes,1,rep,name=rules,proto3" json:"rules,omitempty"`
+	SshPort       uint32                 `protobuf:"varint,2,opt,name=ssh_port,json=sshPort,proto3" json:"ssh_port,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FirewallRuleset) Reset() {
+	*x = FirewallRuleset{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FirewallRuleset) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FirewallRuleset) ProtoMessage() {}
+
+func (x *FirewallRuleset) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FirewallRuleset.ProtoReflect.Descriptor instead.
+func (*FirewallRuleset) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *FirewallRuleset) GetRules() []*FirewallRule {
+	if x != nil {
+		return x.Rules
+	}
+	return nil
+}
+
+func (x *FirewallRuleset) GetSshPort() uint32 {
+	if x != nil {
+		return x.SshPort
+	}
+	return 0
+}
+
+// firewall.plan (READ).
+type FirewallPlanParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mode          FirewallPlanMode       `protobuf:"varint,1,opt,name=mode,proto3,enum=trassa.agent.v1.FirewallPlanMode" json:"mode,omitempty"`
+	Ruleset       *FirewallRuleset       `protobuf:"bytes,2,opt,name=ruleset,proto3" json:"ruleset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FirewallPlanParams) Reset() {
+	*x = FirewallPlanParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FirewallPlanParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FirewallPlanParams) ProtoMessage() {}
+
+func (x *FirewallPlanParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FirewallPlanParams.ProtoReflect.Descriptor instead.
+func (*FirewallPlanParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *FirewallPlanParams) GetMode() FirewallPlanMode {
+	if x != nil {
+		return x.Mode
+	}
+	return FirewallPlanMode_FIREWALL_PLAN_MODE_UNSPECIFIED
+}
+
+func (x *FirewallPlanParams) GetRuleset() *FirewallRuleset {
+	if x != nil {
+		return x.Ruleset
+	}
+	return nil
+}
+
+type FirewallPlanResult struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	RulesetHash string                 `protobuf:"bytes,1,opt,name=ruleset_hash,json=rulesetHash,proto3" json:"ruleset_hash,omitempty"`
+	// Набор nftables, который применит firewall.apply.
+	NftText       string          `protobuf:"bytes,2,opt,name=nft_text,json=nftText,proto3" json:"nft_text,omitempty"`
+	Diff          []string        `protobuf:"bytes,3,rep,name=diff,proto3" json:"diff,omitempty"`
+	Imported      []*FirewallRule `protobuf:"bytes,4,rep,name=imported,proto3" json:"imported,omitempty"`
+	Warnings      []string        `protobuf:"bytes,5,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FirewallPlanResult) Reset() {
+	*x = FirewallPlanResult{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FirewallPlanResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FirewallPlanResult) ProtoMessage() {}
+
+func (x *FirewallPlanResult) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FirewallPlanResult.ProtoReflect.Descriptor instead.
+func (*FirewallPlanResult) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *FirewallPlanResult) GetRulesetHash() string {
+	if x != nil {
+		return x.RulesetHash
+	}
+	return ""
+}
+
+func (x *FirewallPlanResult) GetNftText() string {
+	if x != nil {
+		return x.NftText
+	}
+	return ""
+}
+
+func (x *FirewallPlanResult) GetDiff() []string {
+	if x != nil {
+		return x.Diff
+	}
+	return nil
+}
+
+func (x *FirewallPlanResult) GetImported() []*FirewallRule {
+	if x != nil {
+		return x.Imported
+	}
+	return nil
+}
+
+func (x *FirewallPlanResult) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
+}
+
+// firewall.apply (DESTRUCTIVE, CONFIG + автооткат, confirm_within_sec = 120).
+type FirewallApplyParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ruleset       *FirewallRuleset       `protobuf:"bytes,1,opt,name=ruleset,proto3" json:"ruleset,omitempty"`
+	RulesetHash   string                 `protobuf:"bytes,2,opt,name=ruleset_hash,json=rulesetHash,proto3" json:"ruleset_hash,omitempty"`
+	Mode          FirewallApplyMode      `protobuf:"varint,3,opt,name=mode,proto3,enum=trassa.agent.v1.FirewallApplyMode" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FirewallApplyParams) Reset() {
+	*x = FirewallApplyParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FirewallApplyParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FirewallApplyParams) ProtoMessage() {}
+
+func (x *FirewallApplyParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FirewallApplyParams.ProtoReflect.Descriptor instead.
+func (*FirewallApplyParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *FirewallApplyParams) GetRuleset() *FirewallRuleset {
+	if x != nil {
+		return x.Ruleset
+	}
+	return nil
+}
+
+func (x *FirewallApplyParams) GetRulesetHash() string {
+	if x != nil {
+		return x.RulesetHash
+	}
+	return ""
+}
+
+func (x *FirewallApplyParams) GetMode() FirewallApplyMode {
+	if x != nil {
+		return x.Mode
+	}
+	return FirewallApplyMode_FIREWALL_APPLY_MODE_UNSPECIFIED
+}
+
+// packages.upgrade (CHANGE). Предпросмотр — dry_run.
+type PackagesUpgradeParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         UpgradeScope           `protobuf:"varint,1,opt,name=scope,proto3,enum=trassa.agent.v1.UpgradeScope" json:"scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PackagesUpgradeParams) Reset() {
+	*x = PackagesUpgradeParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PackagesUpgradeParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PackagesUpgradeParams) ProtoMessage() {}
+
+func (x *PackagesUpgradeParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PackagesUpgradeParams.ProtoReflect.Descriptor instead.
+func (*PackagesUpgradeParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *PackagesUpgradeParams) GetScope() UpgradeScope {
+	if x != nil {
+		return x.Scope
+	}
+	return UpgradeScope_UPGRADE_SCOPE_UNSPECIFIED
+}
+
+// system.reboot (DESTRUCTIVE).
+type SystemRebootParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DelaySeconds  uint32                 `protobuf:"varint,1,opt,name=delay_seconds,json=delaySeconds,proto3" json:"delay_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SystemRebootParams) Reset() {
+	*x = SystemRebootParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SystemRebootParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SystemRebootParams) ProtoMessage() {}
+
+func (x *SystemRebootParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SystemRebootParams.ProtoReflect.Descriptor instead.
+func (*SystemRebootParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SystemRebootParams) GetDelaySeconds() uint32 {
+	if x != nil {
+		return x.DelaySeconds
+	}
+	return 0
+}
+
+// service.restart (CHANGE).
+type ServiceRestartParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Unit          string                 `protobuf:"bytes,1,opt,name=unit,proto3" json:"unit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceRestartParams) Reset() {
+	*x = ServiceRestartParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceRestartParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceRestartParams) ProtoMessage() {}
+
+func (x *ServiceRestartParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceRestartParams.ProtoReflect.Descriptor instead.
+func (*ServiceRestartParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ServiceRestartParams) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
 var File_trassa_agent_v1_security_proto protoreflect.FileDescriptor
 
 const file_trassa_agent_v1_security_proto_rawDesc = "" +
@@ -779,14 +1681,79 @@ const file_trassa_agent_v1_security_proto_rawDesc = "" +
 	"\x19PackagesListUpdatesResult\x12:\n" +
 	"\bpackages\x18\x01 \x03(\v2\x1e.trassa.agent.v1.PackageUpdateR\bpackages\x12'\n" +
 	"\x0freboot_required\x18\x02 \x01(\bR\x0erebootRequired\x12'\n" +
-	"\x0freboot_packages\x18\x03 \x03(\tR\x0erebootPackages*\x80\x01\n" +
+	"\x0freboot_packages\x18\x03 \x03(\tR\x0erebootPackages\"/\n" +
+	"\x11SecurityFixParams\x12\x1a\n" +
+	"\bsubjects\x18\x01 \x03(\tR\bsubjects\"\xc8\x02\n" +
+	"\x0fSshHardenParams\x12(\n" +
+	"\rpassword_auth\x18\x01 \x01(\bH\x00R\fpasswordAuth\x88\x01\x01\x129\n" +
+	"\n" +
+	"root_login\x18\x02 \x01(\x0e2\x1a.trassa.agent.v1.RootLoginR\trootLogin\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\rR\x04port\x12$\n" +
+	"\x0emax_auth_tries\x18\x04 \x01(\rR\fmaxAuthTries\x12B\n" +
+	"\rcrypto_preset\x18\x05 \x01(\x0e2\x1d.trassa.agent.v1.CryptoPresetR\fcryptoPreset\x12,\n" +
+	"\x0fempty_passwords\x18\x06 \x01(\bH\x01R\x0eemptyPasswords\x88\x01\x01B\x10\n" +
+	"\x0e_password_authB\x12\n" +
+	"\x10_empty_passwords\"\xc4\x01\n" +
+	"\fFirewallRule\x127\n" +
+	"\x06target\x18\x01 \x01(\x0e2\x1f.trassa.agent.v1.FirewallTargetR\x06target\x12\x1a\n" +
+	"\bprotocol\x18\x02 \x01(\tR\bprotocol\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\rR\x04port\x12\x17\n" +
+	"\aport_to\x18\x04 \x01(\rR\x06portTo\x12\x18\n" +
+	"\asources\x18\x05 \x03(\tR\asources\x12\x18\n" +
+	"\acomment\x18\x06 \x01(\tR\acomment\"a\n" +
+	"\x0fFirewallRuleset\x123\n" +
+	"\x05rules\x18\x01 \x03(\v2\x1d.trassa.agent.v1.FirewallRuleR\x05rules\x12\x19\n" +
+	"\bssh_port\x18\x02 \x01(\rR\asshPort\"\x87\x01\n" +
+	"\x12FirewallPlanParams\x125\n" +
+	"\x04mode\x18\x01 \x01(\x0e2!.trassa.agent.v1.FirewallPlanModeR\x04mode\x12:\n" +
+	"\aruleset\x18\x02 \x01(\v2 .trassa.agent.v1.FirewallRulesetR\aruleset\"\xbd\x01\n" +
+	"\x12FirewallPlanResult\x12!\n" +
+	"\fruleset_hash\x18\x01 \x01(\tR\vrulesetHash\x12\x19\n" +
+	"\bnft_text\x18\x02 \x01(\tR\anftText\x12\x12\n" +
+	"\x04diff\x18\x03 \x03(\tR\x04diff\x129\n" +
+	"\bimported\x18\x04 \x03(\v2\x1d.trassa.agent.v1.FirewallRuleR\bimported\x12\x1a\n" +
+	"\bwarnings\x18\x05 \x03(\tR\bwarnings\"\xac\x01\n" +
+	"\x13FirewallApplyParams\x12:\n" +
+	"\aruleset\x18\x01 \x01(\v2 .trassa.agent.v1.FirewallRulesetR\aruleset\x12!\n" +
+	"\fruleset_hash\x18\x02 \x01(\tR\vrulesetHash\x126\n" +
+	"\x04mode\x18\x03 \x01(\x0e2\".trassa.agent.v1.FirewallApplyModeR\x04mode\"L\n" +
+	"\x15PackagesUpgradeParams\x123\n" +
+	"\x05scope\x18\x01 \x01(\x0e2\x1d.trassa.agent.v1.UpgradeScopeR\x05scope\"9\n" +
+	"\x12SystemRebootParams\x12#\n" +
+	"\rdelay_seconds\x18\x01 \x01(\rR\fdelaySeconds\"*\n" +
+	"\x14ServiceRestartParams\x12\x12\n" +
+	"\x04unit\x18\x01 \x01(\tR\x04unit*\x80\x01\n" +
 	"\n" +
 	"CheckState\x12\x1b\n" +
 	"\x17CHECK_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10CHECK_STATE_PASS\x10\x01\x12\x14\n" +
 	"\x10CHECK_STATE_FAIL\x10\x02\x12\x12\n" +
 	"\x0eCHECK_STATE_NA\x10\x03\x12\x15\n" +
-	"\x11CHECK_STATE_ERROR\x10\x04B=Z;github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1b\x06proto3"
+	"\x11CHECK_STATE_ERROR\x10\x04*S\n" +
+	"\tRootLogin\x12\x1a\n" +
+	"\x16ROOT_LOGIN_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rROOT_LOGIN_NO\x10\x01\x12\x17\n" +
+	"\x13ROOT_LOGIN_KEY_ONLY\x10\x02*G\n" +
+	"\fCryptoPreset\x12\x1d\n" +
+	"\x19CRYPTO_PRESET_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14CRYPTO_PRESET_STRICT\x10\x01*\x85\x01\n" +
+	"\x0eFirewallTarget\x12\x1f\n" +
+	"\x1bFIREWALL_TARGET_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14FIREWALL_TARGET_HOST\x10\x01\x12\x1e\n" +
+	"\x1aFIREWALL_TARGET_CONTAINERS\x10\x02\x12\x18\n" +
+	"\x14FIREWALL_TARGET_BOTH\x10\x03*r\n" +
+	"\x10FirewallPlanMode\x12\"\n" +
+	"\x1eFIREWALL_PLAN_MODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17FIREWALL_PLAN_MODE_DIFF\x10\x01\x12\x1d\n" +
+	"\x19FIREWALL_PLAN_MODE_IMPORT\x10\x02*w\n" +
+	"\x11FirewallApplyMode\x12#\n" +
+	"\x1fFIREWALL_APPLY_MODE_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19FIREWALL_APPLY_MODE_APPLY\x10\x01\x12\x1e\n" +
+	"\x1aFIREWALL_APPLY_MODE_REMOVE\x10\x02*`\n" +
+	"\fUpgradeScope\x12\x1d\n" +
+	"\x19UPGRADE_SCOPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16UPGRADE_SCOPE_SECURITY\x10\x01\x12\x15\n" +
+	"\x11UPGRADE_SCOPE_ALL\x10\x02B=Z;github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1b\x06proto3"
 
 var (
 	file_trassa_agent_v1_security_proto_rawDescOnce sync.Once
@@ -800,34 +1767,60 @@ func file_trassa_agent_v1_security_proto_rawDescGZIP() []byte {
 	return file_trassa_agent_v1_security_proto_rawDescData
 }
 
-var file_trassa_agent_v1_security_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_trassa_agent_v1_security_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_trassa_agent_v1_security_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_trassa_agent_v1_security_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_trassa_agent_v1_security_proto_goTypes = []any{
 	(CheckState)(0),                   // 0: trassa.agent.v1.CheckState
-	(*SecurityScanParams)(nil),        // 1: trassa.agent.v1.SecurityScanParams
-	(*CheckResult)(nil),               // 2: trassa.agent.v1.CheckResult
-	(*Listener)(nil),                  // 3: trassa.agent.v1.Listener
-	(*SshEffective)(nil),              // 4: trassa.agent.v1.SshEffective
-	(*FirewallState)(nil),             // 5: trassa.agent.v1.FirewallState
-	(*SecurityScanResult)(nil),        // 6: trassa.agent.v1.SecurityScanResult
-	(*PackagesListUpdatesParams)(nil), // 7: trassa.agent.v1.PackagesListUpdatesParams
-	(*PackageUpdate)(nil),             // 8: trassa.agent.v1.PackageUpdate
-	(*PackagesListUpdatesResult)(nil), // 9: trassa.agent.v1.PackagesListUpdatesResult
-	nil,                               // 10: trassa.agent.v1.SshEffective.SettingsEntry
+	(RootLogin)(0),                    // 1: trassa.agent.v1.RootLogin
+	(CryptoPreset)(0),                 // 2: trassa.agent.v1.CryptoPreset
+	(FirewallTarget)(0),               // 3: trassa.agent.v1.FirewallTarget
+	(FirewallPlanMode)(0),             // 4: trassa.agent.v1.FirewallPlanMode
+	(FirewallApplyMode)(0),            // 5: trassa.agent.v1.FirewallApplyMode
+	(UpgradeScope)(0),                 // 6: trassa.agent.v1.UpgradeScope
+	(*SecurityScanParams)(nil),        // 7: trassa.agent.v1.SecurityScanParams
+	(*CheckResult)(nil),               // 8: trassa.agent.v1.CheckResult
+	(*Listener)(nil),                  // 9: trassa.agent.v1.Listener
+	(*SshEffective)(nil),              // 10: trassa.agent.v1.SshEffective
+	(*FirewallState)(nil),             // 11: trassa.agent.v1.FirewallState
+	(*SecurityScanResult)(nil),        // 12: trassa.agent.v1.SecurityScanResult
+	(*PackagesListUpdatesParams)(nil), // 13: trassa.agent.v1.PackagesListUpdatesParams
+	(*PackageUpdate)(nil),             // 14: trassa.agent.v1.PackageUpdate
+	(*PackagesListUpdatesResult)(nil), // 15: trassa.agent.v1.PackagesListUpdatesResult
+	(*SecurityFixParams)(nil),         // 16: trassa.agent.v1.SecurityFixParams
+	(*SshHardenParams)(nil),           // 17: trassa.agent.v1.SshHardenParams
+	(*FirewallRule)(nil),              // 18: trassa.agent.v1.FirewallRule
+	(*FirewallRuleset)(nil),           // 19: trassa.agent.v1.FirewallRuleset
+	(*FirewallPlanParams)(nil),        // 20: trassa.agent.v1.FirewallPlanParams
+	(*FirewallPlanResult)(nil),        // 21: trassa.agent.v1.FirewallPlanResult
+	(*FirewallApplyParams)(nil),       // 22: trassa.agent.v1.FirewallApplyParams
+	(*PackagesUpgradeParams)(nil),     // 23: trassa.agent.v1.PackagesUpgradeParams
+	(*SystemRebootParams)(nil),        // 24: trassa.agent.v1.SystemRebootParams
+	(*ServiceRestartParams)(nil),      // 25: trassa.agent.v1.ServiceRestartParams
+	nil,                               // 26: trassa.agent.v1.SshEffective.SettingsEntry
 }
 var file_trassa_agent_v1_security_proto_depIdxs = []int32{
 	0,  // 0: trassa.agent.v1.CheckResult.state:type_name -> trassa.agent.v1.CheckState
-	10, // 1: trassa.agent.v1.SshEffective.settings:type_name -> trassa.agent.v1.SshEffective.SettingsEntry
-	2,  // 2: trassa.agent.v1.SecurityScanResult.checks:type_name -> trassa.agent.v1.CheckResult
-	3,  // 3: trassa.agent.v1.SecurityScanResult.listeners:type_name -> trassa.agent.v1.Listener
-	5,  // 4: trassa.agent.v1.SecurityScanResult.firewall:type_name -> trassa.agent.v1.FirewallState
-	4,  // 5: trassa.agent.v1.SecurityScanResult.ssh:type_name -> trassa.agent.v1.SshEffective
-	8,  // 6: trassa.agent.v1.PackagesListUpdatesResult.packages:type_name -> trassa.agent.v1.PackageUpdate
-	7,  // [7:7] is the sub-list for method output_type
-	7,  // [7:7] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	26, // 1: trassa.agent.v1.SshEffective.settings:type_name -> trassa.agent.v1.SshEffective.SettingsEntry
+	8,  // 2: trassa.agent.v1.SecurityScanResult.checks:type_name -> trassa.agent.v1.CheckResult
+	9,  // 3: trassa.agent.v1.SecurityScanResult.listeners:type_name -> trassa.agent.v1.Listener
+	11, // 4: trassa.agent.v1.SecurityScanResult.firewall:type_name -> trassa.agent.v1.FirewallState
+	10, // 5: trassa.agent.v1.SecurityScanResult.ssh:type_name -> trassa.agent.v1.SshEffective
+	14, // 6: trassa.agent.v1.PackagesListUpdatesResult.packages:type_name -> trassa.agent.v1.PackageUpdate
+	1,  // 7: trassa.agent.v1.SshHardenParams.root_login:type_name -> trassa.agent.v1.RootLogin
+	2,  // 8: trassa.agent.v1.SshHardenParams.crypto_preset:type_name -> trassa.agent.v1.CryptoPreset
+	3,  // 9: trassa.agent.v1.FirewallRule.target:type_name -> trassa.agent.v1.FirewallTarget
+	18, // 10: trassa.agent.v1.FirewallRuleset.rules:type_name -> trassa.agent.v1.FirewallRule
+	4,  // 11: trassa.agent.v1.FirewallPlanParams.mode:type_name -> trassa.agent.v1.FirewallPlanMode
+	19, // 12: trassa.agent.v1.FirewallPlanParams.ruleset:type_name -> trassa.agent.v1.FirewallRuleset
+	18, // 13: trassa.agent.v1.FirewallPlanResult.imported:type_name -> trassa.agent.v1.FirewallRule
+	19, // 14: trassa.agent.v1.FirewallApplyParams.ruleset:type_name -> trassa.agent.v1.FirewallRuleset
+	5,  // 15: trassa.agent.v1.FirewallApplyParams.mode:type_name -> trassa.agent.v1.FirewallApplyMode
+	6,  // 16: trassa.agent.v1.PackagesUpgradeParams.scope:type_name -> trassa.agent.v1.UpgradeScope
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_security_proto_init() }
@@ -835,13 +1828,14 @@ func file_trassa_agent_v1_security_proto_init() {
 	if File_trassa_agent_v1_security_proto != nil {
 		return
 	}
+	file_trassa_agent_v1_security_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_trassa_agent_v1_security_proto_rawDesc), len(file_trassa_agent_v1_security_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   10,
+			NumEnums:      7,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

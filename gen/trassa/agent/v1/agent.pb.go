@@ -1558,6 +1558,13 @@ type OperationParams struct {
 	//	*OperationParams_LogsRead
 	//	*OperationParams_SecurityScan
 	//	*OperationParams_PackagesListUpdates
+	//	*OperationParams_SecurityFix
+	//	*OperationParams_SshHarden
+	//	*OperationParams_FirewallPlan
+	//	*OperationParams_FirewallApply
+	//	*OperationParams_PackagesUpgrade
+	//	*OperationParams_SystemReboot
+	//	*OperationParams_ServiceRestart
 	//	*OperationParams_TestConfigWrite
 	Params        isOperationParams_Params `protobuf_oneof:"params"`
 	unknownFields protoimpl.UnknownFields
@@ -1682,6 +1689,69 @@ func (x *OperationParams) GetPackagesListUpdates() *PackagesListUpdatesParams {
 	return nil
 }
 
+func (x *OperationParams) GetSecurityFix() *SecurityFixParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_SecurityFix); ok {
+			return x.SecurityFix
+		}
+	}
+	return nil
+}
+
+func (x *OperationParams) GetSshHarden() *SshHardenParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_SshHarden); ok {
+			return x.SshHarden
+		}
+	}
+	return nil
+}
+
+func (x *OperationParams) GetFirewallPlan() *FirewallPlanParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_FirewallPlan); ok {
+			return x.FirewallPlan
+		}
+	}
+	return nil
+}
+
+func (x *OperationParams) GetFirewallApply() *FirewallApplyParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_FirewallApply); ok {
+			return x.FirewallApply
+		}
+	}
+	return nil
+}
+
+func (x *OperationParams) GetPackagesUpgrade() *PackagesUpgradeParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_PackagesUpgrade); ok {
+			return x.PackagesUpgrade
+		}
+	}
+	return nil
+}
+
+func (x *OperationParams) GetSystemReboot() *SystemRebootParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_SystemReboot); ok {
+			return x.SystemReboot
+		}
+	}
+	return nil
+}
+
+func (x *OperationParams) GetServiceRestart() *ServiceRestartParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_ServiceRestart); ok {
+			return x.ServiceRestart
+		}
+	}
+	return nil
+}
+
 func (x *OperationParams) GetTestConfigWrite() *TestConfigWriteParams {
 	if x != nil {
 		if x, ok := x.Params.(*OperationParams_TestConfigWrite); ok {
@@ -1731,6 +1801,34 @@ type OperationParams_PackagesListUpdates struct {
 	PackagesListUpdates *PackagesListUpdatesParams `protobuf:"bytes,9,opt,name=packages_list_updates,json=packagesListUpdates,proto3,oneof"`
 }
 
+type OperationParams_SecurityFix struct {
+	SecurityFix *SecurityFixParams `protobuf:"bytes,10,opt,name=security_fix,json=securityFix,proto3,oneof"`
+}
+
+type OperationParams_SshHarden struct {
+	SshHarden *SshHardenParams `protobuf:"bytes,11,opt,name=ssh_harden,json=sshHarden,proto3,oneof"`
+}
+
+type OperationParams_FirewallPlan struct {
+	FirewallPlan *FirewallPlanParams `protobuf:"bytes,12,opt,name=firewall_plan,json=firewallPlan,proto3,oneof"`
+}
+
+type OperationParams_FirewallApply struct {
+	FirewallApply *FirewallApplyParams `protobuf:"bytes,13,opt,name=firewall_apply,json=firewallApply,proto3,oneof"`
+}
+
+type OperationParams_PackagesUpgrade struct {
+	PackagesUpgrade *PackagesUpgradeParams `protobuf:"bytes,14,opt,name=packages_upgrade,json=packagesUpgrade,proto3,oneof"`
+}
+
+type OperationParams_SystemReboot struct {
+	SystemReboot *SystemRebootParams `protobuf:"bytes,15,opt,name=system_reboot,json=systemReboot,proto3,oneof"`
+}
+
+type OperationParams_ServiceRestart struct {
+	ServiceRestart *ServiceRestartParams `protobuf:"bytes,16,opt,name=service_restart,json=serviceRestart,proto3,oneof"`
+}
+
 type OperationParams_TestConfigWrite struct {
 	// Только в сборке с тегом testops.
 	TestConfigWrite *TestConfigWriteParams `protobuf:"bytes,100,opt,name=test_config_write,json=testConfigWrite,proto3,oneof"`
@@ -1753,6 +1851,20 @@ func (*OperationParams_LogsRead) isOperationParams_Params() {}
 func (*OperationParams_SecurityScan) isOperationParams_Params() {}
 
 func (*OperationParams_PackagesListUpdates) isOperationParams_Params() {}
+
+func (*OperationParams_SecurityFix) isOperationParams_Params() {}
+
+func (*OperationParams_SshHarden) isOperationParams_Params() {}
+
+func (*OperationParams_FirewallPlan) isOperationParams_Params() {}
+
+func (*OperationParams_FirewallApply) isOperationParams_Params() {}
+
+func (*OperationParams_PackagesUpgrade) isOperationParams_Params() {}
+
+func (*OperationParams_SystemReboot) isOperationParams_Params() {}
+
+func (*OperationParams_ServiceRestart) isOperationParams_Params() {}
 
 func (*OperationParams_TestConfigWrite) isOperationParams_Params() {}
 
@@ -2529,6 +2641,7 @@ type OperationResult struct {
 	//	*OperationResult_LogsRead
 	//	*OperationResult_SecurityScan
 	//	*OperationResult_PackagesListUpdates
+	//	*OperationResult_FirewallPlan
 	Data          isOperationResult_Data `protobuf_oneof:"data"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2681,6 +2794,15 @@ func (x *OperationResult) GetPackagesListUpdates() *PackagesListUpdatesResult {
 	return nil
 }
 
+func (x *OperationResult) GetFirewallPlan() *FirewallPlanResult {
+	if x != nil {
+		if x, ok := x.Data.(*OperationResult_FirewallPlan); ok {
+			return x.FirewallPlan
+		}
+	}
+	return nil
+}
+
 type isOperationResult_Data interface {
 	isOperationResult_Data()
 }
@@ -2709,6 +2831,10 @@ type OperationResult_PackagesListUpdates struct {
 	PackagesListUpdates *PackagesListUpdatesResult `protobuf:"bytes,25,opt,name=packages_list_updates,json=packagesListUpdates,proto3,oneof"`
 }
 
+type OperationResult_FirewallPlan struct {
+	FirewallPlan *FirewallPlanResult `protobuf:"bytes,26,opt,name=firewall_plan,json=firewallPlan,proto3,oneof"`
+}
+
 func (*OperationResult_SystemInfo) isOperationResult_Data() {}
 
 func (*OperationResult_SystemInventory) isOperationResult_Data() {}
@@ -2720,6 +2846,8 @@ func (*OperationResult_LogsRead) isOperationResult_Data() {}
 func (*OperationResult_SecurityScan) isOperationResult_Data() {}
 
 func (*OperationResult_PackagesListUpdates) isOperationResult_Data() {}
+
+func (*OperationResult_FirewallPlan) isOperationResult_Data() {}
 
 // Подтверждение приёма кадра агента: агент перестаёт досылать результат после InboundAck с этим seq.
 type InboundAck struct {
@@ -4108,7 +4236,8 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\adry_run\x18\t \x01(\bR\x06dryRun\x12 \n" +
 	"\fissued_at_ms\x18\n" +
 	" \x01(\x03R\n" +
-	"issuedAtMs\"\xb9\x06\n" +
+	"issuedAtMs\"\xd3\n" +
+	"\n" +
 	"\x0fOperationParams\x12D\n" +
 	"\vsystem_info\x18\x01 \x01(\v2!.trassa.agent.v1.SystemInfoParamsH\x00R\n" +
 	"systemInfo\x12S\n" +
@@ -4119,7 +4248,16 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x0elogs_subscribe\x18\x06 \x01(\v2$.trassa.agent.v1.LogsSubscribeParamsH\x00R\rlogsSubscribe\x12>\n" +
 	"\tlogs_read\x18\a \x01(\v2\x1f.trassa.agent.v1.LogsReadParamsH\x00R\blogsRead\x12J\n" +
 	"\rsecurity_scan\x18\b \x01(\v2#.trassa.agent.v1.SecurityScanParamsH\x00R\fsecurityScan\x12`\n" +
-	"\x15packages_list_updates\x18\t \x01(\v2*.trassa.agent.v1.PackagesListUpdatesParamsH\x00R\x13packagesListUpdates\x12T\n" +
+	"\x15packages_list_updates\x18\t \x01(\v2*.trassa.agent.v1.PackagesListUpdatesParamsH\x00R\x13packagesListUpdates\x12G\n" +
+	"\fsecurity_fix\x18\n" +
+	" \x01(\v2\".trassa.agent.v1.SecurityFixParamsH\x00R\vsecurityFix\x12A\n" +
+	"\n" +
+	"ssh_harden\x18\v \x01(\v2 .trassa.agent.v1.SshHardenParamsH\x00R\tsshHarden\x12J\n" +
+	"\rfirewall_plan\x18\f \x01(\v2#.trassa.agent.v1.FirewallPlanParamsH\x00R\ffirewallPlan\x12M\n" +
+	"\x0efirewall_apply\x18\r \x01(\v2$.trassa.agent.v1.FirewallApplyParamsH\x00R\rfirewallApply\x12S\n" +
+	"\x10packages_upgrade\x18\x0e \x01(\v2&.trassa.agent.v1.PackagesUpgradeParamsH\x00R\x0fpackagesUpgrade\x12J\n" +
+	"\rsystem_reboot\x18\x0f \x01(\v2#.trassa.agent.v1.SystemRebootParamsH\x00R\fsystemReboot\x12P\n" +
+	"\x0fservice_restart\x18\x10 \x01(\v2%.trassa.agent.v1.ServiceRestartParamsH\x00R\x0eserviceRestart\x12T\n" +
 	"\x11test_config_write\x18d \x01(\v2&.trassa.agent.v1.TestConfigWriteParamsH\x00R\x0ftestConfigWriteB\b\n" +
 	"\x06params\"\x12\n" +
 	"\x10SystemInfoParams\"Q\n" +
@@ -4170,7 +4308,7 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x03seq\x18\x02 \x01(\rR\x03seq\x125\n" +
 	"\x05phase\x18\x03 \x01(\x0e2\x1f.trassa.agent.v1.OperationPhaseR\x05phase\x122\n" +
 	"\x06stream\x18\x04 \x01(\x0e2\x1a.trassa.agent.v1.LogStreamR\x06stream\x12\x14\n" +
-	"\x05chunk\x18\x05 \x01(\tR\x05chunk\"\xcf\x06\n" +
+	"\x05chunk\x18\x05 \x01(\tR\x05chunk\"\x9b\a\n" +
 	"\x0fOperationResult\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12;\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2!.trassa.agent.v1.OperationOutcomeR\aoutcome\x12\x1d\n" +
@@ -4187,7 +4325,8 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x0elogs_subscribe\x18\x16 \x01(\v2$.trassa.agent.v1.LogsSubscribeResultH\x00R\rlogsSubscribe\x12>\n" +
 	"\tlogs_read\x18\x17 \x01(\v2\x1f.trassa.agent.v1.LogsReadResultH\x00R\blogsRead\x12J\n" +
 	"\rsecurity_scan\x18\x18 \x01(\v2#.trassa.agent.v1.SecurityScanResultH\x00R\fsecurityScan\x12`\n" +
-	"\x15packages_list_updates\x18\x19 \x01(\v2*.trassa.agent.v1.PackagesListUpdatesResultH\x00R\x13packagesListUpdatesB\x06\n" +
+	"\x15packages_list_updates\x18\x19 \x01(\v2*.trassa.agent.v1.PackagesListUpdatesResultH\x00R\x13packagesListUpdates\x12J\n" +
+	"\rfirewall_plan\x18\x1a \x01(\v2#.trassa.agent.v1.FirewallPlanResultH\x00R\ffirewallPlanB\x06\n" +
 	"\x04data\"\x1e\n" +
 	"\n" +
 	"InboundAck\x12\x10\n" +
@@ -4447,8 +4586,16 @@ var file_trassa_agent_v1_agent_proto_goTypes = []any{
 	nil,                               // 58: trassa.agent.v1.Subscribe.OptionsEntry
 	(*SecurityScanParams)(nil),        // 59: trassa.agent.v1.SecurityScanParams
 	(*PackagesListUpdatesParams)(nil), // 60: trassa.agent.v1.PackagesListUpdatesParams
-	(*SecurityScanResult)(nil),        // 61: trassa.agent.v1.SecurityScanResult
-	(*PackagesListUpdatesResult)(nil), // 62: trassa.agent.v1.PackagesListUpdatesResult
+	(*SecurityFixParams)(nil),         // 61: trassa.agent.v1.SecurityFixParams
+	(*SshHardenParams)(nil),           // 62: trassa.agent.v1.SshHardenParams
+	(*FirewallPlanParams)(nil),        // 63: trassa.agent.v1.FirewallPlanParams
+	(*FirewallApplyParams)(nil),       // 64: trassa.agent.v1.FirewallApplyParams
+	(*PackagesUpgradeParams)(nil),     // 65: trassa.agent.v1.PackagesUpgradeParams
+	(*SystemRebootParams)(nil),        // 66: trassa.agent.v1.SystemRebootParams
+	(*ServiceRestartParams)(nil),      // 67: trassa.agent.v1.ServiceRestartParams
+	(*SecurityScanResult)(nil),        // 68: trassa.agent.v1.SecurityScanResult
+	(*PackagesListUpdatesResult)(nil), // 69: trassa.agent.v1.PackagesListUpdatesResult
+	(*FirewallPlanResult)(nil),        // 70: trassa.agent.v1.FirewallPlanResult
 }
 var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	14, // 0: trassa.agent.v1.AgentMessage.hello:type_name -> trassa.agent.v1.Hello
@@ -4482,47 +4629,55 @@ var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	28, // 28: trassa.agent.v1.OperationParams.logs_read:type_name -> trassa.agent.v1.LogsReadParams
 	59, // 29: trassa.agent.v1.OperationParams.security_scan:type_name -> trassa.agent.v1.SecurityScanParams
 	60, // 30: trassa.agent.v1.OperationParams.packages_list_updates:type_name -> trassa.agent.v1.PackagesListUpdatesParams
-	29, // 31: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
-	3,  // 32: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
-	24, // 33: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
-	48, // 34: trassa.agent.v1.LogsSubscribeParams.sources:type_name -> trassa.agent.v1.LogSource
-	9,  // 35: trassa.agent.v1.LogsSubscribeParams.min_level:type_name -> trassa.agent.v1.LogLevel
-	48, // 36: trassa.agent.v1.LogsReadParams.source:type_name -> trassa.agent.v1.LogSource
-	4,  // 37: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
-	5,  // 38: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
-	6,  // 39: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
-	36, // 40: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
-	38, // 41: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
-	39, // 42: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
-	40, // 43: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
-	51, // 44: trassa.agent.v1.OperationResult.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeResult
-	52, // 45: trassa.agent.v1.OperationResult.logs_read:type_name -> trassa.agent.v1.LogsReadResult
-	61, // 46: trassa.agent.v1.OperationResult.security_scan:type_name -> trassa.agent.v1.SecurityScanResult
-	62, // 47: trassa.agent.v1.OperationResult.packages_list_updates:type_name -> trassa.agent.v1.PackagesListUpdatesResult
-	37, // 48: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
-	7,  // 49: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
-	2,  // 50: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
-	41, // 51: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
-	42, // 52: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
-	43, // 53: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
-	45, // 54: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
-	55, // 55: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
-	8,  // 56: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
-	56, // 57: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
-	49, // 58: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
-	10, // 59: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
-	9,  // 60: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
-	48, // 61: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
-	57, // 62: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
-	48, // 63: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
-	50, // 64: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
-	49, // 65: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
-	58, // 66: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
-	67, // [67:67] is the sub-list for method output_type
-	67, // [67:67] is the sub-list for method input_type
-	67, // [67:67] is the sub-list for extension type_name
-	67, // [67:67] is the sub-list for extension extendee
-	0,  // [0:67] is the sub-list for field type_name
+	61, // 31: trassa.agent.v1.OperationParams.security_fix:type_name -> trassa.agent.v1.SecurityFixParams
+	62, // 32: trassa.agent.v1.OperationParams.ssh_harden:type_name -> trassa.agent.v1.SshHardenParams
+	63, // 33: trassa.agent.v1.OperationParams.firewall_plan:type_name -> trassa.agent.v1.FirewallPlanParams
+	64, // 34: trassa.agent.v1.OperationParams.firewall_apply:type_name -> trassa.agent.v1.FirewallApplyParams
+	65, // 35: trassa.agent.v1.OperationParams.packages_upgrade:type_name -> trassa.agent.v1.PackagesUpgradeParams
+	66, // 36: trassa.agent.v1.OperationParams.system_reboot:type_name -> trassa.agent.v1.SystemRebootParams
+	67, // 37: trassa.agent.v1.OperationParams.service_restart:type_name -> trassa.agent.v1.ServiceRestartParams
+	29, // 38: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
+	3,  // 39: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
+	24, // 40: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
+	48, // 41: trassa.agent.v1.LogsSubscribeParams.sources:type_name -> trassa.agent.v1.LogSource
+	9,  // 42: trassa.agent.v1.LogsSubscribeParams.min_level:type_name -> trassa.agent.v1.LogLevel
+	48, // 43: trassa.agent.v1.LogsReadParams.source:type_name -> trassa.agent.v1.LogSource
+	4,  // 44: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
+	5,  // 45: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
+	6,  // 46: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
+	36, // 47: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
+	38, // 48: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
+	39, // 49: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
+	40, // 50: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
+	51, // 51: trassa.agent.v1.OperationResult.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeResult
+	52, // 52: trassa.agent.v1.OperationResult.logs_read:type_name -> trassa.agent.v1.LogsReadResult
+	68, // 53: trassa.agent.v1.OperationResult.security_scan:type_name -> trassa.agent.v1.SecurityScanResult
+	69, // 54: trassa.agent.v1.OperationResult.packages_list_updates:type_name -> trassa.agent.v1.PackagesListUpdatesResult
+	70, // 55: trassa.agent.v1.OperationResult.firewall_plan:type_name -> trassa.agent.v1.FirewallPlanResult
+	37, // 56: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
+	7,  // 57: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
+	2,  // 58: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
+	41, // 59: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
+	42, // 60: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
+	43, // 61: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
+	45, // 62: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
+	55, // 63: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
+	8,  // 64: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
+	56, // 65: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
+	49, // 66: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
+	10, // 67: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
+	9,  // 68: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
+	48, // 69: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
+	57, // 70: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
+	48, // 71: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
+	50, // 72: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
+	49, // 73: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
+	58, // 74: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
+	75, // [75:75] is the sub-list for method output_type
+	75, // [75:75] is the sub-list for method input_type
+	75, // [75:75] is the sub-list for extension type_name
+	75, // [75:75] is the sub-list for extension extendee
+	0,  // [0:75] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_agent_proto_init() }
@@ -4561,6 +4716,13 @@ func file_trassa_agent_v1_agent_proto_init() {
 		(*OperationParams_LogsRead)(nil),
 		(*OperationParams_SecurityScan)(nil),
 		(*OperationParams_PackagesListUpdates)(nil),
+		(*OperationParams_SecurityFix)(nil),
+		(*OperationParams_SshHarden)(nil),
+		(*OperationParams_FirewallPlan)(nil),
+		(*OperationParams_FirewallApply)(nil),
+		(*OperationParams_PackagesUpgrade)(nil),
+		(*OperationParams_SystemReboot)(nil),
+		(*OperationParams_ServiceRestart)(nil),
 		(*OperationParams_TestConfigWrite)(nil),
 	}
 	file_trassa_agent_v1_agent_proto_msgTypes[23].OneofWrappers = []any{
@@ -4570,6 +4732,7 @@ func file_trassa_agent_v1_agent_proto_init() {
 		(*OperationResult_LogsRead)(nil),
 		(*OperationResult_SecurityScan)(nil),
 		(*OperationResult_PackagesListUpdates)(nil),
+		(*OperationResult_FirewallPlan)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

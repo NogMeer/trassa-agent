@@ -102,3 +102,123 @@ message PackagesListUpdatesResult {
   // Пакеты, которым нужна перезагрузка.
   repeated string reboot_packages = 3;
 }
+
+// ---------- Блок B: изменения с точкой отката (E10, раздел 6) ----------
+
+// security.fix.<код>: исправление одной проверки каталога. Код — в типе операции. subjects — объекты из
+// результата скана (файлы, пользователи, параметры ядра); пустой список отклоняется (R1).
+message SecurityFixParams {
+  repeated string subjects = 1;
+}
+
+enum RootLogin {
+  // Не менять.
+  ROOT_LOGIN_UNSPECIFIED = 0;
+  // root по SSH не входит.
+  ROOT_LOGIN_NO = 1;
+  // root входит только по ключу (prohibit-password).
+  ROOT_LOGIN_KEY_ONLY = 2;
+}
+
+enum CryptoPreset {
+  // Не менять.
+  CRYPTO_PRESET_UNSPECIFIED = 0;
+  // Строгий набор по ssh-audit (decisions E10, п. 4).
+  CRYPTO_PRESET_STRICT = 1;
+}
+
+// ssh.harden (DESTRUCTIVE, CONFIG + автооткат, confirm_within_sec = 300). Ноль и отсутствие значения — не менять.
+message SshHardenParams {
+  optional bool password_auth = 1;
+  RootLogin root_login = 2;
+  uint32 port = 3;
+  uint32 max_auth_tries = 4;
+  CryptoPreset crypto_preset = 5;
+  optional bool empty_passwords = 6;
+}
+
+enum FirewallTarget {
+  FIREWALL_TARGET_UNSPECIFIED = 0;
+  // Трафик к самому серверу (цепочка input).
+  FIREWALL_TARGET_HOST = 1;
+  // Опубликованные порты контейнеров (цепочка forward).
+  FIREWALL_TARGET_CONTAINERS = 2;
+  FIREWALL_TARGET_BOTH = 3;
+}
+
+// Разрешающее правило: всё, что не разрешено, на внешних интерфейсах закрыто.
+message FirewallRule {
+  FirewallTarget target = 1;
+  // tcp или udp.
+  string protocol = 2;
+  uint32 port = 3;
+  // Конец диапазона; 0 — один порт.
+  uint32 port_to = 4;
+  // Источники в виде CIDR; пусто — любые.
+  repeated string sources = 5;
+  string comment = 6;
+}
+
+// Набор Trassa целиком. ruleset_hash — sha256 (hex) канонического JSON набора по RFC 8785, как planHash.
+message FirewallRuleset {
+  repeated FirewallRule rules = 1;
+  uint32 ssh_port = 2;
+}
+
+enum FirewallPlanMode {
+  FIREWALL_PLAN_MODE_UNSPECIFIED = 0;
+  // Разница с загруженным набором.
+  FIREWALL_PLAN_MODE_DIFF = 1;
+  // Правила ufw и чужих таблиц в формате Trassa; на сервер ничего не пишется.
+  FIREWALL_PLAN_MODE_IMPORT = 2;
+}
+
+// firewall.plan (READ).
+message FirewallPlanParams {
+  FirewallPlanMode mode = 1;
+  FirewallRuleset ruleset = 2;
+}
+
+message FirewallPlanResult {
+  string ruleset_hash = 1;
+  // Набор nftables, который применит firewall.apply.
+  string nft_text = 2;
+  repeated string diff = 3;
+  repeated FirewallRule imported = 4;
+  repeated string warnings = 5;
+}
+
+enum FirewallApplyMode {
+  FIREWALL_APPLY_MODE_UNSPECIFIED = 0;
+  FIREWALL_APPLY_MODE_APPLY = 1;
+  // Снять таблицу Trassa.
+  FIREWALL_APPLY_MODE_REMOVE = 2;
+}
+
+// firewall.apply (DESTRUCTIVE, CONFIG + автооткат, confirm_within_sec = 120).
+message FirewallApplyParams {
+  FirewallRuleset ruleset = 1;
+  string ruleset_hash = 2;
+  FirewallApplyMode mode = 3;
+}
+
+enum UpgradeScope {
+  UPGRADE_SCOPE_UNSPECIFIED = 0;
+  UPGRADE_SCOPE_SECURITY = 1;
+  UPGRADE_SCOPE_ALL = 2;
+}
+
+// packages.upgrade (CHANGE). Предпросмотр — dry_run.
+message PackagesUpgradeParams {
+  UpgradeScope scope = 1;
+}
+
+// system.reboot (DESTRUCTIVE).
+message SystemRebootParams {
+  uint32 delay_seconds = 1;
+}
+
+// service.restart (CHANGE).
+message ServiceRestartParams {
+  string unit = 1;
+}
