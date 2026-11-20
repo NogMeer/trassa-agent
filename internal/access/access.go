@@ -67,7 +67,12 @@ func (e *Env) lookup(name string) (*user.User, error) {
 type State struct {
 	Users        map[string]UserState `json:"users"`
 	RescueExpiry int64                `json:"rescue_expires_at_ms,omitempty"`
+	// RescueCreated — trassa-rescue создан доступом Trassa (только тогда E10 не считает его находкой).
+	RescueCreated bool `json:"rescue_created,omitempty"`
 }
+
+// SudoRule — единственная строка правила sudo Trassa для пользователя u (E10 сверяет файл с ней побайтно).
+func SudoRule(u string) string { return u + " ALL=(ALL:ALL) NOPASSWD: ALL\n" }
 
 // UserState — пользователь доступа.
 type UserState struct {
@@ -454,7 +459,7 @@ func (e *Env) setSudo(ctx context.Context, u string, sudo bool) error {
 	if err := os.MkdirAll(filepath.Dir(tmp), 0o750); err != nil {
 		return err
 	}
-	if err := fsutil.WriteFileAtomic(tmp, []byte(u+" ALL=(ALL:ALL) NOPASSWD: ALL\n"), 0o440, fsutil.Keep); err != nil {
+	if err := fsutil.WriteFileAtomic(tmp, []byte(SudoRule(u)), 0o440, fsutil.Keep); err != nil {
 		return err
 	}
 	defer os.Remove(tmp)
@@ -578,9 +583,14 @@ func (e *Env) RescueGrant(ctx context.Context, p *agentv1.AccessRescueGrantParam
 	if err := e.preflight(ctx, users); err != nil {
 		return nil, err
 	}
-	if _, _, err := e.ensureAccount(ctx, st, RescueUser, "/bin/bash"); err != nil {
+	created, _, err := e.ensureAccount(ctx, st, RescueUser, "/bin/bash")
+	if err != nil {
 		return nil, err
 	}
+	if !created && !st.RescueCreated {
+		return nil, fmt.Errorf("%w: %s создан не Trassa", ErrUserForeign, RescueUser)
+	}
+	st.RescueCreated = true
 	if err := e.writeRoot(RescueConf, []byte(rescueConfText), 0o644); err != nil {
 		return nil, err
 	}

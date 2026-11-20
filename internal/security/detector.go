@@ -166,7 +166,7 @@ func (d *Detector) collect(ctx context.Context, withSUID bool) ([]Item, error) {
 	managed := d.Sys.accessManaged()
 	for _, u := range users {
 		// Учётные записи доступа Trassa (E16) созданы подписанной операцией — не признак взлома.
-		if managed[u.Name] {
+		if _, ok := managed[u.Name]; ok {
 			continue
 		}
 		items = append(items, Item{Kind: KindUser, Subject: u.Name, Fingerprint: fingerprint("user", u.Name, strconv.Itoa(u.UID)),

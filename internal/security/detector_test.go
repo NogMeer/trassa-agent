@@ -130,3 +130,25 @@ func TestDetectorMiner(t *testing.T) {
 		t.Fatalf("tmp=%v miner=%v на минуте %d: %v", tmp, miner, minute, evs)
 	}
 }
+
+// Новые пользователи: из реестра доступа Trassa — не находка; чужой trassa-x и trassa-rescue, созданный не
+// Trassa, — находка.
+func TestDetectorAccessUsers(t *testing.T) {
+	sys, d, clk := detSystem(t)
+	steps(t, d, clk, 1, nil)
+	passwd := filepath.Join(sys.Root, "etc/passwd")
+	f, _ := os.OpenFile(passwd, os.O_APPEND|os.O_WRONLY, 0)
+	fmt.Fprint(f, "ops:x:1001:1001::/home/ops:/bin/bash\ntrassa-x:x:1002:1002::/home/x:/bin/bash\ntrassa-rescue:x:1003:1003::/home/r:/bin/bash\n")
+	f.Close()
+	_ = os.MkdirAll(filepath.Join(sys.Root, "etc/trassa/access"), 0o700)
+	_ = os.WriteFile(filepath.Join(sys.Root, "etc/trassa/access/state.json"), []byte(`{"users":{"ops":{"sudo":true}}}`), 0o600)
+	got := map[string]bool{}
+	for _, ev := range steps(t, d, clk, 30, nil) {
+		if ev.GetAttributes()["code"] == "COMPROMISE_NEW_USER" {
+			got[ev.GetAttributes()["subject"]] = true
+		}
+	}
+	if got["ops"] || !got["trassa-x"] || !got["trassa-rescue"] {
+		t.Fatalf("находки: %v", got)
+	}
+}

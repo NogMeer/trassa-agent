@@ -494,8 +494,9 @@ func (s *System) lines(p string) ([]string, error) {
 	return out, sc.Err()
 }
 
-// accessManaged — учётные записи, созданные доступом Trassa (E16, реестр /etc/trassa/access/state.json), и
-// trassa-rescue: их правила sudo и сами записи — не находки. Нет реестра — пусто.
+// accessManaged — учётные записи доступа Trassa (E16) по реестру /etc/trassa/access/state.json: имя → выдан ли
+// sudo. trassa-rescue — только если его создал доступ (rescue_created), sudo — пока действует выдача. Реестр
+// пишет только root-помощник; нет реестра — пусто.
 func (s *System) accessManaged() map[string]bool {
 	out := map[string]bool{}
 	raw, err := fsutil.ReadLimited(s.path("/etc/trassa/access/state.json"), 4<<20)
@@ -503,16 +504,28 @@ func (s *System) accessManaged() map[string]bool {
 		return out
 	}
 	var st struct {
-		Users map[string]json.RawMessage `json:"users"`
+		Users map[string]struct {
+			Sudo bool `json:"sudo"`
+		} `json:"users"`
+		RescueCreated bool  `json:"rescue_created"`
+		RescueExpiry  int64 `json:"rescue_expires_at_ms"`
 	}
 	if json.Unmarshal(raw, &st) != nil {
 		return out
 	}
-	for u := range st.Users {
-		out[u] = true
+	for u, v := range st.Users {
+		out[u] = v.Sudo
 	}
-	out["trassa-rescue"] = true
+	if st.RescueCreated {
+		out["trassa-rescue"] = st.RescueExpiry > 0
+	}
 	return out
+}
+
+// accessSudoRule — файл sudo доступа Trassa для u ровно с её правилом (побайтно): только такой не находка.
+func (s *System) accessSudoRule(u string) bool {
+	raw, err := fsutil.ReadLimited(s.path("/etc/sudoers.d/trassa-"+u), 4096)
+	return err == nil && string(raw) == u+" ALL=(ALL:ALL) NOPASSWD: ALL\n"
 }
 
 // accessCertAdmin — войти можно по сертификату пользователем с sudo (E16): доверие к CA настроено и у

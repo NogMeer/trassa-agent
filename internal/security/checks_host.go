@@ -153,8 +153,9 @@ func checkNopasswd(_ context.Context, s *Scan) []Finding {
 		if r.user == "root" {
 			continue
 		}
-		// Правило доступа Trassa (E16) для её пользователя: выдано подписанной операцией, не находка.
-		if managed[r.user] && r.file == "/etc/sudoers.d/trassa-"+r.user {
+		// Правило доступа Trassa (E16): пользователь из реестра с выданным sudo, файл trassa-<user> побайтно
+		// равен правилу Trassa. Чужой файл под тем же префиксом или с другим содержимым — находка.
+		if sudo, ok := managed[r.user]; ok && sudo && r.file == "/etc/sudoers.d/trassa-"+r.user && s.sys.accessSudoRule(r.user) {
 			continue
 		}
 		spec := strings.ReplaceAll(r.spec, " ", "")

@@ -104,10 +104,22 @@ func TestUsersAndSudo(t *testing.T) {
 			t.Fatal("хэш пароля в evidence")
 		}
 	}
-	sys = build(t, tree{"etc/sudoers": "@includedir /etc/sudoers.d\n", "etc/trassa/access/state.json": `{"users":{"ops":{}}}`,
-		"etc/sudoers.d/90-ops": "ops ALL=(ALL:ALL) NOPASSWD: ALL\n"})
-	if got := states(scan(t, sys, "SUDO_NOPASSWD_ALL")["SUDO_NOPASSWD_ALL"]); got != "FAIL:ops" {
-		t.Fatalf("правило не в файле Trassa: %s", got)
+	// Исключение — только запись реестра с выданным sudo и файл, побайтно равный правилу Trassa.
+	for name, tr := range map[string]tree{
+		"не файл Trassa": {"etc/trassa/access/state.json": `{"users":{"ops":{"sudo":true}}}`,
+			"etc/sudoers.d/90-ops": "ops ALL=(ALL:ALL) NOPASSWD: ALL\n"},
+		"чужой trassa-x без реестра": {"etc/sudoers.d/trassa-ops": "ops ALL=(ALL:ALL) NOPASSWD: ALL\n"},
+		"sudo не выдан":              {"etc/trassa/access/state.json": `{"users":{"ops":{"sudo":false}}}`, "etc/sudoers.d/trassa-ops": "ops ALL=(ALL:ALL) NOPASSWD: ALL\n"},
+		"другое содержимое": {"etc/trassa/access/state.json": `{"users":{"ops":{"sudo":true}}}`,
+			"etc/sudoers.d/trassa-ops": "ops ALL=(ALL:ALL) NOPASSWD: ALL\nDefaults:ops !requiretty\n"},
+		"rescue не создан Trassa": {"etc/trassa/access/state.json": `{"users":{}}`,
+			"etc/sudoers.d/trassa-trassa-rescue": "trassa-rescue ALL=(ALL:ALL) NOPASSWD: ALL\n"},
+	} {
+		tr["etc/sudoers"] = "@includedir /etc/sudoers.d\n"
+		got := states(scan(t, build(t, tr), "SUDO_NOPASSWD_ALL")["SUDO_NOPASSWD_ALL"])
+		if !strings.HasPrefix(got, "FAIL:") {
+			t.Errorf("%s: %s, ждали находку", name, got)
+		}
 	}
 	// Без пользователя с sudo.
 	sys = build(t, tree{"etc/passwd": "root:x:0:0::/root:/bin/bash\n", "etc/group": "sudo:x:27:\n", "etc/shadow": "root:x::::::::\n"})
