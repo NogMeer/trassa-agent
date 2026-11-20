@@ -105,6 +105,8 @@ type State struct {
 	Units  []UnitState       `json:"units,omitempty"`
 	// Packages — поставлены операцией: откат их удаляет вместе с настройками.
 	Packages []string `json:"packages,omitempty"`
+	// DaemonReload — после возврата файлов перечитать юниты (генераторы, например sshd-socket-generator).
+	DaemonReload bool `json:"daemon_reload,omitempty"`
 }
 
 // UnitState — служба до операции.
@@ -115,7 +117,9 @@ type UnitState struct {
 }
 
 // Empty — откат не трогает ничего, кроме файлов.
-func (s State) Empty() bool { return len(s.Sysctl) == 0 && len(s.Units) == 0 && len(s.Packages) == 0 }
+func (s State) Empty() bool {
+	return len(s.Sysctl) == 0 && len(s.Units) == 0 && len(s.Packages) == 0 && !s.DaemonReload
+}
 
 // Store — каталог точек.
 type Store struct {
@@ -308,6 +312,11 @@ func (s *Store) Restore(op string) (*Manifest, error) {
 	for _, f := range m.Files {
 		if err := restoreFile(dir, f); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", f.Path, err))
+		}
+	}
+	if m.State.DaemonReload {
+		if err := s.Exec("systemctl", "daemon-reload"); err != nil {
+			errs = append(errs, fmt.Errorf("systemctl daemon-reload: %w", err))
 		}
 	}
 	errs = append(errs, s.restoreSysctl(m.State.Sysctl)...)

@@ -57,7 +57,10 @@ const (
 	// scanOperation и updatesOperation — security.scan и packages.list_updates после подписки на журналы.
 	scanOperation    = "01a1f4b6-f2f2-7e66-85b4-000000000003"
 	updatesOperation = "01a1f4b6-f2f2-7e66-85b4-000000000004"
-	panelKeyID       = "stub"
+	// hardenOperation и hardenRevert — ssh.harden и его возврат.
+	hardenOperation = "01a1f4b6-f2f2-7e66-85b4-000000000300"
+	hardenRevert    = "01a1f4b6-f2f2-7e66-85b4-000000000301"
+	panelKeyID      = "stub"
 )
 
 type panel struct {
@@ -434,6 +437,10 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			}
 		case m.GetOperationResult().GetOperationId() == scanOperation:
 			p.writeJSON("security.json", m.GetOperationResult())
+			// ssh.harden с автооткатом (E10-T13): ждёт подтверждения, затем возврат.
+			if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: p.signHarden()}}); err != nil {
+				return
+			}
 			// Исправления E10-T10 по находкам скана, затем возврат каждого (rollback.restore).
 			for i, fx := range p.fixes(m.GetOperationResult().GetSecurityScan()) {
 				id := fmt.Sprintf("01a1f4b6-f2f2-7e66-85b4-0000000001%02d", i)
@@ -446,6 +453,26 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+		case m.GetOperationResult().GetOperationId() == hardenOperation:
+			r := m.GetOperationResult()
+			switch r.GetOutcome() {
+			case agentv1.OperationOutcome_OPERATION_OUTCOME_AWAITING_CONFIRM:
+				p.writeJSON("ssh-await.json", r)
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Confirm{Confirm: p.confirm(hardenOperation)}}); err != nil {
+					return
+				}
+			case agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED:
+				p.writeJSON("ssh-harden.json", r)
+				op := p.signRollback(hardenRevert, "rollback.restore", &agentv1.OperationParams{Params: &agentv1.OperationParams_RollbackRestore{
+					RollbackRestore: &agentv1.RollbackRestoreParams{TargetOperationId: hardenOperation}}})
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
+					return
+				}
+			default:
+				p.writeJSON("ssh-harden.json", r)
+			}
+		case m.GetOperationResult().GetOperationId() == hardenRevert:
+			p.writeJSON("ssh-revert.json", m.GetOperationResult())
 		case p.isFix(m.GetOperationResult().GetOperationId()):
 			r := m.GetOperationResult()
 			fx := p.takeFix(r.GetOperationId())
@@ -614,4 +641,29 @@ func (p *panel) event(e *agentv1.Event) {
 	defer f.Close()
 	_, _ = f.Write(append(b, '\n'))
 	log.Printf("событие: %s", b)
+}
+
+// signHarden — ssh.harden без смены пароля и порта (в контейнере нет ключей): попытки входа, пустые пароли,
+// строгая криптография; автооткат 120 с.
+func (p *panel) signHarden() *agentv1.SignedOperation {
+	now := time.Now()
+	n := make([]byte, 16)
+	_, _ = rand.Read(n)
+	f := false
+	body, _ := proto.Marshal(&agentv1.OperationBody{
+		OperationId: hardenOperation, ServerId: serverID, Type: "ssh.harden", Nonce: n,
+		Params: &agentv1.OperationParams{Params: &agentv1.OperationParams_SshHarden{SshHarden: &agentv1.SshHardenParams{
+			MaxAuthTries: 3, EmptyPasswords: &f, CryptoPreset: agentv1.CryptoPreset_CRYPTO_PRESET_STRICT}}},
+		NotAfterMs: now.Add(5 * time.Minute).UnixMilli(), IssuedAtMs: now.UnixMilli(),
+		Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG, ConfirmWithinSec: 120,
+	})
+	return &agentv1.SignedOperation{Body: body, KeyId: panelKeyID, Signature: ed25519.Sign(p.panel, verify.Input(verify.ContextOperation, body))}
+}
+
+// confirm — SignedConfirm операции op (панель шлёт его после нового соединения агента; заглушке хватает этого).
+func (p *panel) confirm(op string) *agentv1.SignedConfirm {
+	n := make([]byte, 16)
+	_, _ = rand.Read(n)
+	body, _ := proto.Marshal(&agentv1.ConfirmBody{OperationId: op, ServerId: serverID, Nonce: n, NotAfterMs: time.Now().Add(time.Minute).UnixMilli()})
+	return &agentv1.SignedConfirm{Body: body, KeyId: panelKeyID, Signature: ed25519.Sign(p.panel, verify.Input(verify.ContextConfirm, body))}
 }

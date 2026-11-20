@@ -75,6 +75,42 @@ func (e *Executor) applyFix(ctx context.Context, r *run) *agentv1.OperationResul
 	})
 }
 
+func (e *Executor) planSSH(ctx context.Context, r *run) (*security.FixPlan, *agentv1.OperationResult) {
+	if e.Security == nil {
+		return nil, r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	p, err := security.PlanSSHHarden(ctx, e.Security, r.body.GetParams().GetSshHarden())
+	switch {
+	case errors.Is(err, security.ErrPrecondition):
+		return nil, r.failed(CodeFixPrecondition, err.Error())
+	case err != nil:
+		return nil, r.failed(CodeApplyFailed, err.Error())
+	}
+	return p, nil
+}
+
+func (e *Executor) previewSSH(ctx context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult) {
+	p, fail := e.planSSH(ctx, r)
+	if fail != nil {
+		return nil, fail
+	}
+	return &agentv1.Preview{Summary: p.Summary, Files: p.Changes, Services: p.Services, Notes: p.Notes}, nil
+}
+
+// applySSH — ssh.harden с автооткатом: таймер заводится до записи файла, подтверждение приходит по новому
+// соединению агента (как у test.config_write).
+func (e *Executor) applySSH(ctx context.Context, r *run) *agentv1.OperationResult {
+	p, fail := e.planSSH(ctx, r)
+	if fail != nil {
+		return fail
+	}
+	return e.runConfigChange(ctx, r, configChange{
+		paths: p.Paths, services: p.Services, state: p.State,
+		apply:  func() error { return p.Apply(ctx) },
+		verify: func() error { return p.Verify(ctx) },
+	})
+}
+
 // applyListUpdates — packages.list_updates: кэш apt без сети.
 func (e *Executor) applyListUpdates(ctx context.Context, r *run) *agentv1.OperationResult {
 	if e.Security == nil {

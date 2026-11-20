@@ -3,6 +3,8 @@
 package ops
 
 import (
+	"errors"
+
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/security"
 )
@@ -11,6 +13,7 @@ import (
 const (
 	TypeSecurityScan        = "security.scan"
 	TypePackagesListUpdates = "packages.list_updates"
+	TypeSSHHarden           = "ssh.harden"
 )
 
 // FixPrefix — тип исправления: security.fix.<код проверки>.
@@ -35,6 +38,17 @@ func securitySpecs() []Spec {
 		})
 	}
 	return append(fixes, []Spec{
+		{
+			Type: TypeSSHHarden, Class: Destructive, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG, AutoRollback: true,
+			match: func(p *agentv1.OperationParams) bool { return p.GetSshHarden() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				// Без автоотката менять SSH нельзя (R14): потеря доступа должна возвращаться сама.
+				if b.GetConfirmWithinSec() == 0 {
+					return errors.New("confirm_within_sec обязателен")
+				}
+				return security.ValidateSSHHarden(b.GetParams().GetSshHarden())
+			},
+		},
 		{
 			Type: TypeSecurityScan, Class: Read, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
 			match:    func(p *agentv1.OperationParams) bool { return p.GetSecurityScan() != nil },

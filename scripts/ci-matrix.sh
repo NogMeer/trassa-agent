@@ -28,7 +28,7 @@ trap 'podman rm -f "$NAME" >/dev/null 2>&1 || true; rm -rf "$ctx"' EXIT
 cat >"$ctx/Containerfile" <<EOF
 FROM docker.io/library/$IMAGE
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    systemd systemd-sysv dbus ca-certificates curl openssl && rm -rf /var/lib/apt/lists/*
+    systemd systemd-sysv dbus ca-certificates curl openssl openssh-server && rm -rf /var/lib/apt/lists/*
 CMD ["/sbin/init"]
 EOF
 podman build -q -t trassa-matrix-os "$ctx" >/dev/null
@@ -129,6 +129,17 @@ jq -e '[.security_scan.checks[] | select(.state == "CHECK_STATE_ERROR")] | lengt
 jq -r '.security_scan.checks[] | "\(.code) \(.state) \(.subject // "") \(.error // "")"' "$ctx/security.json"
 jq -c '{updates: (.packages_list_updates.packages // [] | length), security: ([.packages_list_updates.packages[]? | select(.security)] | length)}' "$ctx/packages.json"
 
+# ssh.harden (E10-T13): применить, дождаться подтверждения, проверить действующие значения, вернуть.
+for _ in $(seq 1 120); do x test -s "$STUB/ssh-revert.json" && break; x test -s "$STUB/ssh-harden.json" && ! x test -s "$STUB/ssh-await.json" && break; sleep 1; done
+podman cp "$NAME:$STUB/ssh-harden.json" "$ctx/ssh.json" 2>/dev/null || fail "нет итога ssh.harden"
+jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/ssh.json" >/dev/null || fail "ssh.harden: $(cat "$ctx/ssh.json")"
+x test -s "$STUB/ssh-await.json" || fail "ssh.harden прошёл без ожидания подтверждения"
+podman cp "$NAME:$STUB/ssh-revert.json" "$ctx/ssh-revert.json" 2>/dev/null || fail "нет итога возврата ssh.harden"
+jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/ssh-revert.json" >/dev/null || fail "возврат ssh.harden: $(cat "$ctx/ssh-revert.json")"
+x test ! -e /etc/ssh/sshd_config.d/00-trassa.conf || fail "файл Trassa для sshd остался после возврата"
+x sh -c 'sshd -T | grep -qx "maxauthtries 6"' || fail "maxauthtries не вернулся: $(x sh -c 'sshd -T | grep maxauthtries')"
+echo "ssh.harden: применено, подтверждено и возвращено"
+
 # Исправления E10-T10: применить с проверкой и вернуть rollback.restore — система как до исправления.
 for code in PERM_WORLD_WRITABLE SYSCTL_NETWORK BRUTEFORCE_NO_PROTECTION; do
 	for _ in $(seq 1 240); do x test -s "$STUB/revert-$code.json" && break; sleep 1; done
@@ -176,7 +187,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" --slurpfile scan "$ctx/security.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "events", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
 	  security: $scan[0].security_scan.checks,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"
