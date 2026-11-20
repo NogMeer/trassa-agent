@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package fsutil — запись файлов, которая переживает обрыв питания: временный файл в том же каталоге, fsync,
-// rename(2), fsync каталога. Частично записанный файл на месте цели не появляется никогда.
+// rename(2), fsync каталога. Частично записанный файл на месте цели не появляется никогда — кроме цели, которая
+// сама точка монтирования (её rename не заменяет): там запись на месте с fsync.
 package fsutil
 
 import (
@@ -10,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 )
 
 // Owner — владелец файла. Пустой Owner (-1, -1) оставляет владельца процесса.
@@ -58,9 +60,48 @@ func WriteAtomic(path string, perm os.FileMode, owner Owner, fill func(io.Writer
 		return err
 	}
 	if err = os.Rename(tmp, path); err != nil {
-		return err
+		if !errors.Is(err, syscall.EBUSY) {
+			return err
+		}
+		// Цель — точка монтирования (bind mount: /etc/hosts в контейнере, LXC, OpenVZ): заменить её rename нельзя.
+		// Тогда содержимое переписывается на месте с fsync; права и владелец — как у временного файла.
+		if err = copyInPlace(tmp, path, perm, owner); err != nil {
+			return err
+		}
+		return os.Remove(tmp)
 	}
 	return SyncDir(dir)
+}
+
+func copyInPlace(src, dst string, perm os.FileMode, owner Owner) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_TRUNC, 0)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Chmod(perm); err != nil {
+		out.Close()
+		return err
+	}
+	if owner != Keep {
+		if err := out.Chown(owner.UID, owner.GID); err != nil {
+			out.Close()
+			return err
+		}
+	}
+	if err := out.Sync(); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // SyncDir делает fsync каталога: без него rename и удаление могут потеряться при сбое питания.
