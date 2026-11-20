@@ -9,7 +9,7 @@ func TestCompromiseInstant(t *testing.T) {
 		"proc/10/exe": "->/usr/sbin/sshd", "proc/10/comm": "sshd\n",
 		"proc/20/exe": "->/tmp/.x/kworker", "proc/20/comm": "kworker\n",
 		"proc/30/exe": "->/usr/bin/python3.12 (deleted)", "proc/30/comm": "python3\n",
-		"proc/2/comm": "kthreadd\n",
+		"proc/2/comm":       "kthreadd\n",
 		"etc/ld.so.preload": "# comment\n/usr/lib/libhide.so\n",
 		// 10.0.0.5:51000 → 203.0.113.9:3333 (ESTABLISHED) и обычное к 443.
 		"proc/net/tcp": "  sl  local_address rem_address   st\n" +

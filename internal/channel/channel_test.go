@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,6 +23,9 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/events"
 	"github.com/NogMeer/trassa-agent/internal/logs"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
+	"github.com/NogMeer/trassa-agent/internal/nonce"
+	"github.com/NogMeer/trassa-agent/internal/opcheck"
+	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/verify"
 )
 
@@ -503,5 +507,97 @@ func TestLogsDelivery(t *testing.T) {
 	ch := <-got
 	if ch.GetSubscriptionId() != "op1" || ch.GetSeq() != 1 || len(ch.GetRecords()) != 1 {
 		t.Fatalf("%+v", ch)
+	}
+}
+
+// net.check (E07): исполняет сам агент — проверки 1–6, своё окно nonce, итог без помощника.
+func TestNetCheckLocal(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+	port := uint32(l.Addr().(*net.TCPAddr).Port)
+	sign := func(op string, n []byte, p *agentv1.NetCheckParams) *agentv1.SignedOperation {
+		now := time.Now()
+		body, _ := proto.Marshal(&agentv1.OperationBody{
+			OperationId: op, ServerId: serverID, Type: ops.TypeNetCheck, Nonce: n,
+			Params:     &agentv1.OperationParams{Params: &agentv1.OperationParams_NetCheck{NetCheck: p}},
+			NotAfterMs: now.Add(time.Minute).UnixMilli(), IssuedAtMs: now.UnixMilli(), Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+		})
+		return &agentv1.SignedOperation{Body: body, KeyId: "k1", Signature: ed25519.Sign(panelPriv, verify.Input(verify.ContextOperation, body))}
+	}
+	n := []byte("fedcba9876543210")
+	got := make(chan *agentv1.AgentMessage, 16)
+	id := newIdentity(t)
+	g := newGateway(t, id.PublicKey(), func(ctx context.Context, c *gwConn) {
+		for _, so := range []*agentv1.SignedOperation{
+			sign(opID(1), n, &agentv1.NetCheckParams{Host: "127.0.0.1", Port: port, TimeoutMs: 1000}),
+			sign(opID(2), n, &agentv1.NetCheckParams{Host: "127.0.0.1", Port: port}), // тот же nonce — повтор
+			sign(opID(3), []byte("0123456789abcdef"), &agentv1.NetCheckParams{Host: "a b", Port: port}),
+		} {
+			_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: so}})
+		}
+		for {
+			m, err := c.read(ctx)
+			if err != nil {
+				return
+			}
+			got <- m
+			if m.GetOperationResult() != nil {
+				_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_InboundAck{InboundAck: &agentv1.InboundAck{Seq: m.GetSeq()}}})
+			}
+		}
+	})
+	h := newFakeHelper()
+	a := newAgent(t, id, g, h)
+	ns, err := nonce.Open(filepath.Join(t.TempDir(), "nonces.log"), time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ns.Close()
+	a.cfg.Local = &Local{Checker: &opcheck.Checker{Keys: panelKeys(), ServerID: serverID, Catalog: ops.Agent(), Nonces: ns}, Nonces: ns}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = a.Run(ctx) }()
+	acks := map[string]string{}
+	var res *agentv1.OperationResult
+	timeout := time.After(5 * time.Second)
+	for len(acks) < 3 || res == nil {
+		select {
+		case m := <-got:
+			if ak := m.GetOperationAck(); ak != nil {
+				acks[ak.GetOperationId()] = ak.GetRejectCode()
+			}
+			if r := m.GetOperationResult(); r != nil {
+				res = r
+			}
+		case <-timeout:
+			t.Fatalf("acks %v, итог %v", acks, res)
+		}
+	}
+	// Операции идут параллельно: номер достаётся той, что пришла первой, другая получает REPLAY.
+	winner, loser := opID(1), opID(2)
+	if acks[winner] != "" {
+		winner, loser = loser, winner
+	}
+	if acks[winner] != "" || acks[loser] != ops.CodeReplay || acks[opID(3)] != ops.CodeParamsInvalid {
+		t.Fatalf("%v", acks)
+	}
+	if res.GetOperationId() != winner || !res.GetNetCheck().GetReachable() {
+		t.Fatalf("%+v", res)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if h.reportedCount() != 0 || len(h.executed) != 0 {
+		t.Fatal("net.check ушла помощнику")
 	}
 }

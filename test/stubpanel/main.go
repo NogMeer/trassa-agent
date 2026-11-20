@@ -66,8 +66,10 @@ const (
 	fwApply    = "01a1f4b6-f2f2-7e66-85b4-000000000402"
 	fwRevert   = "01a1f4b6-f2f2-7e66-85b4-000000000403"
 	// restartOp и upgradeOp — service.restart и packages.upgrade.
-	restartOp  = "01a1f4b6-f2f2-7e66-85b4-000000000500"
-	upgradeOp  = "01a1f4b6-f2f2-7e66-85b4-000000000501"
+	restartOp = "01a1f4b6-f2f2-7e66-85b4-000000000500"
+	upgradeOp = "01a1f4b6-f2f2-7e66-85b4-000000000501"
+	// netCheckOp — net.check (E07).
+	netCheckOp = "01a1f4b6-f2f2-7e66-85b4-000000000600"
 	panelKeyID = "stub"
 )
 
@@ -530,6 +532,9 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 					ServiceRestart: &agentv1.ServiceRestartParams{Unit: "ssh.service"}}}),
 				p.sign(upgradeOp, "packages.upgrade", &agentv1.OperationParams{Params: &agentv1.OperationParams_PackagesUpgrade{
 					PackagesUpgrade: &agentv1.PackagesUpgradeParams{Scope: agentv1.UpgradeScope_UPGRADE_SCOPE_SECURITY}}}),
+				// net.check (E07) исполняет сам агент: соединение с sshd контейнера.
+				p.sign(netCheckOp, "net.check", &agentv1.OperationParams{Params: &agentv1.OperationParams_NetCheck{
+					NetCheck: &agentv1.NetCheckParams{Host: "127.0.0.1", Port: 22, TimeoutMs: 2000}}}),
 			} {
 				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
 					return
@@ -539,6 +544,8 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			p.writeJSON("restart.json", m.GetOperationResult())
 		case m.GetOperationResult().GetOperationId() == upgradeOp:
 			p.writeJSON("upgrade.json", m.GetOperationResult())
+		case m.GetOperationResult().GetOperationId() == netCheckOp:
+			p.writeJSON("netcheck.json", m.GetOperationResult())
 		case p.isFix(m.GetOperationResult().GetOperationId()):
 			r := m.GetOperationResult()
 			fx := p.takeFix(r.GetOperationId())

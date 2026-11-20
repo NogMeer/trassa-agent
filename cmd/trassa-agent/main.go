@@ -38,6 +38,9 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/identity"
 	"github.com/NogMeer/trassa-agent/internal/logs"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
+	"github.com/NogMeer/trassa-agent/internal/nonce"
+	"github.com/NogMeer/trassa-agent/internal/opcheck"
+	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo/sdunits"
 	"github.com/NogMeer/trassa-agent/internal/uninstall"
@@ -118,11 +121,19 @@ func run(ctx context.Context, log *slog.Logger) int {
 		return exitError
 	}
 	go logs.Run(ctx, hc, spool, logs.PollInterval, log)
+	// Операции агента без прав (net.check): свои проверки 1–6 и своё окно nonce.
+	an, err := nonce.Open(p.AgentNonces, time.Now)
+	if err != nil {
+		log.Error("окно nonce агента", "err", err)
+		return exitError
+	}
+	defer an.Close()
+	local := &channel.Local{Checker: &opcheck.Checker{Keys: keys, ServerID: en.ServerID, Catalog: ops.Agent(), Nonces: an}, Nonces: an}
 	a := channel.New(channel.Config{
 		GatewayURL: en.GatewayURL, ServerID: en.ServerID, Identity: id, PanelKeys: keys,
 		Helper:  hc,
 		Version: config.Version, OS: osID, OSVersion: osVer, Arch: runtime.GOARCH,
-		HTTPClient: &http.Client{}, Log: log, UpdateDir: p.UpdateDir, Metrics: mbuf, Events: equeue, Logs: spool,
+		HTTPClient: &http.Client{}, Log: log, UpdateDir: p.UpdateDir, Metrics: mbuf, Events: equeue, Logs: spool, Local: local,
 	})
 	if err := a.Run(ctx); errors.Is(err, channel.ErrRevoked) {
 		return exitRevoked

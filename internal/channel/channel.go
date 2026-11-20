@@ -77,6 +77,8 @@ type Config struct {
 	Events *queue.Queue[*agentv1.Event]
 	// Logs — пачки журналов на диске (E08-T15); nil — не отправляются.
 	Logs *logs.Spool
+	// Local — операции, которые исполняет сам агент (net.check); nil — все операции идут помощнику.
+	Local *Local
 }
 
 var (
@@ -331,6 +333,9 @@ func (a *Agent) handshake(ctx context.Context, c *conn) (time.Duration, error) {
 		// Без помощника агент всё равно выходит на связь: панель увидит пустой список типов и пустую версию.
 		a.cfg.Log.Warn("помощник недоступен", "err", herr)
 	}
+	if a.cfg.Local != nil && a.cfg.Local.Checker != nil {
+		caps = append(append([]string{}, caps...), a.cfg.Local.Checker.Catalog.Types()...)
+	}
 	if _, err := c.send(hctx, &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Hello{Hello: &agentv1.Hello{
 		ServerId: a.cfg.ServerID, Signature: sig, ProtocolVersion: agentv1.ProtocolVersion_PROTOCOL_VERSION_1,
 		AgentVersion: a.cfg.Version, HelperVersion: helperVersion, Capabilities: caps,
@@ -436,6 +441,10 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 		ack(false, ops.CodeSignatureInvalid)
 		return
 	}
+	if a.cfg.Local.handles(body.GetType()) {
+		a.localOperation(sctx, c, raw, opID, ack)
+		return
+	}
 	// Операция живёт дольше соединения: контекст агента, а не сессии.
 	if body.GetType() == ops.TypeAgentUpdate && !body.GetDryRun() {
 		if dir := a.stageUpdate(context.WithoutCancel(sctx), &body); dir != "" {
@@ -519,6 +528,10 @@ func (a *Agent) inboundAck(ctx context.Context, c *conn, seq uint64) {
 	if r == nil {
 		return
 	}
+	if a.ob.isLocal(op) {
+		a.ob.remove(op, r.GetOutcome())
+		return
+	}
 	if err := a.cfg.Helper.Reported(ctx, op, int32(r.GetOutcome())); err != nil {
 		a.cfg.Log.Warn("помощник: отметка доставки", "op", op, "err", err)
 		return
@@ -588,9 +601,25 @@ func (a *Agent) sendLogs(ctx context.Context, c *conn) error {
 type outbox struct {
 	mu sync.Mutex
 	m  map[string]*agentv1.OperationResult
+	// local — итоги операций агента (net.check): помощник о них не знает, отметка доставки ему не шлётся.
+	local map[string]bool
 }
 
-func newOutbox() *outbox { return &outbox{m: map[string]*agentv1.OperationResult{}} }
+func newOutbox() *outbox {
+	return &outbox{m: map[string]*agentv1.OperationResult{}, local: map[string]bool{}}
+}
+
+func (o *outbox) markLocal(op string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.local[op] = true
+}
+
+func (o *outbox) isLocal(op string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.local[op]
+}
 
 func (o *outbox) add(raw []byte) *agentv1.OperationResult {
 	var r agentv1.OperationResult
@@ -617,6 +646,7 @@ func (o *outbox) remove(op string, outcome agentv1.OperationOutcome) {
 	defer o.mu.Unlock()
 	if cur, ok := o.m[op]; ok && cur.GetOutcome() == outcome {
 		delete(o.m, op)
+		delete(o.local, op)
 	}
 }
 

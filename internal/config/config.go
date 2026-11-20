@@ -37,6 +37,7 @@ type Paths struct {
 	AgentKey        string // /var/lib/trassa/agent/agent.key
 	UpdateDir       string // /var/lib/trassa/agent/update/<operation_id>: выпуск, скачанный агентом
 	LogsDir         string // /var/lib/trassa/agent/logs: пачки журналов до квитанции шлюза (E08-T15)
+	AgentNonces     string // /var/lib/trassa/agent/nonces.log: окно nonce операций, которые исполняет агент (net.check)
 	HelperDir       string // /var/lib/trassa/helper (root, 0700)
 	Nonces          string // /var/lib/trassa/helper/nonces
 	OpsDir          string // /var/lib/trassa/helper/ops: состояние и итоги операций
@@ -64,6 +65,7 @@ func Under(root string) Paths {
 		AgentKey:        j("var/lib/trassa/agent/agent.key"),
 		UpdateDir:       j("var/lib/trassa/agent/update"),
 		LogsDir:         j("var/lib/trassa/agent/logs"),
+		AgentNonces:     j("var/lib/trassa/agent/nonces.log"),
 		HelperDir:       j("var/lib/trassa/helper"),
 		Nonces:          j("var/lib/trassa/helper/nonces"),
 		OpsDir:          j("var/lib/trassa/helper/ops"),

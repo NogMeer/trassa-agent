@@ -163,6 +163,11 @@ for f in restart upgrade; do
 	jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/$f.json" >/dev/null || fail "$f: $(cat "$ctx/$f.json")"
 	echo "$f: $(jq -r .message "$ctx/$f.json")"
 done
+for _ in $(seq 1 30); do x test -s "$STUB/netcheck.json" && break; sleep 1; done
+podman cp "$NAME:$STUB/netcheck.json" "$ctx/netcheck.json" 2>/dev/null || fail "нет итога net.check"
+jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED" and .net_check.reachable == true' "$ctx/netcheck.json" >/dev/null || fail "net.check: $(cat "$ctx/netcheck.json")"
+jq -e '.hello.capabilities | index("net.check") != null' "$ctx/result.json" >/dev/null || fail "net.check нет в capabilities"
+echo "net.check: связь с sshd подтверждена за $(jq -r '.net_check.latency_ms // 0' "$ctx/netcheck.json") мс"
 
 # Исправления E10-T10: применить с проверкой и вернуть rollback.restore — система как до исправления.
 for code in PERM_WORLD_WRITABLE SYSCTL_NETWORK BRUTEFORCE_NO_PROTECTION; do
@@ -211,7 +216,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" --slurpfile scan "$ctx/security.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "firewall", "service.restart", "packages.upgrade", "events", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "firewall", "service.restart", "packages.upgrade", "net.check", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
 	  security: $scan[0].security_scan.checks,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"

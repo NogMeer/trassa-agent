@@ -113,6 +113,7 @@ Updates are signed and rolled out in waves. If a new version fails to start, the
 | `internal/helper`, `internal/helperrpc`, `internal/ops`, `internal/nonce` | Helper: socket with caller uid check, built-in operation list, signature, expiry and nonce checks |
 | `internal/rollback`, `internal/autorollback` | Rollback points and timer-based auto-rollback via systemd |
 | `internal/metrics` | Server metrics from `/proc` and `statfs` without root: a batch every 15 s, kept for up to 10 minutes while offline |
+| `internal/opcheck`, `internal/netcheck` | Signed-operation checks shared by the helper and the agent; `net.check` — a single TCP connect check run by the unprivileged agent |
 | `internal/security` | Security center: `security.scan` runs read-only checks from a built-in list (SSH, users, permissions, ports, firewall, updates, disks, certificates, kernel, Docker); `packages.list_updates` reads updates from the apt cache without network access |
 | `internal/logsrc`, `internal/logs` | Logs via a signed `logs.subscribe`: the helper reads them (journald without a shell, files only inside `/var/log/` without symlinks, containers via the Docker API) and redacts secrets before they leave root; the agent spools up to 50 MB and sends until acknowledged. `logs.read` returns the latest lines on request |
 | `internal/events`, `internal/queue` | Local thresholds (failed service, disk at 90%, memory at 95% for over a minute) and delivery of frames acknowledged by the gateway |
