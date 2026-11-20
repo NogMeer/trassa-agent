@@ -37,6 +37,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/nonce"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
+	"github.com/NogMeer/trassa-agent/internal/sealed"
 	"github.com/NogMeer/trassa-agent/internal/security"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo/sdunits"
@@ -151,6 +152,12 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 	}
 	host := sysinfo.Real()
 	inv := &sysinfo.Inventory{Host: host, Units: sdunits.List}
+	// Ключ секретов (E13, HPKE): создаётся при первом запуске, хранится только у помощника.
+	secrets, err := sealed.LoadOrCreate(filepath.Join(p.HelperDir, "encryption.key"))
+	if err != nil {
+		n.Close()
+		return nil, nil, fmt.Errorf("ключ секретов: %w", err)
+	}
 	sec := security.Real()
 	sec.Detector = &security.Detector{Sys: sec, Path: filepath.Join(p.HelperDir, "baseline.json"), Log: log}
 	ex := &helper.Executor{
@@ -170,6 +177,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		Logs:      logsrc.New(),
 		Security:  sec,
 		WireGuard: wgEnv(p),
+		Secrets:   secrets,
 	}
 	if err := ex.CheckHandlers(); err != nil {
 		n.Close()

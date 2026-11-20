@@ -614,3 +614,34 @@ func TestNetCheckLocal(t *testing.T) {
 		t.Fatal("net.check ушла помощнику")
 	}
 }
+
+type encHelper struct{ *fakeHelper }
+
+func (encHelper) EncryptionKey() ([]byte, string) { return bytes32(7), "kid-7" }
+
+func bytes32(b byte) []byte {
+	out := make([]byte, 32)
+	for i := range out {
+		out[i] = b
+	}
+	return out
+}
+
+// Ключ шифрования секретов помощника (E13) уходит шлюзу в Hello.
+func TestHelloEncryptionKey(t *testing.T) {
+	id := newIdentity(t)
+	hello := make(chan *agentv1.Hello, 1)
+	g := newGateway(t, id.PublicKey(), func(ctx context.Context, c *gwConn) { hello <- c.hello; <-ctx.Done() })
+	a := newAgent(t, id, g, encHelper{newFakeHelper()})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = a.Run(ctx) }()
+	select {
+	case h := <-hello:
+		if len(h.GetEncryptionPublicKey()) != 32 || h.GetEncryptionKeyId() != "kid-7" {
+			t.Fatalf("%+v", h)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("нет Hello")
+	}
+}

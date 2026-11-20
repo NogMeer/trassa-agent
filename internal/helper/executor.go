@@ -24,6 +24,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/redact"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
+	secretkey "github.com/NogMeer/trassa-agent/internal/sealed"
 	"github.com/NogMeer/trassa-agent/internal/security"
 	"github.com/NogMeer/trassa-agent/internal/wireguard"
 )
@@ -88,6 +89,8 @@ type Executor struct {
 	Security *security.System
 	// WireGuard — приватная сеть (E14); nil — WG_UNAVAILABLE.
 	WireGuard *wireguard.Env
+	// Secrets — ключ X25519 помощника для секретов операций (E13, HPKE); nil — секретов не принимает.
+	Secrets *secretkey.Key
 
 	once     sync.Once
 	handlers map[string]handler
@@ -160,7 +163,11 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 	e.init()
 	switch req.Method {
 	case helperrpc.MethodHello:
-		_ = send(helperrpc.Response{Kind: helperrpc.KindHello, HelperVersion: e.Version, Capabilities: e.Checker.Catalog.Types()})
+		r := helperrpc.Response{Kind: helperrpc.KindHello, HelperVersion: e.Version, Capabilities: e.Checker.Catalog.Types()}
+		if e.Secrets != nil {
+			r.EncryptionPublicKey, r.EncryptionKeyID = e.Secrets.Public(), e.Secrets.ID
+		}
+		_ = send(r)
 	case helperrpc.MethodExecute:
 		e.Execute(ctx, req.Signed, send)
 	case helperrpc.MethodConfirm:

@@ -1,0 +1,258 @@
+// SPDX-License-Identifier: Apache-2.0
+// Бэкапы (E13, раздел 6). Секреты только как SealedSecret: HPKE RFC 9180 на ключ X25519 помощника
+// (Hello.encryption_public_key); открытых паролей и ключей в параметрах нет. Решения — decisions/E13-backups.md.
+syntax = "proto3";
+
+package trassa.agent.v1;
+
+option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
+
+// Секрет, зашифрованный панелью на ключ помощника: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM,
+// одноразовый Seal. enc_ct = enc (32 байта) || шифротекст. info = "trassa/secret/v1" и через 0x00:
+// server_id, kid, operation_id, тип операции, plan_id, имя поля ("password", "env:AWS_SECRET_ACCESS_KEY").
+message SealedSecret {
+  string kid = 1;
+  bytes enc_ct = 2;
+}
+
+// Репозиторий restic: адрес без учётных данных, секреты — отдельно.
+message BackupRepo {
+  // s3:…, sftp:…, rest:… — без пользователя и пароля в адресе.
+  string url = 1;
+  SealedSecret password = 2;
+  // Переменные окружения restic с секретами: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, RESTIC_REST_USERNAME…
+  map<string, SealedSecret> env = 3;
+}
+
+message PathSource {
+  string path = 1;
+  repeated string excludes = 2;
+}
+
+message DatabaseSource {
+  // Имя контейнера Docker; пусто — база на хосте.
+  string container = 1;
+  string database = 2;
+}
+
+message BackupSource {
+  // Имя источника в плане — по нему итог и снимок.
+  string name = 1;
+  oneof source {
+    PathSource path = 2;
+    string docker_volume = 3;
+    DatabaseSource postgres = 4;
+    DatabaseSource mysql = 5;
+  }
+}
+
+// Политика хранения: для хранилищ «только добавление» — сроки (--keep-within-*), decisions E13 п. 3.
+message Retention {
+  uint32 keep_last = 1;
+  // Сроки restic: 7d, 4w, 12m, 2y.
+  string keep_within_daily = 2;
+  string keep_within_weekly = 3;
+  string keep_within_monthly = 4;
+}
+
+enum RestoreMode {
+  RESTORE_MODE_UNSPECIFIED = 0;
+  RESTORE_MODE_TEMP_DIR = 1;
+  RESTORE_MODE_IN_PLACE = 2;
+  RESTORE_MODE_OTHER_SERVER = 3;
+}
+
+// Пустой выбор не значит «всё» (R1): нужно all = true.
+message RestoreSelection {
+  bool all = 1;
+  repeated string paths = 2;
+  repeated string databases = 3;
+}
+
+// backup.init (CHANGE).
+message BackupInitParams {
+  string plan_id = 1;
+  BackupRepo repo = 2;
+  string restic_version = 3;
+  // sha256 бинарника restic для архитектуры сервера (hex) и адрес загрузки (скачивает агент).
+  string restic_sha256 = 4;
+  string restic_url = 5;
+  // Цель SERVER: создать пару ключей SSH на источнике.
+  bool ssh_keypair = 6;
+}
+
+message BackupInitResult {
+  bool repo_existed = 1;
+  // Публичный ключ SSH для цели SERVER (приватный остаётся на сервере).
+  string ssh_public_key = 2;
+}
+
+// backup.run (CHANGE).
+message BackupRunParams {
+  string plan_id = 1;
+  repeated BackupSource sources = 2;
+  // KiB/s, 0 — без ограничения.
+  uint32 rate_limit_kibps = 3;
+  // Конец окна: исполнение ограничено им, а не not_after_ms (тот ограничивает только приём).
+  int64 deadline_ms = 4;
+}
+
+message SourceResult {
+  string name = 1;
+  bool ok = 2;
+  string snapshot_id = 3;
+  uint64 bytes_added = 4;
+  uint64 bytes_processed = 5;
+  uint64 files_new = 6;
+  uint64 files_changed = 7;
+  string error = 8;
+  string warning = 9;
+}
+
+message BackupRunResult {
+  repeated SourceResult sources = 1;
+}
+
+// backup.verify (CHANGE).
+message BackupVerifyParams {
+  string plan_id = 1;
+  // Снимки по источникам; пусто — последние.
+  repeated string snapshot_ids = 2;
+  // Доля данных для restic check --read-data-subset, например "5%".
+  string read_data_subset = 3;
+  uint32 sample_files = 4;
+  uint64 max_bytes = 5;
+  int64 deadline_ms = 6;
+}
+
+message DumpCheck {
+  string source = 1;
+  bool ok = 2;
+  string detail = 3;
+}
+
+message BackupVerifyResult {
+  bool repo_check_ok = 1;
+  bool files_ok = 2;
+  bool dumps_ok = 3;
+  uint64 checked_files = 4;
+  uint64 checked_bytes = 5;
+  repeated DumpCheck dumps = 6;
+}
+
+// backup.restore: класс по режиму — TEMP_DIR CHANGE, остальное DESTRUCTIVE.
+message BackupRestoreParams {
+  string plan_id = 1;
+  string snapshot_id = 2;
+  RestoreMode mode = 3;
+  RestoreSelection selection = 4;
+  // TEMP_DIR — пусто (каталог выбирает помощник); OTHER_SERVER — путь на этом сервере.
+  string dest_path = 5;
+  int64 deadline_ms = 6;
+}
+
+message BackupRestoreResult {
+  uint64 restored_files = 1;
+  uint64 restored_bytes = 2;
+  string path = 3;
+}
+
+// backup.sources.discover (READ).
+message BackupDiscoverParams {}
+
+message DiscoveredVolume {
+  string name = 1;
+  uint64 size_bytes = 2;
+  repeated string containers = 3;
+}
+
+message DiscoveredDatabase {
+  // postgres или mysql.
+  string engine = 1;
+  string container = 2;
+  repeated string databases = 3;
+  string version = 4;
+}
+
+message BackupDiscoverResult {
+  repeated DiscoveredVolume volumes = 1;
+  repeated DiscoveredDatabase databases = 2;
+  uint64 free_bytes = 3;
+}
+
+// backup.snapshots.list (READ).
+message BackupSnapshotsParams {
+  string plan_id = 1;
+}
+
+message BackupSnapshot {
+  string id = 1;
+  int64 time_ms = 2;
+  repeated string paths = 3;
+  repeated string tags = 4;
+}
+
+message BackupSnapshotsResult {
+  repeated BackupSnapshot snapshots = 1;
+}
+
+// backup.snapshot.browse (READ): до 1000 записей.
+message BackupBrowseParams {
+  string plan_id = 1;
+  string snapshot_id = 2;
+  string path = 3;
+  uint32 limit = 4;
+}
+
+message BrowseEntry {
+  string name = 1;
+  // file, dir, symlink.
+  string type = 2;
+  uint64 size = 3;
+  int64 mtime_ms = 4;
+}
+
+message BackupBrowseResult {
+  repeated BrowseEntry entries = 1;
+  bool truncated = 2;
+}
+
+// backup.prune (CHANGE): только цель SERVER локально и вариант B; ключи обслуживания — на время операции.
+message BackupPruneParams {
+  string plan_id = 1;
+  Retention retention = 2;
+  BackupRepo maintenance_repo = 3;
+}
+
+message BackupPruneResult {
+  uint32 removed_snapshots = 1;
+  uint64 freed_bytes = 2;
+}
+
+// backup.target.ensure (DESTRUCTIVE, на сервере-цели).
+message BackupTargetEnsureParams {
+  string path = 1;
+  string unix_user = 2;
+  string source_public_key = 3;
+  string source_address = 4;
+}
+
+// backup.target.remove (DESTRUCTIVE).
+message BackupTargetRemoveParams {
+  string unix_user = 1;
+  string path = 2;
+  bool delete_data = 3;
+}
+
+// backup.unconfigure (CHANGE): каталог настроек плана на сервере удаляется.
+message BackupUnconfigureParams {
+  string plan_id = 1;
+}
+
+// Ход бэкапа и восстановления (OperationProgress.backup).
+message BackupProgress {
+  uint64 bytes_done = 1;
+  uint64 bytes_total = 2;
+  uint64 files_done = 3;
+  string current_source = 4;
+}

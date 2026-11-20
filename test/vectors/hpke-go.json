@@ -1,0 +1,30 @@
+[
+  {
+    "comment": "HPKE RFC 9180 DHKEM(X25519,HKDF-SHA256)/HKDF-SHA256/AES-256-GCM, одноразовый Seal; тестовый ключ",
+    "private_key_hex": "a8abababababababababababababababababababababababababababababab6b",
+    "public_key_b64": "43EthRoOXXm4McXjSrIrQaGYFx3iCbi4+sojoRxiSFk=",
+    "kid": "bd7381eab08d2d62",
+    "server_id": "01a1f4b6-f327-7a5d-ac23-e95c272c0fe8",
+    "operation_id": "01a1f4b6-f2f2-7e66-85b4-000000000123",
+    "type": "backup.init",
+    "plan_id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+    "field": "password",
+    "info_hex": "7472617373612f7365637265742f76310030316131663462362d663332372d376135642d616332332d65393563323732633066653800626437333831656162303864326436320030316131663462362d663266322d376536362d383562342d303030303030303030313233006261636b75702e696e69740030313939613162322d633364342d376535662d386139622d3063316432653366346135620070617373776f7264",
+    "plaintext": "correct horse battery staple",
+    "enc_ct_b64": "msGGGz4fCJAuqZN59KN90zuTXxR6r8MlhSUjr8wXYQiiQZtg2IUi/TPPtaOL8+jwE5R4ZYSTYT/DH+506MmgSxz8pFIWFUJy6+FzrQ=="
+  },
+  {
+    "comment": "HPKE RFC 9180 DHKEM(X25519,HKDF-SHA256)/HKDF-SHA256/AES-256-GCM, одноразовый Seal; тестовый ключ",
+    "private_key_hex": "a8abababababababababababababababababababababababababababababab6b",
+    "public_key_b64": "43EthRoOXXm4McXjSrIrQaGYFx3iCbi4+sojoRxiSFk=",
+    "kid": "bd7381eab08d2d62",
+    "server_id": "01a1f4b6-f327-7a5d-ac23-e95c272c0fe8",
+    "operation_id": "01a1f4b6-f2f2-7e66-85b4-000000000123",
+    "type": "backup.init",
+    "plan_id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+    "field": "env:AWS_SECRET_ACCESS_KEY",
+    "info_hex": "7472617373612f7365637265742f76310030316131663462362d663332372d376135642d616332332d65393563323732633066653800626437333831656162303864326436320030316131663462362d663266322d376536362d383562342d303030303030303030313233006261636b75702e696e69740030313939613162322d633364342d376535662d386139622d30633164326533663461356200656e763a4157535f5345435245545f4143434553535f4b4559",
+    "plaintext": "example-s3-secret-for-hpke-vector",
+    "enc_ct_b64": "LmDTfB3axZ52lS0M0nOo/CH68n6Ikm7UdeRhfh1bU23kZppwryaZF1PYYTqmaTBtyvWOvXrMLgPILoULZiHE902sDT0oNsfxRH2TtE7m5q53"
+  }
+]

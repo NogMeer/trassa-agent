@@ -72,6 +72,9 @@ type Response struct {
 	HelperVersion string   `json:"helper_version,omitempty"`
 	Capabilities  []string `json:"capabilities,omitempty"`
 	Running       []string `json:"running,omitempty"`
+	// hello: открытый ключ X25519 помощника для секретов (E13) и его id.
+	EncryptionPublicKey []byte `json:"encryption_public_key,omitempty"`
+	EncryptionKeyID     string `json:"encryption_key_id,omitempty"`
 	// logs.poll: записи LogRecord (protobuf), новые позиции, есть ли ещё.
 	Subscription string            `json:"subscription,omitempty"`
 	Records      [][]byte          `json:"records,omitempty"`

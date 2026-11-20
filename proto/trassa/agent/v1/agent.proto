@@ -9,6 +9,7 @@ syntax = "proto3";
 
 package trassa.agent.v1;
 
+import "trassa/agent/v1/backup.proto";
 import "trassa/agent/v1/security.proto";
 import "trassa/agent/v1/wireguard.proto";
 
@@ -76,6 +77,9 @@ message Hello {
   string os_version = 8;
   string arch = 9;
   int64 agent_time_ms = 10;
+  // Ключ X25519 помощника для секретов (HPKE, E13): 32 байта; id меняется при смене ключа.
+  bytes encryption_public_key = 12;
+  string encryption_key_id = 13;
 }
 
 // Рукопожатие принято.
@@ -143,6 +147,8 @@ enum RollbackKind {
   ROLLBACK_KIND_NONE = 1;
   ROLLBACK_KIND_CONFIG = 2;
   ROLLBACK_KIND_SNAPSHOT = 3;
+  // Локальная копия заменяемых путей и дамп базы до 72 часов (E13, backup.restore).
+  ROLLBACK_KIND_LOCAL_COPY = 4;
 }
 
 // Параметры по типу. Тип и вариант oneof обязаны совпадать (иначе PARAMS_INVALID).
@@ -170,6 +176,17 @@ message OperationParams {
     WireguardKeygenParams wireguard_keygen = 20;
     WireguardApplyParams wireguard_apply = 21;
     WireguardRemoveParams wireguard_remove = 22;
+    BackupInitParams backup_init = 23;
+    BackupRunParams backup_run = 24;
+    BackupVerifyParams backup_verify = 25;
+    BackupRestoreParams backup_restore = 26;
+    BackupDiscoverParams backup_discover = 27;
+    BackupSnapshotsParams backup_snapshots = 28;
+    BackupBrowseParams backup_browse = 29;
+    BackupPruneParams backup_prune = 30;
+    BackupTargetEnsureParams backup_target_ensure = 31;
+    BackupTargetRemoveParams backup_target_remove = 32;
+    BackupUnconfigureParams backup_unconfigure = 33;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }
@@ -283,6 +300,8 @@ message OperationProgress {
   OperationPhase phase = 3;
   LogStream stream = 4;
   string chunk = 5;
+  // Ход бэкапа и восстановления (E13).
+  BackupProgress backup = 6;
 }
 
 enum OperationOutcome {
@@ -318,6 +337,14 @@ message OperationResult {
     WireguardInspectResult wireguard_inspect = 28;
     WireguardKeygenResult wireguard_keygen = 29;
     WireguardApplyResult wireguard_apply = 30;
+    BackupInitResult backup_init = 31;
+    BackupRunResult backup_run = 32;
+    BackupVerifyResult backup_verify = 33;
+    BackupRestoreResult backup_restore = 34;
+    BackupDiscoverResult backup_discover = 35;
+    BackupSnapshotsResult backup_snapshots = 36;
+    BackupBrowseResult backup_browse = 37;
+    BackupPruneResult backup_prune = 38;
   }
 }
 

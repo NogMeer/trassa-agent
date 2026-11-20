@@ -336,10 +336,17 @@ func (a *Agent) handshake(ctx context.Context, c *conn) (time.Duration, error) {
 	if a.cfg.Local != nil && a.cfg.Local.Checker != nil {
 		caps = append(append([]string{}, caps...), a.cfg.Local.Checker.Catalog.Types()...)
 	}
+	// Ключ шифрования секретов помощника (E13): панель шифрует на него пароли и ключи хранилищ.
+	var encPub []byte
+	var encID string
+	if k, ok := a.cfg.Helper.(interface{ EncryptionKey() ([]byte, string) }); ok && herr == nil {
+		encPub, encID = k.EncryptionKey()
+	}
 	if _, err := c.send(hctx, &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Hello{Hello: &agentv1.Hello{
 		ServerId: a.cfg.ServerID, Signature: sig, ProtocolVersion: agentv1.ProtocolVersion_PROTOCOL_VERSION_1,
 		AgentVersion: a.cfg.Version, HelperVersion: helperVersion, Capabilities: caps,
 		Os: a.cfg.OS, OsVersion: a.cfg.OSVersion, Arch: a.cfg.Arch, AgentTimeMs: a.cfg.Now().UnixMilli(),
+		EncryptionPublicKey: encPub, EncryptionKeyId: encID,
 	}}}); err != nil {
 		return 0, err
 	}

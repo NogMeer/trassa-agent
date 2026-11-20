@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -15,6 +16,10 @@ type Client struct {
 	Path string
 	// Timeout — предел на весь запрос, кроме Execute (там — ctx).
 	Timeout time.Duration
+
+	mu     sync.Mutex
+	encPub []byte
+	encID  string
 }
 
 // RemoteError — помощник ответил кадром error.
@@ -69,10 +74,22 @@ func (c *Client) call(ctx context.Context, req Request, want string) (Response, 
 	return r, nil
 }
 
-// Hello — версия помощника и зашитый список типов.
+// Hello — версия помощника и зашитый список типов. Ключ шифрования запоминается для EncryptionKey.
 func (c *Client) Hello(ctx context.Context) (version string, capabilities []string, err error) {
 	r, err := c.call(ctx, Request{Method: MethodHello}, KindHello)
+	if err == nil {
+		c.mu.Lock()
+		c.encPub, c.encID = r.EncryptionPublicKey, r.EncryptionKeyID
+		c.mu.Unlock()
+	}
 	return r.HelperVersion, r.Capabilities, err
+}
+
+// EncryptionKey — ключ X25519 помощника из последнего Hello (для Hello агента шлюзу).
+func (c *Client) EncryptionKey() ([]byte, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.encPub, c.encID
 }
 
 // Confirm передаёт SignedConfirm; в ответ — итог операции, который нужно отправить шлюзу.

@@ -1,7 +1,7 @@
-# Настройки gitleaks: стандартные правила плюс одно исключение.
+# Настройки gitleaks: стандартные правила плюс исключения для синтетических образцов.
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Синтетические образцы секретов для теста фильтра R20 (internal/redact): настоящих ключей там нет"
-paths = ['''^internal/redact/redact_test\.go$''']
+description = "Синтетические образцы: секреты для теста фильтра R20 (internal/redact) и тестовый ключ векторов HPKE (E13); настоящих ключей там нет"
+paths = ['''^internal/redact/redact_test\.go$''', '''^test/vectors/hpke-(go|ts)\.json$''', '''^internal/sealed/genvec/main\.go$''']
