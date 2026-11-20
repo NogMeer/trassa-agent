@@ -15,6 +15,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -28,6 +30,7 @@ import (
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
 	"github.com/NogMeer/trassa-agent/internal/config"
+	"github.com/NogMeer/trassa-agent/internal/dockerapi"
 	"github.com/NogMeer/trassa-agent/internal/helper"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/logsrc"
@@ -39,6 +42,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/sysinfo/sdunits"
 	"github.com/NogMeer/trassa-agent/internal/uninstall"
 	"github.com/NogMeer/trassa-agent/internal/update"
+	"github.com/NogMeer/trassa-agent/internal/wireguard"
 )
 
 func main() {
@@ -64,6 +68,19 @@ func main() {
 			break
 		}
 		err = rollbackCmd(ctx, log, args[0])
+	case "wireguard-sync":
+		// После отката: ядро и блок имён по возвращённым файлам (rollback.State.Commands).
+		if len(args) != 1 || wireguard.ValidIface(args[0]) != nil {
+			err = errors.New("использование: trassa-helper wireguard-sync <iface>")
+			break
+		}
+		e := wgEnv(config.Default())
+		err = errors.Join(e.SyncHosts(args[0]), e.Sync(ctx, args[0]))
+	case "wireguard-purge":
+		// При удалении агента: интерфейсы, правила DOCKER-USER, блоки имён и пересылка Trassa снимаются.
+		if err = requireRoot(); err == nil {
+			err = wgEnv(config.Default()).Purge(ctx)
+		}
 	case "uninstall":
 		purge := len(args) == 1 && args[0] == "--purge-rollback"
 		if len(args) > 1 || (len(args) == 1 && !purge) {
@@ -137,21 +154,22 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 	sec := security.Real()
 	sec.Detector = &security.Detector{Sys: sec, Path: filepath.Join(p.HelperDir, "baseline.json"), Log: log}
 	ex := &helper.Executor{
-		Checker:  &helper.Checker{Keys: keys, ServerID: en.ServerID, Catalog: ops.Builtin(), Nonces: n},
-		States:   helper.States{Dir: p.OpsDir},
-		Nonces:   n,
-		Rollback: &rollback.Store{Dir: p.RollbackDir, Exec: execNoShell},
-		Auto:     autorollback.Store{Dir: p.AutoRollbackDir},
-		Timer:    autorollback.DefaultSystemd(),
-		Lock:     helper.FileLock{Path: p.HelperLock},
-		Log:      log,
-		Version:  config.Version,
-		System:   system{host: host, inv: inv},
-		Services: helper.DefaultSystemdServices(),
-		Updater:  &updater,
-		Paths:    p,
-		Logs:     logsrc.New(),
-		Security: sec,
+		Checker:   &helper.Checker{Keys: keys, ServerID: en.ServerID, Catalog: ops.Builtin(), Nonces: n},
+		States:    helper.States{Dir: p.OpsDir},
+		Nonces:    n,
+		Rollback:  &rollback.Store{Dir: p.RollbackDir, Exec: execNoShell},
+		Auto:      autorollback.Store{Dir: p.AutoRollbackDir},
+		Timer:     autorollback.DefaultSystemd(),
+		Lock:      helper.FileLock{Path: p.HelperLock},
+		Log:       log,
+		Version:   config.Version,
+		System:    system{host: host, inv: inv},
+		Services:  helper.DefaultSystemdServices(),
+		Updater:   &updater,
+		Paths:     p,
+		Logs:      logsrc.New(),
+		Security:  sec,
+		WireGuard: wgEnv(p),
 	}
 	if err := ex.CheckHandlers(); err != nil {
 		n.Close()
@@ -201,6 +219,12 @@ func serve(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// Приватная сеть после перезагрузки и перерисовки /etc/hosts cloud-init — по файлам состояния (E14).
+	if ex.WireGuard != nil {
+		if err := ex.WireGuard.SyncAll(ctx); err != nil {
+			log.Warn("приватная сеть: синхронизация при старте", "err", err)
+		}
+	}
 	// Детектор (E10-T7) наблюдает, пока работает помощник.
 	if ex.Security != nil && ex.Security.Detector != nil {
 		go ex.Security.Detector.Run(ctx)
@@ -234,4 +258,38 @@ func execNoShell(name string, args ...string) error {
 		return fmt.Errorf("%w: %s", err, s)
 	}
 	return nil
+}
+
+// wgEnv — приватная сеть на настоящей системе: файлы в /etc/trassa/wireguard, ядро через netlink и wgctrl.
+func wgEnv(p config.Paths) *wireguard.Env {
+	sock := "/var/run/docker.sock"
+	return &wireguard.Env{
+		System: &wireguard.System{
+			Store: wireguard.Store{Dir: filepath.Join(p.EtcDir, "wireguard")}, Kernel: wireguard.NetlinkKernel{},
+			Run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+				return exec.CommandContext(ctx, name, args...).CombinedOutput()
+			},
+			Hosts: "/etc/hosts", ProcSys: "/proc/sys",
+			DockerPresent: func() bool { _, err := os.Stat(sock); return err == nil },
+		},
+		Root: "/", HelperPath: filepath.Join(p.BinDir, "trassa-helper"), Docker: &dockerapi.Client{},
+		Addrs: func() ([]netip.Prefix, []string, error) {
+			ifs, err := net.Interfaces()
+			if err != nil {
+				return nil, nil, err
+			}
+			var ps []netip.Prefix
+			var names []string
+			for _, i := range ifs {
+				as, _ := i.Addrs()
+				for _, a := range as {
+					if pr, err := netip.ParsePrefix(a.String()); err == nil {
+						ps = append(ps, pr)
+						names = append(names, i.Name)
+					}
+				}
+			}
+			return ps, names, nil
+		},
+	}
 }

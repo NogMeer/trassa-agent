@@ -167,3 +167,9 @@ func (c *Client) EventsPoll(ctx context.Context) ([][]byte, error) {
 	r, err := c.call(ctx, Request{Method: MethodEventsPoll}, KindEvents)
 	return r.Events, err
 }
+
+// WgStats — метрики пиров WireGuard (MetricsBatch, protobuf): устройство читает помощник (нужен CAP_NET_ADMIN).
+func (c *Client) WgStats(ctx context.Context) ([]byte, error) {
+	r, err := c.call(ctx, Request{Method: MethodWgStats}, KindWgStats)
+	return r.Result, err
+}

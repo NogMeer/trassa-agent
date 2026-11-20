@@ -10,6 +10,7 @@ syntax = "proto3";
 package trassa.agent.v1;
 
 import "trassa/agent/v1/security.proto";
+import "trassa/agent/v1/wireguard.proto";
 
 option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
 
@@ -165,6 +166,10 @@ message OperationParams {
     ServiceRestartParams service_restart = 16;
     SecurityBaselineAcceptParams security_baseline_accept = 17;
     NetCheckParams net_check = 18;
+    WireguardInspectParams wireguard_inspect = 19;
+    WireguardKeygenParams wireguard_keygen = 20;
+    WireguardApplyParams wireguard_apply = 21;
+    WireguardRemoveParams wireguard_remove = 22;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }
@@ -310,6 +315,9 @@ message OperationResult {
     PackagesListUpdatesResult packages_list_updates = 25;
     FirewallPlanResult firewall_plan = 26;
     NetCheckResult net_check = 27;
+    WireguardInspectResult wireguard_inspect = 28;
+    WireguardKeygenResult wireguard_keygen = 29;
+    WireguardApplyResult wireguard_apply = 30;
   }
 }
 

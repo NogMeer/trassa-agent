@@ -1,0 +1,127 @@
+// SPDX-License-Identifier: Apache-2.0
+// Приватная сеть (E14, раздел 6): WireGuard на серверах. Приватный ключ создаёт помощник и наружу не отдаёт —
+// здесь только публичные ключи. Решения — docs/plan/decisions/E14-private-network.md.
+syntax = "proto3";
+
+package trassa.agent.v1;
+
+option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
+
+// wireguard.inspect (READ).
+message WireguardInspectParams {
+  string iface_name = 1;
+  // Диапазон сети, CIDR: проверяется пересечение с локальными подсетями.
+  string cidr = 2;
+  uint32 listen_port = 3;
+}
+
+enum LocalSubnetSource {
+  LOCAL_SUBNET_SOURCE_UNSPECIFIED = 0;
+  LOCAL_SUBNET_SOURCE_INTERFACE = 1;
+  LOCAL_SUBNET_SOURCE_ROUTE = 2;
+  LOCAL_SUBNET_SOURCE_DOCKER = 3;
+}
+
+message LocalSubnet {
+  string cidr = 1;
+  LocalSubnetSource source = 2;
+  // Интерфейс, маршрут или сеть Docker.
+  string name = 3;
+}
+
+message WireguardPeerState {
+  string public_key = 1;
+  string endpoint = 2;
+  repeated string allowed_ips = 3;
+  // 0 — рукопожатия не было.
+  int64 last_handshake_ms = 4;
+  uint64 rx_bytes = 5;
+  uint64 tx_bytes = 6;
+  uint32 keepalive_seconds = 7;
+}
+
+message WireguardDevice {
+  string public_key = 1;
+  uint32 listen_port = 2;
+  string address = 3;
+  uint32 mtu = 4;
+  repeated WireguardPeerState peers = 5;
+  // Хэш применённого желаемого состояния (как возвращает wireguard.apply).
+  string config_hash = 6;
+}
+
+// Интерфейс WireGuard не Trassa.
+message ForeignWireguard {
+  string iface = 1;
+  string public_key = 2;
+  uint32 listen_port = 3;
+}
+
+message WireguardInspectResult {
+  bool supported = 1;
+  // WG_UNSUPPORTED и пояснение, если ядро без WireGuard.
+  string unsupported_reason = 2;
+  bool port_free = 3;
+  repeated LocalSubnet local_subnets = 4;
+  // Локальные подсети, пересекающиеся с cidr.
+  repeated string conflicts = 5;
+  bool has_public_ipv4 = 6;
+  repeated string addresses = 7;
+  WireguardDevice device = 8;
+  repeated ForeignWireguard foreign = 9;
+  // Предупреждения: cloud-init перерисовывает /etc/hosts, нет цепочки DOCKER-USER при Docker и т. п.
+  repeated string warnings = 10;
+}
+
+// wireguard.keygen (CHANGE).
+message WireguardKeygenParams {
+  string iface_name = 1;
+  // true — новый ключ кладётся «следующим» и вступает в силу на wireguard.apply с expect_public_key.
+  bool rotate = 2;
+}
+
+message WireguardKeygenResult {
+  string public_key = 1;
+  // Ключ «следующий», ещё не действует.
+  bool next = 2;
+}
+
+message WireguardPeer {
+  string public_key = 1;
+  // хост:порт; пусто — пир сам приходит к нам.
+  string endpoint = 2;
+  repeated string allowed_ips = 3;
+  uint32 keepalive_seconds = 4;
+}
+
+message HostEntry {
+  string fqdn = 1;
+  string address = 2;
+}
+
+// wireguard.apply (DESTRUCTIVE, CONFIG + автооткат). Список пиров всегда полный: отсутствующие удаляются.
+message WireguardApplyParams {
+  string iface_name = 1;
+  // Адрес сервера в сети с префиксом.
+  string address = 2;
+  uint32 listen_port = 3;
+  // 0 — 1420 (decisions E14, п. 7).
+  uint32 mtu = 4;
+  // Публичный ключ, с которым панель строила план: текущий или «следующий» после ротации.
+  string expect_public_key = 5;
+  repeated WireguardPeer peers = 6;
+  // Пересылка между пирами (узел HUB).
+  bool forwarding = 7;
+  repeated HostEntry hosts = 8;
+}
+
+message WireguardApplyResult {
+  string config_hash = 1;
+}
+
+// wireguard.remove (DESTRUCTIVE, CONFIG + автооткат).
+message WireguardRemoveParams {
+  string iface_name = 1;
+  // Удалить ключ после подтверждения; без значения — true.
+  optional bool purge_key = 2;
+}

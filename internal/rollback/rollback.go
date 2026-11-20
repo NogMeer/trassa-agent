@@ -110,6 +110,9 @@ type State struct {
 	// NftFile — набор nftables Trassa: после возврата файлов загрузить его (`nft -f`), а если файла не стало —
 	// снять таблицу inet trassa. Загруженные правила так совпадают с файлом.
 	NftFile string `json:"nft_file,omitempty"`
+	// Commands — команды после возврата файлов (последними): помощник приводит систему к возвращённым файлам
+	// (например, `trassa-helper wireguard-sync <iface>`). Только абсолютный путь программы.
+	Commands [][]string `json:"commands,omitempty"`
 }
 
 // UnitState — служба до операции.
@@ -121,7 +124,7 @@ type UnitState struct {
 
 // Empty — откат не трогает ничего, кроме файлов.
 func (s State) Empty() bool {
-	return len(s.Sysctl) == 0 && len(s.Units) == 0 && len(s.Packages) == 0 && !s.DaemonReload && s.NftFile == ""
+	return len(s.Sysctl) == 0 && len(s.Units) == 0 && len(s.Packages) == 0 && !s.DaemonReload && s.NftFile == "" && len(s.Commands) == 0
 }
 
 // Store — каталог точек.
@@ -332,6 +335,15 @@ func (s *Store) Restore(op string) (*Manifest, error) {
 			if err := s.Exec("nft", "delete", "table", "inet", "trassa"); err != nil {
 				errs = append(errs, fmt.Errorf("nft delete table inet trassa: %w", err))
 			}
+		}
+	}
+	for _, c := range m.State.Commands {
+		if len(c) == 0 || !filepath.IsAbs(c[0]) {
+			errs = append(errs, fmt.Errorf("команда %v", c))
+			continue
+		}
+		if err := s.Exec(c[0], c[1:]...); err != nil {
+			errs = append(errs, fmt.Errorf("%v: %w", c, err))
 		}
 	}
 	if len(errs) > 0 {

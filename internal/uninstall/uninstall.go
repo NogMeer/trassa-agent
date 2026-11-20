@@ -67,6 +67,13 @@ func Exec(ctx context.Context, name string, args ...string) error {
 func Run(ctx context.Context, p config.Paths, purgeRollback bool, run Runner) error {
 	s := Plan(p, purgeRollback)
 	var errs []error
+	// Приватная сеть Trassa (E14) снимается, пока помощник ещё на месте: интерфейсы, правило DOCKER-USER,
+	// блоки имён и пересылка.
+	if helper := filepath.Join(p.BinDir, "trassa-helper"); fileExists(helper) {
+		if err := run(ctx, helper, "wireguard-purge"); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	args := append([]string{"disable", "--now"}, s.Units...)
 	if err := run(ctx, "/usr/bin/systemctl", args...); err != nil {
 		errs = append(errs, err)
@@ -88,3 +95,5 @@ func Run(ctx context.Context, p config.Paths, purgeRollback bool, run Runner) er
 	}
 	return errors.Join(errs...)
 }
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }

@@ -56,7 +56,9 @@ func TestRunPurge(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(p.BinDir, "other-tool")); err != nil {
 		t.Fatal("удалён чужой файл")
 	}
-	want := []string{"/usr/bin/systemctl disable --now trassa-agent.service trassa-helper.service", "/usr/bin/systemctl daemon-reload", "/usr/sbin/userdel trassa"}
+	// Сначала помощник снимает приватную сеть Trassa (E14), пока его бинарник на месте.
+	want := []string{filepath.Join(p.BinDir, "trassa-helper") + " wireguard-purge",
+		"/usr/bin/systemctl disable --now trassa-agent.service trassa-helper.service", "/usr/bin/systemctl daemon-reload", "/usr/sbin/userdel trassa"}
 	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("%v", calls)
 	}

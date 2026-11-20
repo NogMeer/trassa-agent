@@ -25,6 +25,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/redact"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
 	"github.com/NogMeer/trassa-agent/internal/security"
+	"github.com/NogMeer/trassa-agent/internal/wireguard"
 )
 
 // Коды итога, которые ставит исполнитель (в дополнение к кодам проверок и update).
@@ -85,6 +86,8 @@ type Executor struct {
 	Logs *logsrc.Reader
 	// Security — система для security.scan (E10); nil — SECURITY_UNAVAILABLE.
 	Security *security.System
+	// WireGuard — приватная сеть (E14); nil — WG_UNAVAILABLE.
+	WireGuard *wireguard.Env
 
 	once     sync.Once
 	handlers map[string]handler
@@ -183,6 +186,17 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})
 	case helperrpc.MethodLogsPoll:
 		e.pollLogs(ctx, req, send)
+	case helperrpc.MethodWgStats:
+		b := &agentv1.MetricsBatch{CollectedAtMs: e.now().UnixMilli()}
+		if e.WireGuard != nil {
+			ms, err := e.WireGuard.Stats(e.now())
+			if err != nil {
+				e.log().Debug("helper: wg.stats", "err", err)
+			}
+			b.Metrics = ms
+		}
+		raw, _ := proto.Marshal(b)
+		_ = send(helperrpc.Response{Kind: helperrpc.KindWgStats, Result: raw})
 	case helperrpc.MethodEventsPoll:
 		var raw [][]byte
 		if e.Security != nil && e.Security.Detector != nil {
@@ -542,6 +556,13 @@ func (e *Executor) Confirm(ctx context.Context, raw []byte) ([]byte, string) {
 	res.FinishedAtMs = e.now().UnixMilli()
 	if err := e.saveResult(st, &res); err != nil {
 		return nil, CodeInternal
+	}
+	// Ключи WireGuard, отправленные в отставку ротацией или удалением, — только после подтверждения: до него
+	// откат должен их найти.
+	if e.WireGuard != nil && (st.Type == ops.TypeWireguardApply || st.Type == ops.TypeWireguardRemove) {
+		if err := e.WireGuard.Store.AfterConfirm(); err != nil {
+			e.log().Warn("helper: ключи WireGuard после подтверждения", "err", err)
+		}
 	}
 	return st.Result, ""
 }

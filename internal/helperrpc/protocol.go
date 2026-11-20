@@ -28,6 +28,7 @@ const (
 	MethodRunning    = "running"     // операции, которые выполняются сейчас
 	MethodLogsPoll   = "logs.poll"   // новые записи журналов по действующей подписке (E08-T15)
 	MethodEventsPoll = "events.poll" // события детектора (E10-T7)
+	MethodWgStats    = "wg.stats"    // метрики пиров WireGuard (E14-T14)
 )
 
 // Виды ответных кадров.
@@ -40,6 +41,7 @@ const (
 	KindRunning  = "running"
 	KindLogs     = "logs"
 	KindEvents   = "events"
+	KindWgStats  = "wg.stats"
 	KindOK       = "ok"
 	KindError    = "error"
 )
