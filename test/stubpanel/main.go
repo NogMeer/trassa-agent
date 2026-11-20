@@ -70,6 +70,10 @@ const (
 	upgradeOp = "01a1f4b6-f2f2-7e66-85b4-000000000501"
 	// netCheckOp — net.check (E07).
 	netCheckOp = "01a1f4b6-f2f2-7e66-85b4-000000000600"
+	// wgKeygenOp, wgApplyOp, wgRemoveOp — приватная сеть (E14).
+	wgKeygenOp = "01a1f4b6-f2f2-7e66-85b4-000000000700"
+	wgApplyOp  = "01a1f4b6-f2f2-7e66-85b4-000000000701"
+	wgRemoveOp = "01a1f4b6-f2f2-7e66-85b4-000000000702"
 	panelKeyID = "stub"
 )
 
@@ -332,10 +336,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 type conn struct {
 	ws  *websocket.Conn
+	mu  sync.Mutex
 	seq uint64
 }
 
 func (c *conn) send(ctx context.Context, m *agentv1.GatewayMessage) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.seq++
 	m.Seq = c.seq
 	raw, err := proto.Marshal(m)
@@ -546,6 +553,28 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			p.writeJSON("upgrade.json", m.GetOperationResult())
 		case m.GetOperationResult().GetOperationId() == netCheckOp:
 			p.writeJSON("netcheck.json", m.GetOperationResult())
+			// Приватная сеть (E14): ключ хаба, затем apply по ключам узлов от CI (wg-peers.txt), затем remove (wg-remove).
+			if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: p.sign(wgKeygenOp, "wireguard.keygen",
+				&agentv1.OperationParams{Params: &agentv1.OperationParams_WireguardKeygen{WireguardKeygen: &agentv1.WireguardKeygenParams{IfaceName: "wg0"}}})}}); err != nil {
+				return
+			}
+		case m.GetOperationResult().GetOperationId() == wgKeygenOp:
+			r := m.GetOperationResult()
+			p.writeJSON("wg-keygen.json", r)
+			go p.wireguardFlow(ctx, c, r.GetWireguardKeygen().GetPublicKey())
+		case m.GetOperationResult().GetOperationId() == wgApplyOp || m.GetOperationResult().GetOperationId() == wgRemoveOp:
+			r := m.GetOperationResult()
+			name := "wg-apply"
+			if r.GetOperationId() == wgRemoveOp {
+				name = "wg-remove"
+			}
+			if r.GetOutcome() == agentv1.OperationOutcome_OPERATION_OUTCOME_AWAITING_CONFIRM {
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Confirm{Confirm: p.confirm(r.GetOperationId())}}); err != nil {
+					return
+				}
+				break
+			}
+			p.writeJSON(name+".json", r)
 		case p.isFix(m.GetOperationResult().GetOperationId()):
 			r := m.GetOperationResult()
 			fx := p.takeFix(r.GetOperationId())
@@ -773,4 +802,55 @@ func ownIPv4() string {
 		}
 	}
 	return "192.0.2.1"
+}
+
+// wireguardFlow — хаб wg0 10.77.0.1/24 с пересылкой и двумя узлами (их ключи CI кладёт в wg-peers.txt); после
+// проверок CI (файл wg-remove) — удаление. Оба шага с автооткатом и подтверждением.
+func (p *panel) wireguardFlow(ctx context.Context, c *conn, hub string) {
+	wait := func(name string) []byte {
+		for i := 0; i < 300; i++ {
+			if b, err := os.ReadFile(filepath.Join(p.out, name)); err == nil && len(b) > 0 {
+				return b
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(time.Second):
+			}
+		}
+		return nil
+	}
+	keys := strings.Fields(string(wait("wg-peers.txt")))
+	if len(keys) != 2 {
+		log.Printf("wg-peers.txt: %v", keys)
+		return
+	}
+	params := &agentv1.WireguardApplyParams{IfaceName: "wg0", Address: "10.77.0.1/24", ListenPort: 51820, ExpectPublicKey: hub, Forwarding: true,
+		Peers: []*agentv1.WireguardPeer{
+			{PublicKey: keys[0], AllowedIps: []string{"10.77.0.2/32"}},
+			{PublicKey: keys[1], AllowedIps: []string{"10.77.0.3/32"}},
+		},
+		Hosts: []*agentv1.HostEntry{{Fqdn: "a.ci.internal", Address: "10.77.0.2"}, {Fqdn: "b.ci.internal", Address: "10.77.0.3"}}}
+	if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: p.signConfirm(wgApplyOp, "wireguard.apply",
+		&agentv1.OperationParams{Params: &agentv1.OperationParams_WireguardApply{WireguardApply: params}})}}); err != nil {
+		return
+	}
+	if wait("wg-remove") == nil {
+		return
+	}
+	_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: p.signConfirm(wgRemoveOp, "wireguard.remove",
+		&agentv1.OperationParams{Params: &agentv1.OperationParams_WireguardRemove{WireguardRemove: &agentv1.WireguardRemoveParams{IfaceName: "wg0"}}})}})
+}
+
+// signConfirm — операция CONFIG с автооткатом 120 с.
+func (p *panel) signConfirm(id, typ string, params *agentv1.OperationParams) *agentv1.SignedOperation {
+	now := time.Now()
+	n := make([]byte, 16)
+	_, _ = rand.Read(n)
+	body, _ := proto.Marshal(&agentv1.OperationBody{
+		OperationId: id, ServerId: serverID, Type: typ, Nonce: n, Params: params,
+		NotAfterMs: now.Add(5 * time.Minute).UnixMilli(), IssuedAtMs: now.UnixMilli(),
+		Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG, ConfirmWithinSec: 120,
+	})
+	return &agentv1.SignedOperation{Body: body, KeyId: panelKeyID, Signature: ed25519.Sign(p.panel, verify.Input(verify.ContextOperation, body))}
 }

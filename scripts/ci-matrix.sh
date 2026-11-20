@@ -28,7 +28,7 @@ trap 'podman rm -f "$NAME" >/dev/null 2>&1 || true; rm -rf "$ctx"' EXIT
 cat >"$ctx/Containerfile" <<EOF
 FROM docker.io/library/$IMAGE
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    systemd systemd-sysv dbus ca-certificates curl openssl openssh-server nftables && rm -rf /var/lib/apt/lists/*
+    systemd systemd-sysv dbus ca-certificates curl openssl openssh-server nftables iptables wireguard-tools iproute2 iputils-ping && rm -rf /var/lib/apt/lists/*
 CMD ["/sbin/init"]
 EOF
 podman build -q -t trassa-matrix-os "$ctx" >/dev/null
@@ -184,6 +184,54 @@ done
 ! x dpkg -s fail2ban >/dev/null 2>&1 || fail "fail2ban остался после возврата"
 x test ! -e /etc/sysctl.d/90-trassa-security.conf || fail "файл параметров Trassa остался"
 
+# Приватная сеть (E14): хаб wg0 в контейнере, два узла в сетевых пространствах имён за veth. Docker
+# воспроизведён тем, что он делает с firewall: цепочка DOCKER-USER и политика FORWARD DROP (dockerd здесь не нужен).
+x sh -c '
+set -e
+for n in a b; do
+	ip netns add w$n
+	ip link add v$n type veth peer name v$n-ns
+	ip link set v$n-ns netns w$n
+	wg genkey >/root/w$n.key && wg pubkey </root/w$n.key >/root/w$n.pub
+done
+ip addr add 192.0.2.1/30 dev va && ip link set va up
+ip addr add 198.51.100.1/30 dev vb && ip link set vb up
+ip -n wa addr add 192.0.2.2/30 dev va-ns && ip -n wa link set va-ns up && ip -n wa link set lo up
+ip -n wb addr add 198.51.100.2/30 dev vb-ns && ip -n wb link set vb-ns up && ip -n wb link set lo up
+iptables -N DOCKER-USER && iptables -A DOCKER-USER -j RETURN && iptables -I FORWARD -j DOCKER-USER && iptables -P FORWARD DROP
+: >/var/run/docker.sock
+'
+for _ in $(seq 1 60); do x test -s "$STUB/wg-keygen.json" && break; sleep 1; done
+podman cp "$NAME:$STUB/wg-keygen.json" "$ctx/wg-keygen.json" 2>/dev/null || fail "нет итога wireguard.keygen"
+hub=$(jq -r .wireguard_keygen.public_key "$ctx/wg-keygen.json")
+[ "$(printf '%s' "$hub" | wc -c)" -eq 44 ] || fail "wireguard.keygen: $(cat "$ctx/wg-keygen.json")"
+x sh -c "
+set -e
+ip netns exec wa ip link add wg0 type wireguard
+ip netns exec wa wg set wg0 private-key /root/wa.key peer $hub endpoint 192.0.2.1:51820 allowed-ips 10.77.0.0/24 persistent-keepalive 5
+ip -n wa addr add 10.77.0.2/24 dev wg0 && ip -n wa link set wg0 up
+ip netns exec wb ip link add wg0 type wireguard
+ip netns exec wb wg set wg0 private-key /root/wb.key peer $hub endpoint 198.51.100.1:51820 allowed-ips 10.77.0.0/24 persistent-keepalive 5
+ip -n wb addr add 10.77.0.3/24 dev wg0 && ip -n wb link set wg0 up
+cat /root/wa.pub /root/wb.pub >$STUB/wg-peers.txt
+"
+for _ in $(seq 1 120); do x test -s "$STUB/wg-apply.json" && break; sleep 1; done
+podman cp "$NAME:$STUB/wg-apply.json" "$ctx/wg-apply.json" 2>/dev/null || fail "нет итога wireguard.apply"
+jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/wg-apply.json" >/dev/null || fail "wireguard.apply: $(cat "$ctx/wg-apply.json")"
+[ "$(x sh -c 'iptables -S DOCKER-USER | grep -c "trassa:e14:wg0"')" = 1 ] || fail "правило DOCKER-USER не одно: $(x iptables -S DOCKER-USER)"
+x ip netns exec wa ping -c 3 -W 3 10.77.0.3 >/dev/null || fail "транзит wg → wg через хаб не прошёл: $(x wg show 2>&1)"
+x grep -q "10.77.0.3 b.ci.internal" /etc/hosts || fail "блок имён не записан"
+x sh -c ": >$STUB/wg-remove"
+for _ in $(seq 1 120); do x test -s "$STUB/wg-remove.json" && break; sleep 1; done
+podman cp "$NAME:$STUB/wg-remove.json" "$ctx/wg-remove.json" 2>/dev/null || fail "нет итога wireguard.remove"
+jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/wg-remove.json" >/dev/null || fail "wireguard.remove: $(cat "$ctx/wg-remove.json")"
+[ "$(x sh -c 'iptables -S DOCKER-USER | grep -c "trassa:e14:wg0" || true')" = 0 ] || fail "правило DOCKER-USER осталось"
+! x ip link show wg0 >/dev/null 2>&1 || fail "интерфейс wg0 остался"
+! x grep -q "ci.internal" /etc/hosts || fail "блок имён остался"
+x test ! -e /etc/trassa/wireguard/wg0.key || fail "ключ хаба остался после подтверждённого удаления"
+x rm -f /var/run/docker.sock
+echo "приватная сеть: транзит wg → wg через хаб с DOCKER-USER, удаление чистое"
+
 # Детектор (E10-T7): новая учётная запись — событие security.suspicious COMPROMISE_NEW_USER с отпечатком.
 x useradd --system --no-create-home --shell /usr/sbin/nologin ci-intruder
 for _ in $(seq 1 180); do
@@ -226,7 +274,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" --slurpfile scan "$ctx/security.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "firewall", "service.restart", "packages.upgrade", "net.check", "detector", "events", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "firewall", "service.restart", "packages.upgrade", "net.check", "detector", "wireguard", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
 	  security: $scan[0].security_scan.checks,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"
