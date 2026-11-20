@@ -29,9 +29,10 @@ const (
 func (e *Executor) subscriptionFile() string { return filepath.Join(e.Paths.HelperDir, "logs.json") }
 
 type subscriptionJSON struct {
-	ID          string `json:"id"`
-	CreatedAtMs int64  `json:"created_at_ms"`
-	MinLevel    int32  `json:"min_level"`
+	ID          string            `json:"id"`
+	CreatedAtMs int64             `json:"created_at_ms"`
+	MinLevel    int32             `json:"min_level"`
+	Start       map[string]string `json:"start,omitempty"`
 	Sources     []struct {
 		Kind int32  `json:"kind"`
 		Name string `json:"name"`
@@ -50,7 +51,7 @@ func (e *Executor) loadSubscription() (*logsrc.Subscription, error) {
 	if err := json.Unmarshal(b, &j); err != nil {
 		return nil, err
 	}
-	s := &logsrc.Subscription{ID: j.ID, CreatedAtMs: j.CreatedAtMs, MinLevel: agentv1.LogLevel(j.MinLevel)}
+	s := &logsrc.Subscription{ID: j.ID, CreatedAtMs: j.CreatedAtMs, MinLevel: agentv1.LogLevel(j.MinLevel), Start: j.Start}
 	for _, x := range j.Sources {
 		s.Sources = append(s.Sources, &agentv1.LogSource{Kind: agentv1.LogSourceKind(x.Kind), Name: x.Name})
 	}
@@ -58,7 +59,7 @@ func (e *Executor) loadSubscription() (*logsrc.Subscription, error) {
 }
 
 func (e *Executor) saveSubscription(s *logsrc.Subscription) error {
-	j := subscriptionJSON{ID: s.ID, CreatedAtMs: s.CreatedAtMs, MinLevel: int32(s.MinLevel)}
+	j := subscriptionJSON{ID: s.ID, CreatedAtMs: s.CreatedAtMs, MinLevel: int32(s.MinLevel), Start: s.Start}
 	for _, x := range s.Sources {
 		j.Sources = append(j.Sources, struct {
 			Kind int32  `json:"kind"`
@@ -79,8 +80,8 @@ func (e *Executor) applyLogsSubscribe(_ context.Context, r *run) *agentv1.Operat
 		return r.failed(CodeLogsUnavailable, "журналы на этой сборке не читаются")
 	}
 	p := r.body.GetParams().GetLogsSubscribe()
-	st, ok := e.Logs.Open(p.GetSources())
-	sub := &logsrc.Subscription{ID: strings.ToLower(r.body.GetOperationId()), CreatedAtMs: e.now().UnixMilli(), MinLevel: p.GetMinLevel(), Sources: ok}
+	st, ok, start := e.Logs.Open(p.GetSources())
+	sub := &logsrc.Subscription{ID: strings.ToLower(r.body.GetOperationId()), CreatedAtMs: e.now().UnixMilli(), MinLevel: p.GetMinLevel(), Sources: ok, Start: start}
 	if err := e.saveSubscription(sub); err != nil {
 		e.log().Error("helper: подписка журналов не сохранена", "err", err)
 		return r.failed(CodeLogsUnavailable, "подписка не сохранена")

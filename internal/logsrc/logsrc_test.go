@@ -61,7 +61,7 @@ func TestOpenFile(t *testing.T) {
 			t.Errorf("%s: причина %q (%v), ждали %q", p, reason, err, want)
 		}
 	}
-	st, ok := r.Open([]*agentv1.LogSource{
+	st, ok, start := r.Open([]*agentv1.LogSource{
 		file("/var/log/app/app.log"), file("/var/log/app/app.log"), file("/var/log/shadow.log"),
 		{Kind: agentv1.LogSourceKind_LOG_SOURCE_KIND_DOCKER, Name: "web"},
 		{Kind: agentv1.LogSourceKind_LOG_SOURCE_KIND_SYSTEM},
@@ -70,8 +70,8 @@ func TestOpenFile(t *testing.T) {
 	for _, s := range st {
 		reasons = append(reasons, s.GetReason())
 	}
-	if strings.Join(reasons, ",") != ",DUPLICATE,PATH_FORBIDDEN,SOURCE_UNSUPPORTED," || len(ok) != 2 {
-		t.Fatalf("причины %v, открыто %d", reasons, len(ok))
+	if strings.Join(reasons, ",") != ",DUPLICATE,PATH_FORBIDDEN,SOURCE_UNSUPPORTED," || len(ok) != 2 || len(start) != 1 {
+		t.Fatalf("причины %v, открыто %d, начальных позиций %d", reasons, len(ok), len(start))
 	}
 }
 

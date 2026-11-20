@@ -436,6 +436,9 @@ func (r *Reader) Poll(ctx context.Context, sub *Subscription, pos map[string]str
 		var err error
 		switch src.GetKind() {
 		case agentv1.LogSourceKind_LOG_SOURCE_KIND_FILE:
+			if p == "" {
+				p = sub.Start[k]
+			}
 			recs, np, m, err = r.pollFile(src, p, sub.MinLevel, leftRec, leftBytes)
 		case agentv1.LogSourceKind_LOG_SOURCE_KIND_SYSTEM, agentv1.LogSourceKind_LOG_SOURCE_KIND_SSH, agentv1.LogSourceKind_LOG_SOURCE_KIND_UNIT:
 			var extra []string
@@ -502,11 +505,14 @@ type Subscription struct {
 	CreatedAtMs int64
 	MinLevel    agentv1.LogLevel
 	Sources     []*agentv1.LogSource
+	// Start — позиции файлов в момент подписки: строки, дописанные до первого опроса, не теряются.
+	Start map[string]string
 }
 
 // Open проверяет источники подписки: повторы, неподдерживаемые и недоступные файлы получают причину;
-// в подписку попадают только открывшиеся.
-func (r *Reader) Open(sources []*agentv1.LogSource) ([]*agentv1.LogSourceStatus, []*agentv1.LogSource) {
+// в подписку попадают только открывшиеся. start — позиции открывшихся файлов (конец файла сейчас).
+func (r *Reader) Open(sources []*agentv1.LogSource) ([]*agentv1.LogSourceStatus, []*agentv1.LogSource, map[string]string) {
+	start := map[string]string{}
 	seen := map[string]bool{}
 	var st []*agentv1.LogSourceStatus
 	var ok []*agentv1.LogSource
@@ -522,10 +528,13 @@ func (r *Reader) Open(sources []*agentv1.LogSource) ([]*agentv1.LogSourceStatus,
 			f, reason, err := r.OpenFile(s.GetName())
 			if err != nil {
 				res.Reason = reason
-			} else {
-				f.Close()
-				res.Opened = true
+				break
 			}
+			if fi, err := f.Stat(); err == nil {
+				start[k] = filePos(inode(fi), fi.Size())
+			}
+			f.Close()
+			res.Opened = true
 		default:
 			res.Opened = true
 		}
@@ -535,5 +544,5 @@ func (r *Reader) Open(sources []*agentv1.LogSource) ([]*agentv1.LogSourceStatus,
 			ok = append(ok, s)
 		}
 	}
-	return st, ok
+	return st, ok, start
 }

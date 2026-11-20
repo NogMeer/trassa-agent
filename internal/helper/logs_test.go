@@ -61,11 +61,19 @@ func TestLogsSubscribeAndPoll(t *testing.T) {
 		t.Fatalf("статусы: %+v", st)
 	}
 	sub := strings.ToLower(b.GetOperationId())
+	// Строка, дописанная между подпиской и первым опросом, не теряется.
+	if err := os.WriteFile(app, []byte("before\nbetween\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	r := f.poll("", nil)
+	if len(r.Records) != 1 {
+		t.Fatalf("строка между подпиской и опросом: %+v", r)
+	}
+	r = f.poll(sub, r.Positions)
 	if r.Subscription != sub || len(r.Records) != 0 || len(r.Positions) != 1 {
 		t.Fatalf("первый опрос: %+v", r)
 	}
-	if err := os.WriteFile(app, []byte("before\nafter token=trs_live_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG\n"), 0o644); err != nil {
+	if err := os.WriteFile(app, []byte("before\nbetween\nafter token=trs_live_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	r2 := f.poll(sub, r.Positions)
@@ -76,8 +84,8 @@ func TestLogsSubscribeAndPoll(t *testing.T) {
 	if err := proto.Unmarshal(r2.Records[0], &rec); err != nil || !strings.HasPrefix(rec.GetMessage(), "after") || strings.Contains(rec.GetMessage(), "abcdefghijkl") {
 		t.Fatalf("запись: %v %+v", err, &rec)
 	}
-	// Позиции чужой подписки не принимаются: отсчёт заново с конца файла.
-	if r3 := f.poll("other", r.Positions); len(r3.Records) != 0 {
+	// Позиции чужой подписки не принимаются: отсчёт от начала действующей подписки.
+	if r3 := f.poll("other", r2.Positions); len(r3.Records) != 2 {
 		t.Fatalf("позиции прежней подписки: %+v", r3)
 	}
 	// Пустой список выключает сбор.
