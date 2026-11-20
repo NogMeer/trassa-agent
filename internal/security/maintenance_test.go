@@ -4,6 +4,9 @@ package security
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -71,5 +74,24 @@ func TestServiceRestart(t *testing.T) {
 	t.Cleanup(func() { upgradePoll = old })
 	if err := RestartService(context.Background(), sys, "redis.service"); err == nil {
 		t.Fatal("неактивная служба принята")
+	}
+}
+
+// Чужая блокировка apt/dpkg видна до начала работы: файл, процесс-держатель; снята — свободно.
+func TestPackageManagerBusy(t *testing.T) {
+	sys := build(t, tree{"var/lib/dpkg/lock-frontend": "", "var/lib/apt/lists/lock": ""})
+	if h, err := PackageManagerBusy(sys); err != nil || h != nil {
+		t.Fatalf("свободно: %+v %v", h, err)
+	}
+	pid := holdLock(t, filepath.Join(sys.Root, "var/lib/apt/lists/lock"))
+	comm := filepath.Join(sys.Root, "proc", strconv.Itoa(pid), "comm")
+	_ = os.MkdirAll(filepath.Dir(comm), 0o755)
+	_ = os.WriteFile(comm, []byte("unattended-upgr\n"), 0o644)
+	h, err := PackageManagerBusy(sys)
+	if err != nil || h == nil || h.Path != "/var/lib/apt/lists/lock" || h.PID != pid || h.Comm != "unattended-upgr" {
+		t.Fatalf("занято: %+v %v", h, err)
+	}
+	if !strings.Contains(h.String(), "unattended-upgr (pid ") {
+		t.Fatalf("%s", h)
 	}
 }

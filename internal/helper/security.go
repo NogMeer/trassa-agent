@@ -179,14 +179,32 @@ func (e *Executor) applyFirewallApply(ctx context.Context, r *run) *agentv1.Oper
 
 // Коды итога обслуживания.
 const (
-	CodeUpgradeFailed = "UPGRADE_FAILED"
-	CodeRebootFailed  = "REBOOT_FAILED"
-	CodeRestartFailed = "SERVICE_RESTART_FAILED"
+	// CodePackageManagerBusy — apt/dpkg занят чужим процессом (unattended-upgrades, ручной apt): операция не
+	// начиналась; в сообщении — файл блокировки и процесс-держатель.
+	CodePackageManagerBusy = "PACKAGE_MANAGER_BUSY"
+	CodeUpgradeFailed      = "UPGRADE_FAILED"
+	CodeRebootFailed       = "REBOOT_FAILED"
+	CodeRestartFailed      = "SERVICE_RESTART_FAILED"
 )
+
+// aptBusy — итог PACKAGE_MANAGER_BUSY, если apt/dpkg занят; nil — свободен.
+func (e *Executor) aptBusy(r *run) *agentv1.OperationResult {
+	h, err := security.PackageManagerBusy(e.Security)
+	if err != nil {
+		return r.failed(CodePackagesFailed, "блокировки менеджера пакетов не проверены: "+err.Error())
+	}
+	if h != nil {
+		return r.failed(CodePackageManagerBusy, "Менеджер пакетов "+h.String()+"; повторите, когда он закончит")
+	}
+	return nil
+}
 
 func (e *Executor) previewUpgrade(ctx context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult) {
 	if e.Security == nil {
 		return nil, r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	if busy := e.aptBusy(r); busy != nil {
+		return nil, busy
 	}
 	plan, err := security.PlanUpgrade(ctx, e.Security, r.body.GetParams().GetPackagesUpgrade().GetScope())
 	if err != nil {
@@ -209,6 +227,9 @@ func (e *Executor) previewUpgrade(ctx context.Context, r *run) (*agentv1.Preview
 func (e *Executor) applyUpgrade(ctx context.Context, r *run) *agentv1.OperationResult {
 	if e.Security == nil {
 		return r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	if busy := e.aptBusy(r); busy != nil {
+		return busy
 	}
 	before, err := security.RunningServices(ctx, e.Security)
 	if err != nil {
@@ -293,6 +314,9 @@ func (e *Executor) applyBaselineAccept(_ context.Context, r *run) *agentv1.Opera
 func (e *Executor) applyListUpdates(ctx context.Context, r *run) *agentv1.OperationResult {
 	if e.Security == nil {
 		return r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	if busy := e.aptBusy(r); busy != nil {
+		return busy
 	}
 	out, err := security.ListUpdates(ctx, e.Security)
 	if err != nil {

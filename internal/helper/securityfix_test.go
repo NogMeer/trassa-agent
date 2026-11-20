@@ -3,8 +3,10 @@
 package helper
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -145,5 +147,34 @@ func TestSystemReboot(t *testing.T) {
 	long := f.body(ops.TypeSystemReboot, &agentv1.OperationParams{Params: &agentv1.OperationParams_SystemReboot{SystemReboot: &agentv1.SystemRebootParams{DelaySeconds: 3601}}})
 	if o := f.exec(sealed(long)); o.accepted || o.code != ops.CodeParamsInvalid {
 		t.Fatalf("%+v", o)
+	}
+}
+
+// apt/dpkg занят чужим процессом — PACKAGE_MANAGER_BUSY с держателем до начала работы, apt не запускается.
+func TestPackagesBusy(t *testing.T) {
+	f := newFixture(t)
+	root := t.TempDir()
+	lock := filepath.Join(root, "var/lib/dpkg/lock-frontend")
+	_ = os.MkdirAll(filepath.Dir(lock), 0o755)
+	_ = os.WriteFile(lock, nil, 0o640)
+	var ran []string
+	f.e.Security = &security.System{Root: root, RootUID: os.Getuid(), Now: time.Now,
+		Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+			ran = append(ran, name+" "+strings.Join(args, " "))
+			return nil, nil
+		}}
+	pid := holdLock(t, lock)
+	list := f.body(ops.TypePackagesListUpdates, &agentv1.OperationParams{Params: &agentv1.OperationParams_PackagesListUpdates{PackagesListUpdates: &agentv1.PackagesListUpdatesParams{}}})
+	upg := f.body(ops.TypePackagesUpgrade, &agentv1.OperationParams{Params: &agentv1.OperationParams_PackagesUpgrade{PackagesUpgrade: &agentv1.PackagesUpgradeParams{Scope: agentv1.UpgradeScope_UPGRADE_SCOPE_SECURITY}}})
+	for _, b := range []*agentv1.OperationBody{list, upg} {
+		o := f.exec(sealed(b))
+		if o.result.GetErrorCode() != CodePackageManagerBusy || !strings.Contains(o.result.GetMessage(), "pid "+strconv.Itoa(pid)) {
+			t.Fatalf("%s: %+v", b.GetType(), o.result)
+		}
+	}
+	for _, c := range ran {
+		if strings.HasPrefix(c, "apt-get") {
+			t.Fatalf("apt запущен при занятой блокировке: %v", ran)
+		}
 	}
 }

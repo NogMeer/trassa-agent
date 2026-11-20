@@ -40,8 +40,10 @@ func backupSpecs() []Spec {
 	return []Spec{
 		{
 			Type: TypeBackupInit, Class: Change, Rollback: config, Long: true,
-			match:    func(p *agentv1.OperationParams) bool { return p.GetBackupInit() != nil },
-			Validate: func(b *agentv1.OperationBody) error { return pathCoded(backup.ValidateInit(b.GetParams().GetBackupInit())) },
+			match: func(p *agentv1.OperationParams) bool { return p.GetBackupInit() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				return pathCoded(backup.ValidateInit(b.GetParams().GetBackupInit()))
+			},
 		},
 		{
 			Type: TypeBackupRun, Class: Change, Rollback: none, Long: true,
