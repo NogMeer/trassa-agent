@@ -56,6 +56,8 @@ type Paths struct {
 	BackupWorkDir   string // /var/lib/trassa/backup: restore-test, restore, localcopy
 	CacheDir        string // /var/cache/trassa: кэш restic
 	TargetBin       string // /usr/local/lib/trassa: rclone и restic цели бэкапов (0755: их запускает пользователь цели)
+	SSHDir          string // /etc/ssh: файлы доступа Trassa (E16) — sshd_config.d/00-trassa-*.conf и trassa/
+	SudoersDir      string // /etc/sudoers.d: правила trassa-<пользователь> (E16)
 }
 
 // Default — пути на сервере.
@@ -89,6 +91,8 @@ func Under(root string) Paths {
 		BackupWorkDir:   j("var/lib/trassa/backup"),
 		CacheDir:        j("var/cache/trassa"),
 		TargetBin:       j("usr/local/lib/trassa"),
+		SSHDir:          j("etc/ssh"),
+		SudoersDir:      j("etc/sudoers.d"),
 	}
 }
 

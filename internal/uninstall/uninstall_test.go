@@ -96,3 +96,41 @@ func TestPlanFirewallUnit(t *testing.T) {
 		t.Fatalf("%v %v", s.Units, s.Paths)
 	}
 }
+
+// Удаление снимает доступ E16: доверие к CA, принципалы, аварийный вход, правила sudo Trassa; чужие правила
+// sudo и файлы sshd остаются; sshd перечитывает настройки.
+func TestRunRemovesAccess(t *testing.T) {
+	_, p := layout(t)
+	files := map[string]string{
+		filepath.Join(p.SSHDir, "sshd_config.d", "00-trassa-access.conf"): "TrustedUserCAKeys /etc/ssh/trassa/ca.pub\n",
+		filepath.Join(p.SSHDir, "sshd_config.d", "00-trassa-rescue.conf"): "Match User trassa-rescue\n",
+		filepath.Join(p.SSHDir, "sshd_config.d", "50-cloud-init.conf"):    "PasswordAuthentication no\n",
+		filepath.Join(p.SSHDir, "trassa", "ca.pub"):                       "ssh-ed25519 AAAA\n",
+		filepath.Join(p.SSHDir, "trassa", "principals", "ops"):            "restrict,pty trassa:w:m\n",
+		filepath.Join(p.SudoersDir, "trassa-ops"):                         "ops ALL=(ALL:ALL) NOPASSWD: ALL\n",
+		filepath.Join(p.SudoersDir, "90-admin"):                           "admin ALL=(ALL) ALL\n",
+	}
+	for f, c := range files {
+		_ = os.MkdirAll(filepath.Dir(f), 0o755)
+		if err := os.WriteFile(f, []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var calls []string
+	if err := Run(context.Background(), p, true, func(_ context.Context, name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for f := range files {
+		_, err := os.Stat(f)
+		keep := strings.HasSuffix(f, "50-cloud-init.conf") || strings.HasSuffix(f, "90-admin")
+		if keep != (err == nil) {
+			t.Errorf("%s: остался=%v", f, err == nil)
+		}
+	}
+	if !strings.Contains(strings.Join(calls, "\n"), "/usr/bin/systemctl try-reload-or-restart ssh.service") {
+		t.Fatalf("sshd не перечитан: %v", calls)
+	}
+}

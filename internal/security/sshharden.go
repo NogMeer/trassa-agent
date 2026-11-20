@@ -216,7 +216,8 @@ func sshPreconditions(ctx context.Context, s *Scan, cur *agentv1.SshEffective, w
 		kbd = v
 	}
 	if password != "yes" && kbd != "yes" {
-		ok := false
+		// Вход по сертификату пользователем с sudo (E16) — тоже вход без пароля.
+		ok := s.sys.Now != nil && s.sys.accessCertAdmin(s.sys.Now())
 		for _, k := range keys {
 			if isAdmin[k.user] || (k.user == "root" && root != "no") {
 				ok = true

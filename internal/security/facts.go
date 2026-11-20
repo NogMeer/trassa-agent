@@ -25,6 +25,7 @@ import (
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/dockerapi"
+	"github.com/NogMeer/trassa-agent/internal/fsutil"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
 )
 
@@ -491,4 +492,62 @@ func (s *System) lines(p string) ([]string, error) {
 		}
 	}
 	return out, sc.Err()
+}
+
+// accessManaged — учётные записи, созданные доступом Trassa (E16, реестр /etc/trassa/access/state.json), и
+// trassa-rescue: их правила sudo и сами записи — не находки. Нет реестра — пусто.
+func (s *System) accessManaged() map[string]bool {
+	out := map[string]bool{}
+	raw, err := fsutil.ReadLimited(s.path("/etc/trassa/access/state.json"), 4<<20)
+	if err != nil {
+		return out
+	}
+	var st struct {
+		Users map[string]json.RawMessage `json:"users"`
+	}
+	if json.Unmarshal(raw, &st) != nil {
+		return out
+	}
+	for u := range st.Users {
+		out[u] = true
+	}
+	out["trassa-rescue"] = true
+	return out
+}
+
+// accessCertAdmin — войти можно по сертификату пользователем с sudo (E16): доверие к CA настроено и у
+// управляемого пользователя с sudo есть принципал без срока или с ещё не вышедшим сроком.
+func (s *System) accessCertAdmin(now time.Time) bool {
+	if _, err := os.Stat(s.path("/etc/ssh/sshd_config.d/00-trassa-access.conf")); err != nil {
+		return false
+	}
+	if _, err := os.Stat(s.path("/etc/ssh/trassa/ca.pub")); err != nil {
+		return false
+	}
+	raw, err := fsutil.ReadLimited(s.path("/etc/trassa/access/state.json"), 4<<20)
+	if err != nil {
+		return false
+	}
+	var st struct {
+		Users map[string]struct {
+			Sudo       bool `json:"sudo"`
+			Principals []struct {
+				ExpiresMs int64 `json:"expires_at_ms"`
+			} `json:"principals"`
+		} `json:"users"`
+	}
+	if json.Unmarshal(raw, &st) != nil {
+		return false
+	}
+	for _, u := range st.Users {
+		if !u.Sudo {
+			continue
+		}
+		for _, p := range u.Principals {
+			if p.ExpiresMs == 0 || p.ExpiresMs > now.UnixMilli() {
+				return true
+			}
+		}
+	}
+	return false
 }

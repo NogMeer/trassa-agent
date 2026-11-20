@@ -28,6 +28,7 @@ import (
 	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/access"
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
 	"github.com/NogMeer/trassa-agent/internal/backup"
 	"github.com/NogMeer/trassa-agent/internal/config"
@@ -184,6 +185,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 			WorkDir: p.BackupWorkDir, StatusPath: filepath.Join(p.BackupWorkDir, "status.json"),
 			Docker: &dockerapi.Client{}, Run: backup.RunCommand, Look: backup.LookPath,
 		},
+		Access: &access.Env{Root: "/", Run: backup.RunCommand},
 		BackupTarget: &backup.Target{Root: "/", BinDir: p.TargetBin, Run: backup.RunCommand,
 			StageDir: func(op string) string { return helper.StageDir(p, op) }},
 	}

@@ -47,7 +47,26 @@ func Plan(p config.Paths, purgeRollback bool) Steps {
 	if purgeRollback {
 		s.Paths = append(s.Paths, p.StateDir)
 	}
+	// Доступ (E16): CA пространства не должен пускать на сервер без Trassa. Снимаются доверие к CA, принципалы,
+	// аварийный вход и правила sudo, выданные Trassa; сами учётные записи остаются.
+	s.Paths = append(s.Paths, accessPaths(p)...)
 	return s
+}
+
+func accessPaths(p config.Paths) []string {
+	var out []string
+	for _, f := range []string{"sshd_config.d/00-trassa-access.conf", "sshd_config.d/00-trassa-rescue.conf", "trassa"} {
+		if fileExists(filepath.Join(p.SSHDir, f)) {
+			out = append(out, filepath.Join(p.SSHDir, f))
+		}
+	}
+	ents, _ := os.ReadDir(p.SudoersDir)
+	for _, e := range ents {
+		if strings.HasPrefix(e.Name(), "trassa-") && !strings.ContainsAny(e.Name(), ".~") {
+			out = append(out, filepath.Join(p.SudoersDir, e.Name()))
+		}
+	}
+	return out
 }
 
 // Runner выполняет внешние команды (systemctl, userdel) без оболочки.
@@ -90,6 +109,12 @@ func Run(ctx context.Context, p config.Paths, purgeRollback bool, run Runner) er
 	if err := run(ctx, "/usr/bin/systemctl", "daemon-reload"); err != nil {
 		errs = append(errs, err)
 	}
+	// Файлы доступа сняты — sshd перечитывает настройки (запущенный ssh.service; при ssh.socket — сам).
+	if len(accessPaths(p)) == 0 && hadAccess(s) {
+		if err := run(ctx, "/usr/bin/systemctl", "try-reload-or-restart", "ssh.service"); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	if err := run(ctx, "/usr/sbin/userdel", s.User); err != nil && !strings.Contains(err.Error(), "does not exist") {
 		errs = append(errs, err)
 	}
@@ -97,3 +122,13 @@ func Run(ctx context.Context, p config.Paths, purgeRollback bool, run Runner) er
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+// hadAccess — в плане удаления были файлы доступа sshd.
+func hadAccess(s Steps) bool {
+	for _, p := range s.Paths {
+		if strings.Contains(p, "00-trassa-access.conf") || strings.Contains(p, "00-trassa-rescue.conf") {
+			return true
+		}
+	}
+	return false
+}

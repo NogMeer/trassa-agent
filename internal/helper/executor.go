@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/access"
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
 	"github.com/NogMeer/trassa-agent/internal/backup"
 	"github.com/NogMeer/trassa-agent/internal/config"
@@ -95,6 +96,8 @@ type Executor struct {
 	// Backup — бэкапы restic (E13); BackupTarget — цель SERVER; nil — BACKUP_UNAVAILABLE.
 	Backup       *backup.Env
 	BackupTarget *backup.Target
+	// Access — доступ (E16); nil — ACCESS_UNAVAILABLE.
+	Access *access.Env
 
 	once     sync.Once
 	handlers map[string]handler

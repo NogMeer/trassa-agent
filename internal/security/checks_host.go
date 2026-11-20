@@ -148,8 +148,13 @@ func sudoRules(sys *System) []sudoRule {
 
 func checkNopasswd(_ context.Context, s *Scan) []Finding {
 	var out []Finding
+	managed := s.sys.accessManaged()
 	for _, r := range sudoRules(s.sys) {
 		if r.user == "root" {
+			continue
+		}
+		// Правило доступа Trassa (E16) для её пользователя: выдано подписанной операцией, не находка.
+		if managed[r.user] && r.file == "/etc/sudoers.d/trassa-"+r.user {
 			continue
 		}
 		spec := strings.ReplaceAll(r.spec, " ", "")

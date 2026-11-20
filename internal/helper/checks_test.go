@@ -265,14 +265,15 @@ func TestCatalogNotConfigurable(t *testing.T) {
 			t.Fatalf("поле записи о регистрации %s", et.Field(i).Name)
 		}
 	}
-	want := []string{"agent.uninstall", "agent.update",
+	want := []string{"access.rescue.grant", "access.rescue.revoke", "access.sessions.terminate", "access.state.read",
+		"access.user.ensure", "access.user.remove", "agent.uninstall", "agent.update",
 		"backup.init", "backup.prune", "backup.restore", "backup.run", "backup.snapshot.browse", "backup.snapshots.list",
 		"backup.sources.discover", "backup.target.ensure", "backup.target.remove", "backup.target.revoke_reader", "backup.unconfigure", "backup.verify",
 		"firewall.apply", "firewall.plan", "logs.read", "logs.subscribe", "packages.list_updates", "packages.upgrade", "rollback.restore",
 		"security.baseline.accept", "security.fix.BRUTEFORCE_NO_PROTECTION", "security.fix.KERNEL_ASLR_OFF", "security.fix.PERM_CRON", "security.fix.PERM_SYSTEM_FILES",
 		"security.fix.PERM_USER_SSH_DIR", "security.fix.PERM_WORLD_WRITABLE", "security.fix.SSH_CONFIG_PERMS", "security.fix.SYSCTL_NETWORK",
 		"security.fix.TIME_SYNC_OFF", "security.fix.UPDATES_AUTO_DISABLED", "security.fix.USER_EMPTY_PASSWORD", "security.fix.USER_SERVICE_SHELL",
-		"security.scan", "service.restart", "ssh.harden", "system.info", "system.inventory", "system.reboot",
+		"security.scan", "service.restart", "ssh.harden", "sshca.trust", "sshca.untrust", "system.info", "system.inventory", "system.reboot",
 		"wireguard.apply", "wireguard.inspect", "wireguard.keygen", "wireguard.remove"}
 	if ops.TestOps {
 		want = append(want, "test.config_write")

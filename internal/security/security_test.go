@@ -83,6 +83,9 @@ func TestUsersAndSudo(t *testing.T) {
 		"etc/sudoers.d/90-bob":     "bob ALL=(ALL) NOPASSWD: ALL\n",
 		"etc/sudoers.d/README":     "# пусто\n",
 		"etc/sudoers.d/skip.dpkg~": "eve ALL=(ALL) NOPASSWD: ALL\n",
+		// Правило доступа Trassa (E16) для её пользователя — не находка; то же правило в чужом файле — находка.
+		"etc/trassa/access/state.json": `{"users":{"ops":{"sudo":true}}}`,
+		"etc/sudoers.d/trassa-ops":     "ops ALL=(ALL:ALL) NOPASSWD: ALL\n",
 	})
 	r := scan(t, sys, "USER_UID0_EXTRA", "USER_EMPTY_PASSWORD", "USER_NO_ADMIN", "SUDO_NOPASSWD_ALL", "USER_SERVICE_SHELL")
 	for code, want := range map[string]string{
@@ -100,6 +103,11 @@ func TestUsersAndSudo(t *testing.T) {
 		if strings.Contains(c.GetEvidence(), "$") {
 			t.Fatal("хэш пароля в evidence")
 		}
+	}
+	sys = build(t, tree{"etc/sudoers": "@includedir /etc/sudoers.d\n", "etc/trassa/access/state.json": `{"users":{"ops":{}}}`,
+		"etc/sudoers.d/90-ops": "ops ALL=(ALL:ALL) NOPASSWD: ALL\n"})
+	if got := states(scan(t, sys, "SUDO_NOPASSWD_ALL")["SUDO_NOPASSWD_ALL"]); got != "FAIL:ops" {
+		t.Fatalf("правило не в файле Trassa: %s", got)
 	}
 	// Без пользователя с sudo.
 	sys = build(t, tree{"etc/passwd": "root:x:0:0::/root:/bin/bash\n", "etc/group": "sudo:x:27:\n", "etc/shadow": "root:x::::::::\n"})

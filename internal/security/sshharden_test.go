@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 )
@@ -190,5 +191,31 @@ func TestSSHHardenPortVsTrassaFirewall(t *testing.T) {
 	sys := sshSystem(t, true)
 	if _, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{Port: 2222}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Вход по сертификату пользователем с sudo (доступ E16) — тоже вход без пароля: пароль выключать можно.
+func TestSSHHardenCertAdmin(t *testing.T) {
+	sys := sshSystem(t, false)
+	sys.Now = func() time.Time { return time.UnixMilli(1_800_000_000_000) }
+	if _, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{PasswordAuth: ptr(false)}); !errors.Is(err, ErrPrecondition) {
+		t.Fatalf("без ключа и сертификата: %v", err)
+	}
+	for p, c := range map[string]string{
+		"etc/ssh/sshd_config.d/00-trassa-access.conf": "TrustedUserCAKeys /etc/ssh/trassa/ca.pub\n",
+		"etc/ssh/trassa/ca.pub":                       "ssh-ed25519 AAAA\n",
+		"etc/trassa/access/state.json":                `{"users":{"ops":{"sudo":true,"principals":[{"name":"trassa:w:m","expires_at_ms":1800000600000}]}}}`,
+	} {
+		full := filepath.Join(sys.Root, p)
+		_ = os.MkdirAll(filepath.Dir(full), 0o755)
+		_ = os.WriteFile(full, []byte(c), 0o644)
+	}
+	if _, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{PasswordAuth: ptr(false)}); err != nil {
+		t.Fatalf("с сертификатом: %v", err)
+	}
+	// Срок принципала вышел — снова отказ.
+	sys.Now = func() time.Time { return time.UnixMilli(1_800_000_700_000) }
+	if _, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{PasswordAuth: ptr(false)}); !errors.Is(err, ErrPrecondition) {
+		t.Fatalf("срок вышел: %v", err)
 	}
 }
