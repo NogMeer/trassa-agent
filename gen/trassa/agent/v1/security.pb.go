@@ -1627,6 +1627,53 @@ func (x *ServiceRestartParams) GetUnit() string {
 	return ""
 }
 
+// security.baseline.accept (CHANGE, rollback NONE): «Это сделал я» — объекты детектора с этими отпечатками
+// переходят в базовый список сервера и больше не дают событий. Пустой список отклоняется (R1). Отпечаток — из
+// атрибута fingerprint события security.suspicious.
+type SecurityBaselineAcceptParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Fingerprints  []string               `protobuf:"bytes,1,rep,name=fingerprints,proto3" json:"fingerprints,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SecurityBaselineAcceptParams) Reset() {
+	*x = SecurityBaselineAcceptParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SecurityBaselineAcceptParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SecurityBaselineAcceptParams) ProtoMessage() {}
+
+func (x *SecurityBaselineAcceptParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SecurityBaselineAcceptParams.ProtoReflect.Descriptor instead.
+func (*SecurityBaselineAcceptParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SecurityBaselineAcceptParams) GetFingerprints() []string {
+	if x != nil {
+		return x.Fingerprints
+	}
+	return nil
+}
+
 var File_trassa_agent_v1_security_proto protoreflect.FileDescriptor
 
 const file_trassa_agent_v1_security_proto_rawDesc = "" +
@@ -1722,7 +1769,9 @@ const file_trassa_agent_v1_security_proto_rawDesc = "" +
 	"\x12SystemRebootParams\x12#\n" +
 	"\rdelay_seconds\x18\x01 \x01(\rR\fdelaySeconds\"*\n" +
 	"\x14ServiceRestartParams\x12\x12\n" +
-	"\x04unit\x18\x01 \x01(\tR\x04unit*\x80\x01\n" +
+	"\x04unit\x18\x01 \x01(\tR\x04unit\"B\n" +
+	"\x1cSecurityBaselineAcceptParams\x12\"\n" +
+	"\ffingerprints\x18\x01 \x03(\tR\ffingerprints*\x80\x01\n" +
 	"\n" +
 	"CheckState\x12\x1b\n" +
 	"\x17CHECK_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
@@ -1768,39 +1817,40 @@ func file_trassa_agent_v1_security_proto_rawDescGZIP() []byte {
 }
 
 var file_trassa_agent_v1_security_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_trassa_agent_v1_security_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_trassa_agent_v1_security_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_trassa_agent_v1_security_proto_goTypes = []any{
-	(CheckState)(0),                   // 0: trassa.agent.v1.CheckState
-	(RootLogin)(0),                    // 1: trassa.agent.v1.RootLogin
-	(CryptoPreset)(0),                 // 2: trassa.agent.v1.CryptoPreset
-	(FirewallTarget)(0),               // 3: trassa.agent.v1.FirewallTarget
-	(FirewallPlanMode)(0),             // 4: trassa.agent.v1.FirewallPlanMode
-	(FirewallApplyMode)(0),            // 5: trassa.agent.v1.FirewallApplyMode
-	(UpgradeScope)(0),                 // 6: trassa.agent.v1.UpgradeScope
-	(*SecurityScanParams)(nil),        // 7: trassa.agent.v1.SecurityScanParams
-	(*CheckResult)(nil),               // 8: trassa.agent.v1.CheckResult
-	(*Listener)(nil),                  // 9: trassa.agent.v1.Listener
-	(*SshEffective)(nil),              // 10: trassa.agent.v1.SshEffective
-	(*FirewallState)(nil),             // 11: trassa.agent.v1.FirewallState
-	(*SecurityScanResult)(nil),        // 12: trassa.agent.v1.SecurityScanResult
-	(*PackagesListUpdatesParams)(nil), // 13: trassa.agent.v1.PackagesListUpdatesParams
-	(*PackageUpdate)(nil),             // 14: trassa.agent.v1.PackageUpdate
-	(*PackagesListUpdatesResult)(nil), // 15: trassa.agent.v1.PackagesListUpdatesResult
-	(*SecurityFixParams)(nil),         // 16: trassa.agent.v1.SecurityFixParams
-	(*SshHardenParams)(nil),           // 17: trassa.agent.v1.SshHardenParams
-	(*FirewallRule)(nil),              // 18: trassa.agent.v1.FirewallRule
-	(*FirewallRuleset)(nil),           // 19: trassa.agent.v1.FirewallRuleset
-	(*FirewallPlanParams)(nil),        // 20: trassa.agent.v1.FirewallPlanParams
-	(*FirewallPlanResult)(nil),        // 21: trassa.agent.v1.FirewallPlanResult
-	(*FirewallApplyParams)(nil),       // 22: trassa.agent.v1.FirewallApplyParams
-	(*PackagesUpgradeParams)(nil),     // 23: trassa.agent.v1.PackagesUpgradeParams
-	(*SystemRebootParams)(nil),        // 24: trassa.agent.v1.SystemRebootParams
-	(*ServiceRestartParams)(nil),      // 25: trassa.agent.v1.ServiceRestartParams
-	nil,                               // 26: trassa.agent.v1.SshEffective.SettingsEntry
+	(CheckState)(0),                      // 0: trassa.agent.v1.CheckState
+	(RootLogin)(0),                       // 1: trassa.agent.v1.RootLogin
+	(CryptoPreset)(0),                    // 2: trassa.agent.v1.CryptoPreset
+	(FirewallTarget)(0),                  // 3: trassa.agent.v1.FirewallTarget
+	(FirewallPlanMode)(0),                // 4: trassa.agent.v1.FirewallPlanMode
+	(FirewallApplyMode)(0),               // 5: trassa.agent.v1.FirewallApplyMode
+	(UpgradeScope)(0),                    // 6: trassa.agent.v1.UpgradeScope
+	(*SecurityScanParams)(nil),           // 7: trassa.agent.v1.SecurityScanParams
+	(*CheckResult)(nil),                  // 8: trassa.agent.v1.CheckResult
+	(*Listener)(nil),                     // 9: trassa.agent.v1.Listener
+	(*SshEffective)(nil),                 // 10: trassa.agent.v1.SshEffective
+	(*FirewallState)(nil),                // 11: trassa.agent.v1.FirewallState
+	(*SecurityScanResult)(nil),           // 12: trassa.agent.v1.SecurityScanResult
+	(*PackagesListUpdatesParams)(nil),    // 13: trassa.agent.v1.PackagesListUpdatesParams
+	(*PackageUpdate)(nil),                // 14: trassa.agent.v1.PackageUpdate
+	(*PackagesListUpdatesResult)(nil),    // 15: trassa.agent.v1.PackagesListUpdatesResult
+	(*SecurityFixParams)(nil),            // 16: trassa.agent.v1.SecurityFixParams
+	(*SshHardenParams)(nil),              // 17: trassa.agent.v1.SshHardenParams
+	(*FirewallRule)(nil),                 // 18: trassa.agent.v1.FirewallRule
+	(*FirewallRuleset)(nil),              // 19: trassa.agent.v1.FirewallRuleset
+	(*FirewallPlanParams)(nil),           // 20: trassa.agent.v1.FirewallPlanParams
+	(*FirewallPlanResult)(nil),           // 21: trassa.agent.v1.FirewallPlanResult
+	(*FirewallApplyParams)(nil),          // 22: trassa.agent.v1.FirewallApplyParams
+	(*PackagesUpgradeParams)(nil),        // 23: trassa.agent.v1.PackagesUpgradeParams
+	(*SystemRebootParams)(nil),           // 24: trassa.agent.v1.SystemRebootParams
+	(*ServiceRestartParams)(nil),         // 25: trassa.agent.v1.ServiceRestartParams
+	(*SecurityBaselineAcceptParams)(nil), // 26: trassa.agent.v1.SecurityBaselineAcceptParams
+	nil,                                  // 27: trassa.agent.v1.SshEffective.SettingsEntry
 }
 var file_trassa_agent_v1_security_proto_depIdxs = []int32{
 	0,  // 0: trassa.agent.v1.CheckResult.state:type_name -> trassa.agent.v1.CheckState
-	26, // 1: trassa.agent.v1.SshEffective.settings:type_name -> trassa.agent.v1.SshEffective.SettingsEntry
+	27, // 1: trassa.agent.v1.SshEffective.settings:type_name -> trassa.agent.v1.SshEffective.SettingsEntry
 	8,  // 2: trassa.agent.v1.SecurityScanResult.checks:type_name -> trassa.agent.v1.CheckResult
 	9,  // 3: trassa.agent.v1.SecurityScanResult.listeners:type_name -> trassa.agent.v1.Listener
 	11, // 4: trassa.agent.v1.SecurityScanResult.firewall:type_name -> trassa.agent.v1.FirewallState
@@ -1835,7 +1885,7 @@ func file_trassa_agent_v1_security_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_trassa_agent_v1_security_proto_rawDesc), len(file_trassa_agent_v1_security_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   20,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -163,6 +163,7 @@ message OperationParams {
     PackagesUpgradeParams packages_upgrade = 14;
     SystemRebootParams system_reboot = 15;
     ServiceRestartParams service_restart = 16;
+    SecurityBaselineAcceptParams security_baseline_accept = 17;
     NetCheckParams net_check = 18;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;

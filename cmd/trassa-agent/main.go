@@ -121,6 +121,7 @@ func run(ctx context.Context, log *slog.Logger) int {
 		return exitError
 	}
 	go logs.Run(ctx, hc, spool, logs.PollInterval, log)
+	go events.PollHelper(ctx, hc, equeue, 15*time.Second, log)
 	// Операции агента без прав (net.check): свои проверки 1–6 и своё окно nonce.
 	an, err := nonce.Open(p.AgentNonces, time.Now)
 	if err != nil {

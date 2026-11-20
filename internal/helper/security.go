@@ -271,6 +271,24 @@ func (e *Executor) applyServiceRestart(ctx context.Context, r *run) *agentv1.Ope
 	return r.succeeded(unit + " перезапущена и работает")
 }
 
+// CodeBaselineUnknown — отпечатка нет среди ожидающих объектов детектора.
+const CodeBaselineUnknown = "BASELINE_UNKNOWN"
+
+// applyBaselineAccept — «Это сделал я»: объекты переходят в базовый список, события по ним прекращаются.
+func (e *Executor) applyBaselineAccept(_ context.Context, r *run) *agentv1.OperationResult {
+	if e.Security == nil || e.Security.Detector == nil {
+		return r.failed(CodeSecurityUnavailable, "детектор на этой сборке не работает")
+	}
+	digest, err := e.Security.Detector.Accept(r.body.GetParams().GetSecurityBaselineAccept().GetFingerprints())
+	if errors.Is(err, security.ErrUnknownFingerprint) {
+		return r.failed(CodeBaselineUnknown, err.Error())
+	}
+	if err != nil {
+		return r.failed(CodeInternal, err.Error())
+	}
+	return r.succeeded("baseline_digest " + digest)
+}
+
 // applyListUpdates — packages.list_updates: кэш apt без сети.
 func (e *Executor) applyListUpdates(ctx context.Context, r *run) *agentv1.OperationResult {
 	if e.Security == nil {

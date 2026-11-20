@@ -161,3 +161,9 @@ func writeRequest(conn net.Conn, req Request) error {
 	}
 	return werr
 }
+
+// EventsPoll — события детектора (Event, protobuf), накопленные помощником с прошлого опроса.
+func (c *Client) EventsPoll(ctx context.Context) ([][]byte, error) {
+	r, err := c.call(ctx, Request{Method: MethodEventsPoll}, KindEvents)
+	return r.Events, err
+}

@@ -222,3 +222,12 @@ message SystemRebootParams {
 message ServiceRestartParams {
   string unit = 1;
 }
+
+// ---------- Блок C: детектор ----------
+
+// security.baseline.accept (CHANGE, rollback NONE): «Это сделал я» — объекты детектора с этими отпечатками
+// переходят в базовый список сервера и больше не дают событий. Пустой список отклоняется (R1). Отпечаток — из
+// атрибута fingerprint события security.suspicious.
+message SecurityBaselineAcceptParams {
+  repeated string fingerprints = 1;
+}

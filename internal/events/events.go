@@ -10,10 +10,14 @@
 package events
 
 import (
+	"context"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/queue"
@@ -158,3 +162,35 @@ func event(code, subject, state string, sev agentv1.EventSeverity, at int64, val
 }
 
 func pct(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "%" }
+
+// HelperPoller — события детектора помощника (helperrpc.Client.EventsPoll).
+type HelperPoller interface {
+	EventsPoll(ctx context.Context) ([][]byte, error)
+}
+
+// PollHelper забирает события детектора (E10-T7) раз в every и кладёт в очередь отправки с квитанцией шлюза.
+// Ошибка опроса пишется в журнал один раз, пока не пройдёт.
+func PollHelper(ctx context.Context, h HelperPoller, q *queue.Queue[*agentv1.Event], every time.Duration, log *slog.Logger) {
+	failing := ""
+	for {
+		raw, err := h.EventsPoll(ctx)
+		switch {
+		case err != nil && err.Error() != failing:
+			log.Warn("события детектора: опрос помощника", "err", err)
+			failing = err.Error()
+		case err == nil:
+			failing = ""
+			for _, b := range raw {
+				var e agentv1.Event
+				if proto.Unmarshal(b, &e) == nil {
+					q.Add(&e)
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(every):
+		}
+	}
+}

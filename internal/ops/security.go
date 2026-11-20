@@ -19,6 +19,7 @@ const (
 	TypePackagesUpgrade     = "packages.upgrade"
 	TypeSystemReboot        = "system.reboot"
 	TypeServiceRestart      = "service.restart"
+	TypeBaselineAccept      = "security.baseline.accept"
 )
 
 // FixPrefix — тип исправления: security.fix.<код проверки>.
@@ -43,6 +44,14 @@ func securitySpecs() []Spec {
 		})
 	}
 	return append(fixes, []Spec{
+		{
+			// Меняет только базовый список помощника, не систему.
+			Type: TypeBaselineAccept, Class: Change, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+			match: func(p *agentv1.OperationParams) bool { return p.GetSecurityBaselineAccept() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				return security.ValidateAccept(b.GetParams().GetSecurityBaselineAccept())
+			},
+		},
 		{
 			// Откат обновления — снапшот (E12) или согласие человека; точки CONFIG нет.
 			Type: TypePackagesUpgrade, Class: Change, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,

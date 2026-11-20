@@ -20,13 +20,14 @@ const MaxFrame = 4 << 20
 
 // Методы.
 const (
-	MethodHello    = "hello"     // версия и список типов помощника
-	MethodExecute  = "execute"   // выполнить SignedOperation
-	MethodConfirm  = "confirm"   // SignedConfirm: снять автооткат
-	MethodReports  = "reports"   // итоги, ещё не подтверждённые шлюзом
-	MethodReported = "reported"  // шлюз подтвердил приём итога operation_id
-	MethodRunning  = "running"   // операции, которые выполняются сейчас
-	MethodLogsPoll = "logs.poll" // новые записи журналов по действующей подписке (E08-T15)
+	MethodHello      = "hello"       // версия и список типов помощника
+	MethodExecute    = "execute"     // выполнить SignedOperation
+	MethodConfirm    = "confirm"     // SignedConfirm: снять автооткат
+	MethodReports    = "reports"     // итоги, ещё не подтверждённые шлюзом
+	MethodReported   = "reported"    // шлюз подтвердил приём итога operation_id
+	MethodRunning    = "running"     // операции, которые выполняются сейчас
+	MethodLogsPoll   = "logs.poll"   // новые записи журналов по действующей подписке (E08-T15)
+	MethodEventsPoll = "events.poll" // события детектора (E10-T7)
 )
 
 // Виды ответных кадров.
@@ -38,6 +39,7 @@ const (
 	KindReports  = "reports"
 	KindRunning  = "running"
 	KindLogs     = "logs"
+	KindEvents   = "events"
 	KindOK       = "ok"
 	KindError    = "error"
 )
@@ -73,6 +75,8 @@ type Response struct {
 	Records      [][]byte          `json:"records,omitempty"`
 	Positions    map[string]string `json:"positions,omitempty"`
 	More         bool              `json:"more,omitempty"`
+	// events.poll: события Event (protobuf).
+	Events [][]byte `json:"events,omitempty"`
 }
 
 // ErrFrameTooLarge — кадр больше MaxFrame.

@@ -183,6 +183,16 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})
 	case helperrpc.MethodLogsPoll:
 		e.pollLogs(ctx, req, send)
+	case helperrpc.MethodEventsPoll:
+		var raw [][]byte
+		if e.Security != nil && e.Security.Detector != nil {
+			for _, ev := range e.Security.Detector.Drain() {
+				if b, err := proto.Marshal(ev); err == nil {
+					raw = append(raw, b)
+				}
+			}
+		}
+		_ = send(helperrpc.Response{Kind: helperrpc.KindEvents, Events: raw})
 	case helperrpc.MethodRunning:
 		_ = send(helperrpc.Response{Kind: helperrpc.KindRunning, Running: e.Running()})
 	default:

@@ -184,6 +184,16 @@ done
 ! x dpkg -s fail2ban >/dev/null 2>&1 || fail "fail2ban остался после возврата"
 x test ! -e /etc/sysctl.d/90-trassa-security.conf || fail "файл параметров Trassa остался"
 
+# Детектор (E10-T7): новая учётная запись — событие security.suspicious COMPROMISE_NEW_USER с отпечатком.
+x useradd --system --no-create-home --shell /usr/sbin/nologin ci-intruder
+for _ in $(seq 1 180); do
+	x sh -c "grep -F '\"code\":\"COMPROMISE_NEW_USER\"' $STUB/events.jsonl 2>/dev/null | grep -qF ci-intruder" && break
+	sleep 1
+done
+x sh -c "grep -F '\"code\":\"COMPROMISE_NEW_USER\"' $STUB/events.jsonl | grep -F ci-intruder | grep -qF '\"fingerprint\":'" ||
+	fail "детектор не сообщил о новом пользователе: $(x cat $STUB/events.jsonl 2>&1 | tail -5)"
+echo "детектор: новый пользователь замечен"
+
 # События (E08-T12): упавшая служба даёт service.down за 30 с, сброс — resolved.
 x systemd-run --quiet --unit=ci-broken --property=Type=oneshot /bin/false || true
 event_seen() {
@@ -216,7 +226,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" --slurpfile scan "$ctx/security.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "firewall", "service.restart", "packages.upgrade", "net.check", "events", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "firewall", "service.restart", "packages.upgrade", "net.check", "detector", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
 	  security: $scan[0].security_scan.checks,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"

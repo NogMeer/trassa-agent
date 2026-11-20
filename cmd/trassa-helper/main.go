@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -133,6 +134,8 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 	}
 	host := sysinfo.Real()
 	inv := &sysinfo.Inventory{Host: host, Units: sdunits.List}
+	sec := security.Real()
+	sec.Detector = &security.Detector{Sys: sec, Path: filepath.Join(p.HelperDir, "baseline.json"), Log: log}
 	ex := &helper.Executor{
 		Checker:  &helper.Checker{Keys: keys, ServerID: en.ServerID, Catalog: ops.Builtin(), Nonces: n},
 		States:   helper.States{Dir: p.OpsDir},
@@ -148,7 +151,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		Updater:  &updater,
 		Paths:    p,
 		Logs:     logsrc.New(),
-		Security: security.Real(),
+		Security: sec,
 	}
 	if err := ex.CheckHandlers(); err != nil {
 		n.Close()
@@ -197,6 +200,10 @@ func serve(ctx context.Context, log *slog.Logger) error {
 	l, err := helperrpc.Listen(p.Socket, gid)
 	if err != nil {
 		return err
+	}
+	// Детектор (E10-T7) наблюдает, пока работает помощник.
+	if ex.Security != nil && ex.Security.Detector != nil {
+		go ex.Security.Detector.Run(ctx)
 	}
 	log.Info("помощник слушает", "socket", p.Socket, "types", ex.Checker.Catalog.Types(), "version", config.Version)
 	return (&helperrpc.Server{AllowedUID: uid, Handler: ex, Log: log}).Serve(ctx, l)

@@ -39,6 +39,8 @@ type System struct {
 	Now       func() time.Time
 	// Adjtimex — maxerror часов ядра в микросекундах (adjtimex, modes=0).
 	Adjtimex func() (int64, error)
+	// Detector — наблюдение (E10-T7): ожидающие объекты для проверок COMPROMISE_* и базовый список для снимка.
+	Detector *Detector
 	// RootUID — uid владельца системных файлов: 0, в тестах — uid того, кто запускает тест.
 	RootUID int
 }
