@@ -49,6 +49,8 @@ func (e *Executor) builtinHandlers() map[string]handler {
 		ops.TypePackagesListUpdates: {apply: e.applyListUpdates},
 	}
 	h[ops.TypeSSHHarden] = handler{preview: e.previewSSH, apply: e.applySSH}
+	h[ops.TypeFirewallPlan] = handler{apply: e.applyFirewallPlan}
+	h[ops.TypeFirewallApply] = handler{preview: e.previewFirewallApply, apply: e.applyFirewallApply}
 	for _, code := range security.FixCodes() {
 		h[ops.FixPrefix+code] = handler{preview: e.previewFix, apply: e.applyFix}
 	}

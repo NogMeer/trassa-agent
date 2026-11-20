@@ -60,7 +60,12 @@ const (
 	// hardenOperation и hardenRevert — ssh.harden и его возврат.
 	hardenOperation = "01a1f4b6-f2f2-7e66-85b4-000000000300"
 	hardenRevert    = "01a1f4b6-f2f2-7e66-85b4-000000000301"
-	panelKeyID      = "stub"
+	// fwLockPlan, fwPlan, fwApply, fwRevert — firewall.plan (запирающий и рабочий), firewall.apply и возврат.
+	fwLockPlan = "01a1f4b6-f2f2-7e66-85b4-000000000400"
+	fwPlan     = "01a1f4b6-f2f2-7e66-85b4-000000000401"
+	fwApply    = "01a1f4b6-f2f2-7e66-85b4-000000000402"
+	fwRevert   = "01a1f4b6-f2f2-7e66-85b4-000000000403"
+	panelKeyID = "stub"
 )
 
 type panel struct {
@@ -473,6 +478,49 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			}
 		case m.GetOperationResult().GetOperationId() == hardenRevert:
 			p.writeJSON("ssh-revert.json", m.GetOperationResult())
+			// firewall (E10-T15/T16): план без порта SSH запирает — отказ; план с SSH, применение, подтверждение, возврат.
+			lock := &agentv1.FirewallRuleset{SshPort: 22, Rules: []*agentv1.FirewallRule{
+				{Target: agentv1.FirewallTarget_FIREWALL_TARGET_HOST, Protocol: "tcp", Port: 80}}}
+			for _, op := range []*agentv1.SignedOperation{
+				p.sign(fwLockPlan, "firewall.plan", &agentv1.OperationParams{Params: &agentv1.OperationParams_FirewallPlan{FirewallPlan: &agentv1.FirewallPlanParams{
+					Mode: agentv1.FirewallPlanMode_FIREWALL_PLAN_MODE_DIFF, Ruleset: lock}}}),
+				p.sign(fwPlan, "firewall.plan", &agentv1.OperationParams{Params: &agentv1.OperationParams_FirewallPlan{FirewallPlan: &agentv1.FirewallPlanParams{
+					Mode: agentv1.FirewallPlanMode_FIREWALL_PLAN_MODE_DIFF, Ruleset: ciRuleset()}}}),
+			} {
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
+					return
+				}
+			}
+		case m.GetOperationResult().GetOperationId() == fwLockPlan:
+			p.writeJSON("fw-lock.json", m.GetOperationResult())
+		case m.GetOperationResult().GetOperationId() == fwPlan:
+			r := m.GetOperationResult()
+			p.writeJSON("fw-plan.json", r)
+			if r.GetOutcome() == agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED {
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: p.signFirewallApply(r.GetFirewallPlan().GetRulesetHash())}}); err != nil {
+					return
+				}
+			}
+		case m.GetOperationResult().GetOperationId() == fwApply:
+			r := m.GetOperationResult()
+			switch r.GetOutcome() {
+			case agentv1.OperationOutcome_OPERATION_OUTCOME_AWAITING_CONFIRM:
+				p.writeJSON("fw-await.json", r)
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Confirm{Confirm: p.confirm(fwApply)}}); err != nil {
+					return
+				}
+			case agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED:
+				p.writeJSON("fw-apply.json", r)
+				op := p.signRollback(fwRevert, "rollback.restore", &agentv1.OperationParams{Params: &agentv1.OperationParams_RollbackRestore{
+					RollbackRestore: &agentv1.RollbackRestoreParams{TargetOperationId: fwApply}}})
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
+					return
+				}
+			default:
+				p.writeJSON("fw-apply.json", r)
+			}
+		case m.GetOperationResult().GetOperationId() == fwRevert:
+			p.writeJSON("fw-revert.json", m.GetOperationResult())
 		case p.isFix(m.GetOperationResult().GetOperationId()):
 			r := m.GetOperationResult()
 			fx := p.takeFix(r.GetOperationId())
@@ -666,4 +714,27 @@ func (p *panel) confirm(op string) *agentv1.SignedConfirm {
 	_, _ = rand.Read(n)
 	body, _ := proto.Marshal(&agentv1.ConfirmBody{OperationId: op, ServerId: serverID, Nonce: n, NotAfterMs: time.Now().Add(time.Minute).UnixMilli()})
 	return &agentv1.SignedConfirm{Body: body, KeyId: panelKeyID, Signature: ed25519.Sign(p.panel, verify.Input(verify.ContextConfirm, body))}
+}
+
+// ciRuleset — SSH и веб; канал заглушки идёт по lo и фильтром не затрагивается.
+func ciRuleset() *agentv1.FirewallRuleset {
+	return &agentv1.FirewallRuleset{SshPort: 22, Rules: []*agentv1.FirewallRule{
+		{Target: agentv1.FirewallTarget_FIREWALL_TARGET_HOST, Protocol: "tcp", Port: 22, Comment: "SSH"},
+		{Target: agentv1.FirewallTarget_FIREWALL_TARGET_BOTH, Protocol: "tcp", Port: 443},
+		{Target: agentv1.FirewallTarget_FIREWALL_TARGET_CONTAINERS, Protocol: "tcp", Port: 8080, Sources: []string{"203.0.113.0/24"}},
+	}}
+}
+
+func (p *panel) signFirewallApply(hash string) *agentv1.SignedOperation {
+	now := time.Now()
+	n := make([]byte, 16)
+	_, _ = rand.Read(n)
+	body, _ := proto.Marshal(&agentv1.OperationBody{
+		OperationId: fwApply, ServerId: serverID, Type: "firewall.apply", Nonce: n,
+		Params: &agentv1.OperationParams{Params: &agentv1.OperationParams_FirewallApply{FirewallApply: &agentv1.FirewallApplyParams{
+			Ruleset: ciRuleset(), RulesetHash: hash, Mode: agentv1.FirewallApplyMode_FIREWALL_APPLY_MODE_APPLY}}},
+		NotAfterMs: now.Add(5 * time.Minute).UnixMilli(), IssuedAtMs: now.UnixMilli(),
+		Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG, ConfirmWithinSec: 120,
+	})
+	return &agentv1.SignedOperation{Body: body, KeyId: panelKeyID, Signature: ed25519.Sign(p.panel, verify.Input(verify.ContextOperation, body))}
 }

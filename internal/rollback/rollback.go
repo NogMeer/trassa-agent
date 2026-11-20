@@ -107,6 +107,9 @@ type State struct {
 	Packages []string `json:"packages,omitempty"`
 	// DaemonReload — после возврата файлов перечитать юниты (генераторы, например sshd-socket-generator).
 	DaemonReload bool `json:"daemon_reload,omitempty"`
+	// NftFile — набор nftables Trassa: после возврата файлов загрузить его (`nft -f`), а если файла не стало —
+	// снять таблицу inet trassa. Загруженные правила так совпадают с файлом.
+	NftFile string `json:"nft_file,omitempty"`
 }
 
 // UnitState — служба до операции.
@@ -118,7 +121,7 @@ type UnitState struct {
 
 // Empty — откат не трогает ничего, кроме файлов.
 func (s State) Empty() bool {
-	return len(s.Sysctl) == 0 && len(s.Units) == 0 && len(s.Packages) == 0 && !s.DaemonReload
+	return len(s.Sysctl) == 0 && len(s.Units) == 0 && len(s.Packages) == 0 && !s.DaemonReload && s.NftFile == ""
 }
 
 // Store — каталог точек.
@@ -320,6 +323,17 @@ func (s *Store) Restore(op string) (*Manifest, error) {
 		}
 	}
 	errs = append(errs, s.restoreSysctl(m.State.Sysctl)...)
+	if f := m.State.NftFile; f != "" {
+		if _, err := os.Stat(f); err == nil {
+			if err := s.Exec("nft", "-f", f); err != nil {
+				errs = append(errs, fmt.Errorf("nft -f %s: %w", f, err))
+			}
+		} else if s.Exec("nft", "list", "table", "inet", "trassa") == nil {
+			if err := s.Exec("nft", "delete", "table", "inet", "trassa"); err != nil {
+				errs = append(errs, fmt.Errorf("nft delete table inet trassa: %w", err))
+			}
+		}
+	}
 	if len(errs) > 0 {
 		return m, fmt.Errorf("%w: %v", ErrFailed, errors.Join(errs...))
 	}

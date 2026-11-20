@@ -135,7 +135,7 @@ func TestCheck4Replay(t *testing.T) {
 // Строка 5: тип из зашитого списка.
 func TestCheck5Type(t *testing.T) {
 	f := newFixture(t)
-	for _, typ := range []string{"exec.run", "", "SYSTEM.INFO", "system.info ", "firewall.apply"} {
+	for _, typ := range []string{"exec.run", "", "SYSTEM.INFO", "system.info ", "firewall.disable"} {
 		expectReject(t, f, sealed(f.body(typ, infoParams())), ops.CodeTypeUnknown)
 	}
 	if !ops.TestOps {
@@ -263,7 +263,7 @@ func TestCatalogNotConfigurable(t *testing.T) {
 			t.Fatalf("поле записи о регистрации %s", et.Field(i).Name)
 		}
 	}
-	want := []string{"agent.uninstall", "agent.update", "logs.read", "logs.subscribe", "packages.list_updates", "rollback.restore",
+	want := []string{"agent.uninstall", "agent.update", "firewall.apply", "firewall.plan", "logs.read", "logs.subscribe", "packages.list_updates", "rollback.restore",
 		"security.fix.BRUTEFORCE_NO_PROTECTION", "security.fix.KERNEL_ASLR_OFF", "security.fix.PERM_CRON", "security.fix.PERM_SYSTEM_FILES",
 		"security.fix.PERM_USER_SSH_DIR", "security.fix.PERM_WORLD_WRITABLE", "security.fix.SSH_CONFIG_PERMS", "security.fix.SYSCTL_NETWORK",
 		"security.fix.TIME_SYNC_OFF", "security.fix.UPDATES_AUTO_DISABLED", "security.fix.USER_EMPTY_PASSWORD", "security.fix.USER_SERVICE_SHELL",

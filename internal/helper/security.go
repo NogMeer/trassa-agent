@@ -111,6 +111,70 @@ func (e *Executor) applySSH(ctx context.Context, r *run) *agentv1.OperationResul
 	})
 }
 
+// Коды итога firewall.
+const (
+	CodeFirewallWouldLockSSH = "FIREWALL_WOULD_LOCK_SSH"
+	CodeFirewallHashMismatch = "FIREWALL_HASH_MISMATCH"
+	CodeFirewallPlanFailed   = "FIREWALL_PLAN_FAILED"
+)
+
+func firewallFail(r *run, err error) *agentv1.OperationResult {
+	switch {
+	case errors.Is(err, security.ErrWouldLockSSH):
+		return r.failed(CodeFirewallWouldLockSSH, err.Error())
+	case errors.Is(err, security.ErrRulesetHash):
+		return r.failed(CodeFirewallHashMismatch, err.Error())
+	case errors.Is(err, security.ErrPrecondition):
+		return r.failed(CodeFixPrecondition, err.Error())
+	}
+	return r.failed(CodeFirewallPlanFailed, err.Error())
+}
+
+func (e *Executor) applyFirewallPlan(ctx context.Context, r *run) *agentv1.OperationResult {
+	if e.Security == nil {
+		return r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	out, err := security.FirewallPlan(ctx, e.Security, r.body.GetParams().GetFirewallPlan())
+	if err != nil {
+		return firewallFail(r, err)
+	}
+	res := r.succeeded("")
+	res.Data = &agentv1.OperationResult_FirewallPlan{FirewallPlan: out}
+	return res
+}
+
+func (e *Executor) planFirewallApply(ctx context.Context, r *run) (*security.FixPlan, *agentv1.OperationResult) {
+	if e.Security == nil {
+		return nil, r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	p, err := security.PlanFirewallApply(ctx, e.Security, r.body.GetParams().GetFirewallApply())
+	if err != nil {
+		return nil, firewallFail(r, err)
+	}
+	return p, nil
+}
+
+func (e *Executor) previewFirewallApply(ctx context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult) {
+	p, fail := e.planFirewallApply(ctx, r)
+	if fail != nil {
+		return nil, fail
+	}
+	return &agentv1.Preview{Summary: p.Summary, Files: p.Changes, Notes: p.Notes}, nil
+}
+
+// applyFirewallApply — firewall.apply с автооткатом (R14): таймер заводится до применения.
+func (e *Executor) applyFirewallApply(ctx context.Context, r *run) *agentv1.OperationResult {
+	p, fail := e.planFirewallApply(ctx, r)
+	if fail != nil {
+		return fail
+	}
+	return e.runConfigChange(ctx, r, configChange{
+		paths: p.Paths, services: p.Services, state: p.State,
+		apply:  func() error { return p.Apply(ctx) },
+		verify: func() error { return p.Verify(ctx) },
+	})
+}
+
 // applyListUpdates — packages.list_updates: кэш apt без сети.
 func (e *Executor) applyListUpdates(ctx context.Context, r *run) *agentv1.OperationResult {
 	if e.Security == nil {

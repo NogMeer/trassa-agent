@@ -55,6 +55,11 @@ func readFirewall(ctx context.Context, s *Scan) (*firewall, error) {
 		fw.ruleset = string(out)
 		fw.inputFiltered = nftInputFiltered(fw.ruleset)
 		fw.state.TrassaTable = strings.Contains(fw.ruleset, "table "+TrassaTable+" {")
+		if _, rest, ok := strings.Cut(fw.ruleset, `comment "trassa:`); ok && fw.state.TrassaTable {
+			if h, _, ok := strings.Cut(rest, `"`); ok && len(h) == 64 {
+				fw.state.TrassaRulesetHash = h
+			}
+		}
 	}
 	// iptables-legacy живёт мимо nftables: его правила nft не видит.
 	if out, err := s.sys.run(ctx, "iptables-legacy", "-S", "INPUT"); err == nil && iptablesFiltered(string(out)) {

@@ -1,0 +1,49 @@
+[
+  {
+    "ruleset": {
+      "sshPort": 22,
+      "rules": [
+        {
+          "target": "FIREWALL_TARGET_HOST",
+          "protocol": "tcp",
+          "port": 22
+        }
+      ]
+    },
+    "canonical": "{\"rules\":[{\"port\":22,\"protocol\":\"tcp\",\"target\":\"FIREWALL_TARGET_HOST\"}],\"sshPort\":22}",
+    "sha256": "4ddc22b51590513caa609cff8584ce3b9f9a3110fa96a3cc4e7fd6dee6d76d16"
+  },
+  {
+    "ruleset": {
+      "sshPort": 2222,
+      "rules": [
+        {
+          "target": "FIREWALL_TARGET_HOST",
+          "protocol": "tcp",
+          "port": 2222,
+          "sources": [
+            "203.0.113.0/24"
+          ]
+        },
+        {
+          "target": "FIREWALL_TARGET_BOTH",
+          "protocol": "tcp",
+          "port": 443,
+          "comment": "веб \"https\""
+        },
+        {
+          "target": "FIREWALL_TARGET_CONTAINERS",
+          "protocol": "udp",
+          "port": 3000,
+          "portTo": 3010,
+          "sources": [
+            "10.0.0.0/8",
+            "2001:db8::/32"
+          ]
+        }
+      ]
+    },
+    "canonical": "{\"rules\":[{\"port\":2222,\"protocol\":\"tcp\",\"sources\":[\"203.0.113.0/24\"],\"target\":\"FIREWALL_TARGET_HOST\"},{\"comment\":\"веб \\\"https\\\"\",\"port\":443,\"protocol\":\"tcp\",\"target\":\"FIREWALL_TARGET_BOTH\"},{\"port\":3000,\"portTo\":3010,\"protocol\":\"udp\",\"sources\":[\"10.0.0.0/8\",\"2001:db8::/32\"],\"target\":\"FIREWALL_TARGET_CONTAINERS\"}],\"sshPort\":2222}",
+    "sha256": "b172445bd3c0a0bde853239fef2c0cfb56599edd43bb1e5c3f4dc7e0bd4c79bd"
+  }
+]

@@ -19,6 +19,10 @@ import (
 // Units — службы Trassa.
 var Units = []string{"trassa-agent.service", "trassa-helper.service"}
 
+// FirewallUnit — служба набора межсетевого экрана Trassa (E10): есть, только если firewall.apply применялся.
+// Удаляется вместе с агентом: её ExecStop снимает таблицу inet trassa, иначе правила остались бы без хозяина.
+const FirewallUnit = "trassa-firewall.service"
+
 // Steps — что будет удалено.
 type Steps struct {
 	Units         []string
@@ -29,8 +33,11 @@ type Steps struct {
 
 // Plan — список для предпросмотра и для Run.
 func Plan(p config.Paths, purgeRollback bool) Steps {
-	s := Steps{Units: Units, User: config.UserName, PurgeRollback: purgeRollback}
-	for _, u := range Units {
+	s := Steps{Units: append([]string{}, Units...), User: config.UserName, PurgeRollback: purgeRollback}
+	if _, err := os.Stat(filepath.Join(p.UnitDir, FirewallUnit)); err == nil {
+		s.Units = append(s.Units, FirewallUnit)
+	}
+	for _, u := range s.Units {
 		s.Paths = append(s.Paths, filepath.Join(p.UnitDir, u))
 	}
 	s.Paths = append(s.Paths,

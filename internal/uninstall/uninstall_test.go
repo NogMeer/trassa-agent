@@ -76,3 +76,21 @@ func TestRunKeepsRollback(t *testing.T) {
 		}
 	}
 }
+
+// Служба firewall Trassa удаляется вместе с агентом (её ExecStop снимает таблицу inet trassa).
+func TestPlanFirewallUnit(t *testing.T) {
+	p := config.Under(t.TempDir())
+	if s := Plan(p, false); len(s.Units) != 2 {
+		t.Fatalf("без firewall: %v", s.Units)
+	}
+	if err := os.MkdirAll(p.UnitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p.UnitDir, FirewallUnit), []byte("[Unit]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := Plan(p, false)
+	if len(s.Units) != 3 || s.Units[2] != FirewallUnit || s.Paths[2] != filepath.Join(p.UnitDir, FirewallUnit) {
+		t.Fatalf("%v %v", s.Units, s.Paths)
+	}
+}

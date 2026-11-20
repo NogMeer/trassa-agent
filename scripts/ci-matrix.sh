@@ -28,7 +28,7 @@ trap 'podman rm -f "$NAME" >/dev/null 2>&1 || true; rm -rf "$ctx"' EXIT
 cat >"$ctx/Containerfile" <<EOF
 FROM docker.io/library/$IMAGE
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    systemd systemd-sysv dbus ca-certificates curl openssl openssh-server && rm -rf /var/lib/apt/lists/*
+    systemd systemd-sysv dbus ca-certificates curl openssl openssh-server nftables && rm -rf /var/lib/apt/lists/*
 CMD ["/sbin/init"]
 EOF
 podman build -q -t trassa-matrix-os "$ctx" >/dev/null
@@ -140,6 +140,22 @@ x test ! -e /etc/ssh/sshd_config.d/00-trassa.conf || fail "файл Trassa дл�
 x sh -c 'sshd -T | grep -qx "maxauthtries 6"' || fail "maxauthtries не вернулся: $(x sh -c 'sshd -T | grep maxauthtries')"
 echo "ssh.harden: применено, подтверждено и возвращено"
 
+# firewall (E10-T15/T16): запирающий набор отклонён; рабочий проверен nft -c, применён, подтверждён, возвращён.
+for _ in $(seq 1 120); do x test -s "$STUB/fw-revert.json" && break; x test -s "$STUB/fw-apply.json" && ! x test -s "$STUB/fw-await.json" && break; sleep 1; done
+for f in fw-lock fw-plan fw-apply fw-revert; do
+	podman cp "$NAME:$STUB/$f.json" "$ctx/$f.json" 2>/dev/null || fail "нет итога $f"
+done
+jq -e '.error_code == "FIREWALL_WOULD_LOCK_SSH"' "$ctx/fw-lock.json" >/dev/null || fail "запирающий набор: $(cat "$ctx/fw-lock.json")"
+jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED" and (.firewall_plan.ruleset_hash | length) == 64' "$ctx/fw-plan.json" >/dev/null ||
+	fail "firewall.plan: $(cat "$ctx/fw-plan.json")"
+jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/fw-apply.json" >/dev/null || fail "firewall.apply: $(cat "$ctx/fw-apply.json")"
+x test -s "$STUB/fw-await.json" || fail "firewall.apply прошёл без ожидания подтверждения"
+jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/fw-revert.json" >/dev/null || fail "возврат firewall: $(cat "$ctx/fw-revert.json")"
+! x nft list table inet trassa >/dev/null 2>&1 || fail "таблица inet trassa осталась после возврата"
+x test ! -e /etc/trassa/firewall.nft -a ! -e /etc/systemd/system/trassa-firewall.service || fail "файлы firewall Trassa остались"
+x systemctl is-active --quiet trassa-agent.service || fail "агент упал после firewall"
+echo "firewall: план, отказ запирающему набору, применение, подтверждение и возврат"
+
 # Исправления E10-T10: применить с проверкой и вернуть rollback.restore — система как до исправления.
 for code in PERM_WORLD_WRITABLE SYSCTL_NETWORK BRUTEFORCE_NO_PROTECTION; do
 	for _ in $(seq 1 240); do x test -s "$STUB/revert-$code.json" && break; sleep 1; done
@@ -187,7 +203,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" --slurpfile scan "$ctx/security.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "events", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "ssh.harden", "firewall", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
 	  security: $scan[0].security_scan.checks,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"

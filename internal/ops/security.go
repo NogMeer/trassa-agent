@@ -14,6 +14,8 @@ const (
 	TypeSecurityScan        = "security.scan"
 	TypePackagesListUpdates = "packages.list_updates"
 	TypeSSHHarden           = "ssh.harden"
+	TypeFirewallPlan        = "firewall.plan"
+	TypeFirewallApply       = "firewall.apply"
 )
 
 // FixPrefix — тип исправления: security.fix.<код проверки>.
@@ -38,6 +40,40 @@ func securitySpecs() []Spec {
 		})
 	}
 	return append(fixes, []Spec{
+		{
+			Type: TypeFirewallPlan, Class: Read, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+			match: func(p *agentv1.OperationParams) bool { return p.GetFirewallPlan() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				p := b.GetParams().GetFirewallPlan()
+				switch p.GetMode() {
+				case agentv1.FirewallPlanMode_FIREWALL_PLAN_MODE_IMPORT:
+					return nil
+				case agentv1.FirewallPlanMode_FIREWALL_PLAN_MODE_DIFF:
+					return security.ValidateRuleset(p.GetRuleset())
+				}
+				return errors.New("mode")
+			},
+		},
+		{
+			Type: TypeFirewallApply, Class: Destructive, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG, AutoRollback: true,
+			match: func(p *agentv1.OperationParams) bool { return p.GetFirewallApply() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				if b.GetConfirmWithinSec() == 0 {
+					return errors.New("confirm_within_sec обязателен")
+				}
+				p := b.GetParams().GetFirewallApply()
+				switch p.GetMode() {
+				case agentv1.FirewallApplyMode_FIREWALL_APPLY_MODE_REMOVE:
+					return nil
+				case agentv1.FirewallApplyMode_FIREWALL_APPLY_MODE_APPLY:
+					if len(p.GetRulesetHash()) != 64 {
+						return errors.New("ruleset_hash")
+					}
+					return security.ValidateRuleset(p.GetRuleset())
+				}
+				return errors.New("mode")
+			},
+		},
 		{
 			Type: TypeSSHHarden, Class: Destructive, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG, AutoRollback: true,
 			match: func(p *agentv1.OperationParams) bool { return p.GetSshHarden() != nil },
