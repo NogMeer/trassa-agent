@@ -33,10 +33,18 @@ CMD ["/sbin/init"]
 EOF
 podman build -q -t trassa-matrix-os "$ctx" >/dev/null
 podman run -d --systemd=always --privileged --name "$NAME" -v "$PWD:/src:ro" trassa-matrix-os >/dev/null
-state=$(x systemctl is-system-running --wait 2>/dev/null || true)
+# Сразу после старта шины systemd ещё нет и is-system-running отвечает пустотой — ждём до 60 с.
+state=""
+for _ in $(seq 1 60); do
+	state=$(x systemctl is-system-running --wait 2>/dev/null || true)
+	case "$state" in
+	running | degraded) break ;;
+	esac
+	sleep 1
+done
 case "$state" in
 running | degraded) ;;
-*) fail "systemd в контейнере не поднялся: $state" ;;
+*) fail "systemd в контейнере не поднялся за 60 с: $state" ;;
 esac
 osid=$(x sh -c '. /etc/os-release; echo "$ID $VERSION_ID"')
 echo "== $osid, $(x uname -m)"
@@ -92,7 +100,9 @@ x systemctl is-active --quiet trassa-agent.service || fail "служба аге�
 
 # 4. Удаление: ни файлов, ни служб, ни пользователя.
 x /usr/local/bin/trassa-agent uninstall --purge-rollback --yes
-left=$(x sh -c "find /etc /usr/local/bin /var/lib /run /usr/lib/systemd -name '*trassa*' 2>/dev/null" || true)
+# /run/systemd/propagate/<служба> — служебный каталог самого systemd (249 в Ubuntu 22.04 не убирает его после
+# остановки службы с песочницей); это tmpfs systemd, не файл Trassa.
+left=$(x sh -c "find /etc /usr/local/bin /var/lib /run /usr/lib/systemd -name '*trassa*' ! -path '/run/systemd/propagate/*' 2>/dev/null" || true)
 [ -z "$left" ] || fail "после удаления осталось: $left"
 ! x id trassa >/dev/null 2>&1 || fail "пользователь trassa остался"
 
