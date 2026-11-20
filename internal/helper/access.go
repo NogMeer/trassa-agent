@@ -170,8 +170,14 @@ func (e *Executor) applyTerminate(ctx context.Context, r *run) *agentv1.Operatio
 		}
 		out.Terminated, out.NotFound = done, missing
 	}
-	// Терминалов через помощник в этой версии нет: их идентификаторы не найдены.
-	out.NotFound = append(out.NotFound, p.GetSessionIds()...)
+	// Терминалы через помощник: отзыв закрывает их (служба и сеанс logind со всеми процессами).
+	for _, sid := range p.GetSessionIds() {
+		if e.TerminalClose(sid, agentv1.TerminalEndReason_TERMINAL_END_REASON_REVOKED) {
+			out.Terminated = append(out.Terminated, sid)
+		} else {
+			out.NotFound = append(out.NotFound, sid)
+		}
+	}
 	res := r.succeeded(fmt.Sprintf("Закрыто сеансов: %d", len(out.GetTerminated())))
 	res.Data = &agentv1.OperationResult_AccessSessionsTerminate{AccessSessionsTerminate: out}
 	return res
@@ -211,4 +217,14 @@ func (e *Executor) applyAccessState(ctx context.Context, r *run) *agentv1.Operat
 	res := r.succeeded("")
 	res.Data = &agentv1.OperationResult_AccessState{AccessState: out}
 	return res
+}
+
+// ExpireRescue — часовая задача: кончившаяся выдача trassa-rescue снимает его принципал и sudo.
+func (e *Executor) ExpireRescue(ctx context.Context) {
+	if e.Access == nil {
+		return
+	}
+	if err := e.Access.ExpireRescue(ctx, e.now()); err != nil {
+		e.log().Warn("helper: снятие истёкшей выдачи trassa-rescue", "err", err)
+	}
 }

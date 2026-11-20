@@ -39,6 +39,9 @@ type TerminalUnits interface {
 	Active(ctx context.Context, sessionID string) (bool, error)
 	Stop(ctx context.Context, sessionID string) error
 	StopAll(ctx context.Context) error
+	// Session — сеанс logind оболочки; TerminateSession — закрыть его со всеми процессами.
+	Session(ctx context.Context, sessionID string) (string, error)
+	TerminateSession(ctx context.Context, id string) error
 }
 
 // Terminals — открытые терминалы помощника.
@@ -56,6 +59,8 @@ type Terminals struct {
 }
 
 type termSession struct {
+	// login — сеанс logind оболочки: закрывается вместе со службой (фоновые процессы терминала не остаются).
+	login      string
 	opID       string
 	user       string
 	renewUntil time.Time
@@ -154,6 +159,17 @@ func (e *Executor) applyTerminalOpen(ctx context.Context, r *run) *agentv1.Opera
 		delete(t.sessions, sid)
 		t.mu.Unlock()
 	}()
+	// Сеанс logind появляется, когда PAM перенёс оболочку в session-N.scope: ждём до 3 с.
+	for i := 0; i < 30 && s.login == ""; i++ {
+		if id, err := t.Units.Session(ctx, sid); err == nil && id != "" {
+			s.login = id
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if s.login == "" {
+		e.log().Warn("helper: сеанс logind терминала не найден: закрытие остановит только службу", "session", sid)
+	}
 	r.system("Терминал %s открыт: %s, %s", sid, p.GetUnixUser(), lang)
 	if err := r.send(helperrpc.Response{Kind: helperrpc.KindTerminal, FD: master, Terminal: &helperrpc.TerminalInfo{
 		SessionID: sid, UnixUser: p.GetUnixUser(), Lang: lang, IdleTimeoutSec: p.GetIdleTimeoutSec()}}); err != nil {
@@ -177,11 +193,15 @@ func (e *Executor) waitTerminal(ctx context.Context, t *Terminals, sid string, s
 	tick := time.NewTicker(poll)
 	defer tick.Stop()
 	gone := helperrpc.Disconnected(ctx)
+	// stop — служба и сеанс logind со всеми процессами (в том числе запущенными в фоне из терминала).
 	stop := func(reason agentv1.TerminalEndReason) agentv1.TerminalEndReason {
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		if err := t.Units.Stop(sctx, sid); err != nil {
 			e.log().Error("helper: служба терминала не остановлена", "session", sid, "err", err)
+		}
+		if err := t.Units.TerminateSession(sctx, s.login); err != nil {
+			e.log().Error("helper: сеанс logind терминала не закрыт", "session", sid, "login", s.login, "err", err)
 		}
 		return reason
 	}
@@ -206,7 +226,8 @@ func (e *Executor) waitTerminal(ctx context.Context, t *Terminals, sid string, s
 			return stop(agentv1.TerminalEndReason_TERMINAL_END_REASON_NOT_RENEWED)
 		}
 		if active, err := t.Units.Active(ctx, sid); err == nil && !active {
-			return agentv1.TerminalEndReason_TERMINAL_END_REASON_SHELL_EXIT
+			// Оболочка вышла, но её фоновые процессы могли остаться в сеансе — закрываем и его.
+			return stop(agentv1.TerminalEndReason_TERMINAL_END_REASON_SHELL_EXIT)
 		}
 	}
 }

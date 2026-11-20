@@ -517,7 +517,11 @@ func (s *System) accessManaged() map[string]bool {
 		out[u] = v.Sudo
 	}
 	if st.RescueCreated {
-		out["trassa-rescue"] = st.RescueExpiry > 0
+		now := time.Now()
+		if s.Now != nil {
+			now = s.Now()
+		}
+		out["trassa-rescue"] = st.RescueExpiry > now.UnixMilli()
 	}
 	return out
 }

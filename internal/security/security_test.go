@@ -112,6 +112,8 @@ func TestUsersAndSudo(t *testing.T) {
 		"sudo не выдан":              {"etc/trassa/access/state.json": `{"users":{"ops":{"sudo":false}}}`, "etc/sudoers.d/trassa-ops": "ops ALL=(ALL:ALL) NOPASSWD: ALL\n"},
 		"другое содержимое": {"etc/trassa/access/state.json": `{"users":{"ops":{"sudo":true}}}`,
 			"etc/sudoers.d/trassa-ops": "ops ALL=(ALL:ALL) NOPASSWD: ALL\nDefaults:ops !requiretty\n"},
+		"выдача rescue кончилась": {"etc/trassa/access/state.json": `{"users":{},"rescue_created":true,"rescue_expires_at_ms":1000}`,
+			"etc/sudoers.d/trassa-trassa-rescue": "trassa-rescue ALL=(ALL:ALL) NOPASSWD: ALL\n"},
 		"rescue не создан Trassa": {"etc/trassa/access/state.json": `{"users":{}}`,
 			"etc/sudoers.d/trassa-trassa-rescue": "trassa-rescue ALL=(ALL:ALL) NOPASSWD: ALL\n"},
 	} {

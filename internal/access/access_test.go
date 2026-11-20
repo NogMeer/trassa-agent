@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -337,5 +338,34 @@ func TestTerminateCerts(t *testing.T) {
 	}
 	if !h.called("loginctl terminate-session 7") || h.called("loginctl terminate-session 8") {
 		t.Fatalf("%v", h.calls)
+	}
+}
+
+// Истёкшая выдача снимается задачей помощника; чужой trassa-rescue доступ не трогает.
+func TestRescueExpireAndForeign(t *testing.T) {
+	e, h := newHost(t)
+	k1, _ := caKey(t)
+	if _, err := e.Trust(context.Background(), []string{k1}); err != nil {
+		t.Fatal(err)
+	}
+	g := &agentv1.AccessRescueGrantParams{Principal: "trassa:ws1:rescue:g1", ExpiresAtMs: 1_800_000_600_000}
+	if _, err := e.RescueGrant(context.Background(), g); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.ExpireRescue(context.Background(), time.UnixMilli(1_800_000_000_000)); err != nil || !h.exists(filepath.Join(SudoersDir, "trassa-"+RescueUser)) {
+		t.Fatalf("снято до срока: %v", err)
+	}
+	if err := e.ExpireRescue(context.Background(), time.UnixMilli(1_800_000_600_001)); err != nil || h.exists(filepath.Join(SudoersDir, "trassa-"+RescueUser)) {
+		t.Fatalf("после срока sudo остался: %v", err)
+	}
+	// Чужая учётная запись trassa-rescue: отказ до любых изменений (usermod не вызывается).
+	e2, h2 := newHost(t)
+	if _, err := e2.Trust(context.Background(), []string{k1}); err != nil {
+		t.Fatal(err)
+	}
+	h2.users[RescueUser] = true
+	h2.calls = nil
+	if _, err := e2.RescueGrant(context.Background(), g); !errors.Is(err, ErrUserForeign) || h2.called("usermod") {
+		t.Fatalf("чужой trassa-rescue: %v %v", err, h2.calls)
 	}
 }

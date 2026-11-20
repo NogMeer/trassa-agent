@@ -253,6 +253,7 @@ func serve(ctx context.Context, log *slog.Logger) error {
 				return
 			case <-t.C:
 				ex.PruneBackupWork()
+				ex.ExpireRescue(ctx)
 			}
 		}
 	}()

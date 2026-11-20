@@ -19,10 +19,22 @@ import (
 )
 
 type fakeUnits struct {
-	mu      sync.Mutex
-	started []terminal.Shell
-	stopped []string
-	exited  map[string]bool
+	mu         sync.Mutex
+	started    []terminal.Shell
+	stopped    []string
+	exited     map[string]bool
+	terminated []string
+}
+
+func (u *fakeUnits) Session(_ context.Context, sid string) (string, error) {
+	return "s-" + sid[len(sid)-2:], nil
+}
+
+func (u *fakeUnits) TerminateSession(_ context.Context, id string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.terminated = append(u.terminated, id)
+	return nil
 }
 
 func (u *fakeUnits) Start(_ context.Context, s terminal.Shell, slave *os.File) error {
@@ -155,8 +167,8 @@ func TestTerminalOpenRenewExpire(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("терминал не закрылся по сроку продления")
 	}
-	if strings.Join(units.stopped, ",") != sid {
-		t.Fatalf("остановлены: %v", units.stopped)
+	if strings.Join(units.stopped, ",") != sid || strings.Join(units.terminated, ",") != "s-e4" {
+		t.Fatalf("остановлены: %v, сеансы logind: %v", units.stopped, units.terminated)
 	}
 	// Закрытие агентом (простой) и выход оболочки.
 	sid2 := "01a1f4b6-f2f2-7e66-85b4-0000000000e5"
@@ -175,6 +187,32 @@ func TestTerminalOpenRenewExpire(t *testing.T) {
 	units.exited[sid3] = true
 	units.mu.Unlock()
 	if res := <-done; res.GetTerminalOpen().GetReason() != agentv1.TerminalEndReason_TERMINAL_END_REASON_SHELL_EXIT {
+		t.Fatalf("%+v", res)
+	}
+	// Выход оболочки тоже закрывает сеанс logind: фоновые процессы терминала не остаются.
+	units.mu.Lock()
+	defer units.mu.Unlock()
+	if strings.Join(units.terminated, ",") != "s-e4,s-e5,s-e6" {
+		t.Fatalf("сеансы logind: %v", units.terminated)
+	}
+	// Отзыв доступа (signed access.sessions.terminate) закрывает открытый терминал.
+}
+
+func TestTerminateClosesHelperTerminal(t *testing.T) {
+	f := newFixture(t)
+	f.enableTerminals(t)
+	_ = os.MkdirAll(f.e.Access.Root+"/etc/trassa/access", 0o700)
+	_ = os.WriteFile(f.e.Access.Root+"/etc/trassa/access/state.json", []byte(`{"users":{"ops":{}}}`), 0o600)
+	sid := "01a1f4b6-f2f2-7e66-85b4-0000000000e7"
+	term, done := f.execAsync(sealed(f.terminalBody("ops", sid)))
+	<-term
+	tb := f.body(ops.TypeAccessSessionsTerminate, &agentv1.OperationParams{Params: &agentv1.OperationParams_AccessSessionsTerminate{
+		AccessSessionsTerminate: &agentv1.AccessSessionsTerminateParams{SessionIds: []string{sid, "01a1f4b6-f2f2-7e66-85b4-0000000000ee"}}}})
+	o := f.exec(sealed(tb))
+	if r := o.result.GetAccessSessionsTerminate(); strings.Join(r.GetTerminated(), ",") != sid || len(r.GetNotFound()) != 1 {
+		t.Fatalf("%+v", o.result)
+	}
+	if res := <-done; res.GetTerminalOpen().GetReason() != agentv1.TerminalEndReason_TERMINAL_END_REASON_REVOKED {
 		t.Fatalf("%+v", res)
 	}
 }

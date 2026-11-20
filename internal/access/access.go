@@ -408,7 +408,11 @@ func toRecords(ps []*agentv1.AccessPrincipal) []PrincipalRecord {
 // сертификату, без пароля); существующая и не из реестра — ACCESS_USER_FOREIGN.
 func (e *Env) ensureAccount(ctx context.Context, st *State, u, shell string) (bool, *user.User, error) {
 	if _, err := e.lookup(u); err == nil {
-		if _, ours := st.Users[u]; !ours && u != RescueUser {
+		_, ours := st.Users[u]
+		if u == RescueUser {
+			ours = st.RescueCreated
+		}
+		if !ours {
 			return false, nil, fmt.Errorf("%w: %s создан не Trassa", ErrUserForeign, u)
 		}
 		if out, err := e.Run(ctx, "usermod", "--shell", shell, "--password", "*", u); err != nil {
@@ -583,12 +587,8 @@ func (e *Env) RescueGrant(ctx context.Context, p *agentv1.AccessRescueGrantParam
 	if err := e.preflight(ctx, users); err != nil {
 		return nil, err
 	}
-	created, _, err := e.ensureAccount(ctx, st, RescueUser, "/bin/bash")
-	if err != nil {
+	if _, _, err := e.ensureAccount(ctx, st, RescueUser, "/bin/bash"); err != nil {
 		return nil, err
-	}
-	if !created && !st.RescueCreated {
-		return nil, fmt.Errorf("%w: %s создан не Trassa", ErrUserForeign, RescueUser)
 	}
 	st.RescueCreated = true
 	if err := e.writeRoot(RescueConf, []byte(rescueConfText), 0o644); err != nil {
@@ -730,4 +730,17 @@ func (e *Env) ShellOf(u string, now time.Time) (string, error) {
 		return "/bin/bash", nil
 	}
 	return us.Shell, nil
+}
+
+// ExpireRescue — выдача trassa-rescue кончилась: принципал и sudo снимаются (вход по сертификату и так закрыт
+// expiry-time, но правило sudo не должно оставаться). Ничего не выдано — ничего не делает.
+func (e *Env) ExpireRescue(ctx context.Context, now time.Time) error {
+	st, err := e.loadState()
+	if err != nil {
+		return err
+	}
+	if st.RescueExpiry == 0 || st.RescueExpiry > now.UnixMilli() {
+		return nil
+	}
+	return e.RescueRevoke(ctx)
 }

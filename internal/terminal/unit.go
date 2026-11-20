@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -147,9 +148,79 @@ func (d Systemd) StopAll(ctx context.Context) error {
 	}
 	var errs []error
 	for _, u := range units {
+		sess := ""
+		if p, err := c.GetServicePropertyContext(ctx, u.Name, "MainPID"); err == nil {
+			if pid, _ := p.Value.Value().(uint32); pid > 0 {
+				sess = SessionOfPID(int(pid))
+			}
+		}
 		if _, err := c.StopUnitContext(ctx, u.Name, "replace", nil); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", u.Name, err))
 		}
+		if err := d.TerminateSession(ctx, sess); err != nil {
+			errs = append(errs, fmt.Errorf("%s: сеанс %s: %w", u.Name, sess, err))
+		}
 	}
 	return errors.Join(errs...)
+}
+
+// Session — сеанс logind оболочки: PAMName переносит главный процесс службы в session-N.scope, и его потомки
+// живут там, а не в cgroup службы. "" — сеанса (ещё) нет.
+func (d Systemd) Session(ctx context.Context, sessionID string) (string, error) {
+	c, err := d.conn(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer c.Close()
+	p, err := c.GetServicePropertyContext(ctx, UnitName(sessionID), "MainPID")
+	if err != nil {
+		return "", err
+	}
+	pid, _ := p.Value.Value().(uint32)
+	if pid == 0 {
+		return "", nil
+	}
+	return SessionOfPID(int(pid)), nil
+}
+
+// SessionOfPID — сеанс logind процесса по /proc/<pid>/cgroup (session-N.scope).
+func SessionOfPID(pid int) string {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil {
+		return ""
+	}
+	if m := sessionScope.FindSubmatch(b); m != nil {
+		return string(m[1])
+	}
+	return ""
+}
+
+var sessionScope = regexp.MustCompile(`/session-([A-Za-z0-9]+)\.scope`)
+
+// TerminateSession — закрыть сеанс logind со всеми его процессами (org.freedesktop.login1 TerminateSession):
+// фоновые процессы, запущенные из терминала, не переживают его закрытие.
+func (Systemd) TerminateSession(ctx context.Context, id string) error {
+	if id == "" {
+		return nil
+	}
+	c, err := dbus.SystemBusPrivate()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	if err := c.Auth(nil); err != nil {
+		return err
+	}
+	if err := c.Hello(); err != nil {
+		return err
+	}
+	call := c.Object("org.freedesktop.login1", "/org/freedesktop/login1").CallWithContext(ctx, "org.freedesktop.login1.Manager.TerminateSession", 0, id)
+	if call.Err != nil {
+		var de dbus.Error
+		if errors.As(call.Err, &de) && strings.HasSuffix(de.Name, "NoSuchSession") {
+			return nil
+		}
+		return call.Err
+	}
+	return nil
 }
