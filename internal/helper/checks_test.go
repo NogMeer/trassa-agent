@@ -263,7 +263,7 @@ func TestCatalogNotConfigurable(t *testing.T) {
 			t.Fatalf("поле записи о регистрации %s", et.Field(i).Name)
 		}
 	}
-	want := []string{"agent.uninstall", "agent.update", "logs.read", "logs.subscribe", "rollback.restore", "system.info", "system.inventory"}
+	want := []string{"agent.uninstall", "agent.update", "logs.read", "logs.subscribe", "packages.list_updates", "rollback.restore", "security.scan", "system.info", "system.inventory"}
 	if ops.TestOps {
 		want = append(want, "test.config_write")
 	}

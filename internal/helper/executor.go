@@ -24,6 +24,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/redact"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
+	"github.com/NogMeer/trassa-agent/internal/security"
 )
 
 // Коды итога, которые ставит исполнитель (в дополнение к кодам проверок и update).
@@ -82,6 +83,8 @@ type Executor struct {
 	Paths    config.Paths
 	// Logs читает журналы (E08-T15); nil — logs.subscribe и logs.read завершаются LOGS_UNAVAILABLE.
 	Logs *logsrc.Reader
+	// Security — система для security.scan (E10); nil — SECURITY_UNAVAILABLE.
+	Security *security.System
 
 	once     sync.Once
 	handlers map[string]handler

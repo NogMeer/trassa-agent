@@ -9,6 +9,8 @@ syntax = "proto3";
 
 package trassa.agent.v1;
 
+import "trassa/agent/v1/security.proto";
+
 option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
 
 // Версия протокола этого файла. Шлюз поддерживает текущую и предыдущую.
@@ -152,6 +154,8 @@ message OperationParams {
     RollbackRestoreParams rollback_restore = 5;
     LogsSubscribeParams logs_subscribe = 6;
     LogsReadParams logs_read = 7;
+    SecurityScanParams security_scan = 8;
+    PackagesListUpdatesParams packages_list_updates = 9;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }
@@ -293,6 +297,8 @@ message OperationResult {
     SystemInventoryResult system_inventory = 21;
     LogsSubscribeResult logs_subscribe = 22;
     LogsReadResult logs_read = 23;
+    SecurityScanResult security_scan = 24;
+    PackagesListUpdatesResult packages_list_updates = 25;
   }
 }
 

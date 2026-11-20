@@ -30,6 +30,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/nonce"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
+	"github.com/NogMeer/trassa-agent/internal/security"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo/sdunits"
 	"github.com/NogMeer/trassa-agent/internal/uninstall"
@@ -144,6 +145,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		Updater:  &updater,
 		Paths:    p,
 		Logs:     logsrc.New(),
+		Security: security.Real(),
 	}
 	if err := ex.CheckHandlers(); err != nil {
 		n.Close()

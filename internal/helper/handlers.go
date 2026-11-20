@@ -37,13 +37,15 @@ func StageDir(p config.Paths, op string) string {
 
 func (e *Executor) builtinHandlers() map[string]handler {
 	h := map[string]handler{
-		ops.TypeSystemInfo:      {apply: e.applySystemInfo},
-		ops.TypeSystemInventory: {apply: e.applyInventory},
-		ops.TypeAgentUpdate:     {preview: e.previewUpdate, apply: e.applyUpdate},
-		ops.TypeAgentUninstall:  {preview: e.previewUninstall, apply: e.applyUninstall},
-		ops.TypeRollbackRestore: {preview: e.previewRestore, apply: e.applyRestore},
-		ops.TypeLogsSubscribe:   {apply: e.applyLogsSubscribe},
-		ops.TypeLogsRead:        {apply: e.applyLogsRead},
+		ops.TypeSystemInfo:          {apply: e.applySystemInfo},
+		ops.TypeSystemInventory:     {apply: e.applyInventory},
+		ops.TypeAgentUpdate:         {preview: e.previewUpdate, apply: e.applyUpdate},
+		ops.TypeAgentUninstall:      {preview: e.previewUninstall, apply: e.applyUninstall},
+		ops.TypeRollbackRestore:     {preview: e.previewRestore, apply: e.applyRestore},
+		ops.TypeLogsSubscribe:       {apply: e.applyLogsSubscribe},
+		ops.TypeLogsRead:            {apply: e.applyLogsRead},
+		ops.TypeSecurityScan:        {apply: e.applySecurityScan},
+		ops.TypePackagesListUpdates: {apply: e.applyListUpdates},
 	}
 	for t, x := range e.extraHandlers() {
 		h[t] = x

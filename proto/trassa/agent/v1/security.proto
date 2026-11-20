@@ -1,0 +1,104 @@
+// SPDX-License-Identifier: Apache-2.0
+// Центр безопасности (E10, раздел 6): скан проверок только чтением и список обновлений пакетов.
+// Поля с данными сервера проходят фильтр секретов на сервере; содержимого ключей и хэшей паролей здесь нет —
+// только отпечатки и имена. Результат операции не больше 1 МБ.
+syntax = "proto3";
+
+package trassa.agent.v1;
+
+option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
+
+// security.scan (READ). checks — коды из каталога E10; пустой список отклоняется (R1).
+message SecurityScanParams {
+  repeated string checks = 1;
+  // Отпечаток базового списка детектора, который знает панель; пусто — панель списка не знает.
+  string baseline_digest = 2;
+}
+
+enum CheckState {
+  CHECK_STATE_UNSPECIFIED = 0;
+  CHECK_STATE_PASS = 1;
+  CHECK_STATE_FAIL = 2;
+  // Проверка к этому серверу не относится (например, Docker не установлен).
+  CHECK_STATE_NA = 3;
+  CHECK_STATE_ERROR = 4;
+}
+
+message CheckResult {
+  string code = 1;
+  // На чём сработало: порт, пользователь, файл, раздел; у проверок сервера целиком — пусто.
+  string subject = 2;
+  CheckState state = 3;
+  // Короткое пояснение для человека, до 2 КБ, без секретов. Панель выводит его только как текст.
+  string evidence = 4;
+  // Для ERROR: TIMEOUT, UNSUPPORTED, READ_FAILED.
+  string error = 5;
+}
+
+// Слушающий сокет.
+message Listener {
+  // tcp или udp.
+  string protocol = 1;
+  string address = 2;
+  uint32 port = 3;
+  // Имя процесса; пусто — не определено.
+  string process = 4;
+  // Имя контейнера Docker, если сокет принадлежит контейнеру или его docker-proxy.
+  string container = 5;
+  // Адрес не loopback и не только приватный: порт может быть виден снаружи. Доступность снаружи проверяет панель.
+  bool public = 6;
+}
+
+// Действующие настройки сервера SSH.
+message SshEffective {
+  // Пары из `sshd -T`, только известные Trassa ключи, в нижнем регистре.
+  map<string, string> settings = 1;
+  repeated uint32 ports = 2;
+  // Порт задаётся сокетом systemd (ssh.socket), а не только sshd_config.
+  bool socket_activated = 3;
+}
+
+message FirewallState {
+  // nftables, iptables-legacy или none.
+  string backend = 1;
+  bool ufw_active = 2;
+  bool firewalld_active = 3;
+  // Таблица Trassa загружена.
+  bool trassa_table = 4;
+  // Хэш загруженного набора Trassa (тот же расчёт, что у firewall.plan).
+  string trassa_ruleset_hash = 5;
+  // iptables, nftables или none.
+  string docker_backend = 6;
+}
+
+message SecurityScanResult {
+  repeated CheckResult checks = 1;
+  repeated Listener listeners = 2;
+  // Адреса интерфейсов сервера в виде CIDR.
+  repeated string addresses = 3;
+  FirewallState firewall = 4;
+  SshEffective ssh = 5;
+  // Отпечатки базового списка детектора (sha256 записей).
+  repeated string baseline = 6;
+  string baseline_digest = 7;
+}
+
+// packages.list_updates (READ): только чтение кэша apt, без сети.
+message PackagesListUpdatesParams {}
+
+message PackageUpdate {
+  string name = 1;
+  string current = 2;
+  string candidate = 3;
+  // Кандидат из источника обновлений безопасности.
+  bool security = 4;
+  // Когда опубликован кандидат; 0 — неизвестно.
+  int64 published_at_ms = 5;
+}
+
+message PackagesListUpdatesResult {
+  repeated PackageUpdate packages = 1;
+  bool reboot_required = 2;
+  // Пакеты, которым нужна перезагрузка.
+  repeated string reboot_packages = 3;
+}

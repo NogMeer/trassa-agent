@@ -441,3 +441,6 @@ func isDigits(s string) bool {
 	}
 	return true
 }
+
+// Mounts — точки монтирования дисков, как у метрик разделов (для проверок центра безопасности).
+func (c *Collector) Mounts() ([]string, error) { return c.mounts() }

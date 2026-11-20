@@ -1556,6 +1556,8 @@ type OperationParams struct {
 	//	*OperationParams_RollbackRestore
 	//	*OperationParams_LogsSubscribe
 	//	*OperationParams_LogsRead
+	//	*OperationParams_SecurityScan
+	//	*OperationParams_PackagesListUpdates
 	//	*OperationParams_TestConfigWrite
 	Params        isOperationParams_Params `protobuf_oneof:"params"`
 	unknownFields protoimpl.UnknownFields
@@ -1662,6 +1664,24 @@ func (x *OperationParams) GetLogsRead() *LogsReadParams {
 	return nil
 }
 
+func (x *OperationParams) GetSecurityScan() *SecurityScanParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_SecurityScan); ok {
+			return x.SecurityScan
+		}
+	}
+	return nil
+}
+
+func (x *OperationParams) GetPackagesListUpdates() *PackagesListUpdatesParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_PackagesListUpdates); ok {
+			return x.PackagesListUpdates
+		}
+	}
+	return nil
+}
+
 func (x *OperationParams) GetTestConfigWrite() *TestConfigWriteParams {
 	if x != nil {
 		if x, ok := x.Params.(*OperationParams_TestConfigWrite); ok {
@@ -1703,6 +1723,14 @@ type OperationParams_LogsRead struct {
 	LogsRead *LogsReadParams `protobuf:"bytes,7,opt,name=logs_read,json=logsRead,proto3,oneof"`
 }
 
+type OperationParams_SecurityScan struct {
+	SecurityScan *SecurityScanParams `protobuf:"bytes,8,opt,name=security_scan,json=securityScan,proto3,oneof"`
+}
+
+type OperationParams_PackagesListUpdates struct {
+	PackagesListUpdates *PackagesListUpdatesParams `protobuf:"bytes,9,opt,name=packages_list_updates,json=packagesListUpdates,proto3,oneof"`
+}
+
 type OperationParams_TestConfigWrite struct {
 	// Только в сборке с тегом testops.
 	TestConfigWrite *TestConfigWriteParams `protobuf:"bytes,100,opt,name=test_config_write,json=testConfigWrite,proto3,oneof"`
@@ -1721,6 +1749,10 @@ func (*OperationParams_RollbackRestore) isOperationParams_Params() {}
 func (*OperationParams_LogsSubscribe) isOperationParams_Params() {}
 
 func (*OperationParams_LogsRead) isOperationParams_Params() {}
+
+func (*OperationParams_SecurityScan) isOperationParams_Params() {}
+
+func (*OperationParams_PackagesListUpdates) isOperationParams_Params() {}
 
 func (*OperationParams_TestConfigWrite) isOperationParams_Params() {}
 
@@ -2495,6 +2527,8 @@ type OperationResult struct {
 	//	*OperationResult_SystemInventory
 	//	*OperationResult_LogsSubscribe
 	//	*OperationResult_LogsRead
+	//	*OperationResult_SecurityScan
+	//	*OperationResult_PackagesListUpdates
 	Data          isOperationResult_Data `protobuf_oneof:"data"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2629,6 +2663,24 @@ func (x *OperationResult) GetLogsRead() *LogsReadResult {
 	return nil
 }
 
+func (x *OperationResult) GetSecurityScan() *SecurityScanResult {
+	if x != nil {
+		if x, ok := x.Data.(*OperationResult_SecurityScan); ok {
+			return x.SecurityScan
+		}
+	}
+	return nil
+}
+
+func (x *OperationResult) GetPackagesListUpdates() *PackagesListUpdatesResult {
+	if x != nil {
+		if x, ok := x.Data.(*OperationResult_PackagesListUpdates); ok {
+			return x.PackagesListUpdates
+		}
+	}
+	return nil
+}
+
 type isOperationResult_Data interface {
 	isOperationResult_Data()
 }
@@ -2649,6 +2701,14 @@ type OperationResult_LogsRead struct {
 	LogsRead *LogsReadResult `protobuf:"bytes,23,opt,name=logs_read,json=logsRead,proto3,oneof"`
 }
 
+type OperationResult_SecurityScan struct {
+	SecurityScan *SecurityScanResult `protobuf:"bytes,24,opt,name=security_scan,json=securityScan,proto3,oneof"`
+}
+
+type OperationResult_PackagesListUpdates struct {
+	PackagesListUpdates *PackagesListUpdatesResult `protobuf:"bytes,25,opt,name=packages_list_updates,json=packagesListUpdates,proto3,oneof"`
+}
+
 func (*OperationResult_SystemInfo) isOperationResult_Data() {}
 
 func (*OperationResult_SystemInventory) isOperationResult_Data() {}
@@ -2656,6 +2716,10 @@ func (*OperationResult_SystemInventory) isOperationResult_Data() {}
 func (*OperationResult_LogsSubscribe) isOperationResult_Data() {}
 
 func (*OperationResult_LogsRead) isOperationResult_Data() {}
+
+func (*OperationResult_SecurityScan) isOperationResult_Data() {}
+
+func (*OperationResult_PackagesListUpdates) isOperationResult_Data() {}
 
 // Подтверждение приёма кадра агента: агент перестаёт досылать результат после InboundAck с этим seq.
 type InboundAck struct {
@@ -3974,7 +4038,7 @@ var File_trassa_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x1btrassa/agent/v1/agent.proto\x12\x0ftrassa.agent.v1\"\xa6\x04\n" +
+	"\x1btrassa/agent/v1/agent.proto\x12\x0ftrassa.agent.v1\x1a\x1etrassa/agent/v1/security.proto\"\xa6\x04\n" +
 	"\fAgentMessage\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12.\n" +
 	"\x05hello\x18\n" +
@@ -4044,7 +4108,7 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\adry_run\x18\t \x01(\bR\x06dryRun\x12 \n" +
 	"\fissued_at_ms\x18\n" +
 	" \x01(\x03R\n" +
-	"issuedAtMs\"\x8b\x05\n" +
+	"issuedAtMs\"\xb9\x06\n" +
 	"\x0fOperationParams\x12D\n" +
 	"\vsystem_info\x18\x01 \x01(\v2!.trassa.agent.v1.SystemInfoParamsH\x00R\n" +
 	"systemInfo\x12S\n" +
@@ -4053,7 +4117,9 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x0fagent_uninstall\x18\x04 \x01(\v2%.trassa.agent.v1.AgentUninstallParamsH\x00R\x0eagentUninstall\x12S\n" +
 	"\x10rollback_restore\x18\x05 \x01(\v2&.trassa.agent.v1.RollbackRestoreParamsH\x00R\x0frollbackRestore\x12M\n" +
 	"\x0elogs_subscribe\x18\x06 \x01(\v2$.trassa.agent.v1.LogsSubscribeParamsH\x00R\rlogsSubscribe\x12>\n" +
-	"\tlogs_read\x18\a \x01(\v2\x1f.trassa.agent.v1.LogsReadParamsH\x00R\blogsRead\x12T\n" +
+	"\tlogs_read\x18\a \x01(\v2\x1f.trassa.agent.v1.LogsReadParamsH\x00R\blogsRead\x12J\n" +
+	"\rsecurity_scan\x18\b \x01(\v2#.trassa.agent.v1.SecurityScanParamsH\x00R\fsecurityScan\x12`\n" +
+	"\x15packages_list_updates\x18\t \x01(\v2*.trassa.agent.v1.PackagesListUpdatesParamsH\x00R\x13packagesListUpdates\x12T\n" +
 	"\x11test_config_write\x18d \x01(\v2&.trassa.agent.v1.TestConfigWriteParamsH\x00R\x0ftestConfigWriteB\b\n" +
 	"\x06params\"\x12\n" +
 	"\x10SystemInfoParams\"Q\n" +
@@ -4104,7 +4170,7 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x03seq\x18\x02 \x01(\rR\x03seq\x125\n" +
 	"\x05phase\x18\x03 \x01(\x0e2\x1f.trassa.agent.v1.OperationPhaseR\x05phase\x122\n" +
 	"\x06stream\x18\x04 \x01(\x0e2\x1a.trassa.agent.v1.LogStreamR\x06stream\x12\x14\n" +
-	"\x05chunk\x18\x05 \x01(\tR\x05chunk\"\xa1\x05\n" +
+	"\x05chunk\x18\x05 \x01(\tR\x05chunk\"\xcf\x06\n" +
 	"\x0fOperationResult\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12;\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2!.trassa.agent.v1.OperationOutcomeR\aoutcome\x12\x1d\n" +
@@ -4119,7 +4185,9 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"systemInfo\x12S\n" +
 	"\x10system_inventory\x18\x15 \x01(\v2&.trassa.agent.v1.SystemInventoryResultH\x00R\x0fsystemInventory\x12M\n" +
 	"\x0elogs_subscribe\x18\x16 \x01(\v2$.trassa.agent.v1.LogsSubscribeResultH\x00R\rlogsSubscribe\x12>\n" +
-	"\tlogs_read\x18\x17 \x01(\v2\x1f.trassa.agent.v1.LogsReadResultH\x00R\blogsReadB\x06\n" +
+	"\tlogs_read\x18\x17 \x01(\v2\x1f.trassa.agent.v1.LogsReadResultH\x00R\blogsRead\x12J\n" +
+	"\rsecurity_scan\x18\x18 \x01(\v2#.trassa.agent.v1.SecurityScanResultH\x00R\fsecurityScan\x12`\n" +
+	"\x15packages_list_updates\x18\x19 \x01(\v2*.trassa.agent.v1.PackagesListUpdatesResultH\x00R\x13packagesListUpdatesB\x06\n" +
 	"\x04data\"\x1e\n" +
 	"\n" +
 	"InboundAck\x12\x10\n" +
@@ -4318,65 +4386,69 @@ func file_trassa_agent_v1_agent_proto_rawDescGZIP() []byte {
 var file_trassa_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
 var file_trassa_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_trassa_agent_v1_agent_proto_goTypes = []any{
-	(ProtocolVersion)(0),          // 0: trassa.agent.v1.ProtocolVersion
-	(CloseReason)(0),              // 1: trassa.agent.v1.CloseReason
-	(RollbackKind)(0),             // 2: trassa.agent.v1.RollbackKind
-	(InventoryKind)(0),            // 3: trassa.agent.v1.InventoryKind
-	(OperationPhase)(0),           // 4: trassa.agent.v1.OperationPhase
-	(LogStream)(0),                // 5: trassa.agent.v1.LogStream
-	(OperationOutcome)(0),         // 6: trassa.agent.v1.OperationOutcome
-	(FileChangeKind)(0),           // 7: trassa.agent.v1.FileChangeKind
-	(EventSeverity)(0),            // 8: trassa.agent.v1.EventSeverity
-	(LogLevel)(0),                 // 9: trassa.agent.v1.LogLevel
-	(LogSourceKind)(0),            // 10: trassa.agent.v1.LogSourceKind
-	(*AgentMessage)(nil),          // 11: trassa.agent.v1.AgentMessage
-	(*GatewayMessage)(nil),        // 12: trassa.agent.v1.GatewayMessage
-	(*Challenge)(nil),             // 13: trassa.agent.v1.Challenge
-	(*Hello)(nil),                 // 14: trassa.agent.v1.Hello
-	(*Welcome)(nil),               // 15: trassa.agent.v1.Welcome
-	(*Heartbeat)(nil),             // 16: trassa.agent.v1.Heartbeat
-	(*Close)(nil),                 // 17: trassa.agent.v1.Close
-	(*SignedOperation)(nil),       // 18: trassa.agent.v1.SignedOperation
-	(*OperationBody)(nil),         // 19: trassa.agent.v1.OperationBody
-	(*OperationParams)(nil),       // 20: trassa.agent.v1.OperationParams
-	(*SystemInfoParams)(nil),      // 21: trassa.agent.v1.SystemInfoParams
-	(*SystemInventoryParams)(nil), // 22: trassa.agent.v1.SystemInventoryParams
-	(*AgentUpdateParams)(nil),     // 23: trassa.agent.v1.AgentUpdateParams
-	(*ReleaseArtifact)(nil),       // 24: trassa.agent.v1.ReleaseArtifact
-	(*AgentUninstallParams)(nil),  // 25: trassa.agent.v1.AgentUninstallParams
-	(*RollbackRestoreParams)(nil), // 26: trassa.agent.v1.RollbackRestoreParams
-	(*LogsSubscribeParams)(nil),   // 27: trassa.agent.v1.LogsSubscribeParams
-	(*LogsReadParams)(nil),        // 28: trassa.agent.v1.LogsReadParams
-	(*TestConfigWriteParams)(nil), // 29: trassa.agent.v1.TestConfigWriteParams
-	(*SignedConfirm)(nil),         // 30: trassa.agent.v1.SignedConfirm
-	(*ConfirmBody)(nil),           // 31: trassa.agent.v1.ConfirmBody
-	(*OperationAck)(nil),          // 32: trassa.agent.v1.OperationAck
-	(*OperationProgress)(nil),     // 33: trassa.agent.v1.OperationProgress
-	(*OperationResult)(nil),       // 34: trassa.agent.v1.OperationResult
-	(*InboundAck)(nil),            // 35: trassa.agent.v1.InboundAck
-	(*Preview)(nil),               // 36: trassa.agent.v1.Preview
-	(*FileChange)(nil),            // 37: trassa.agent.v1.FileChange
-	(*RollbackPoint)(nil),         // 38: trassa.agent.v1.RollbackPoint
-	(*SystemInfoResult)(nil),      // 39: trassa.agent.v1.SystemInfoResult
-	(*SystemInventoryResult)(nil), // 40: trassa.agent.v1.SystemInventoryResult
-	(*ServiceEntry)(nil),          // 41: trassa.agent.v1.ServiceEntry
-	(*ContainerEntry)(nil),        // 42: trassa.agent.v1.ContainerEntry
-	(*PortEntry)(nil),             // 43: trassa.agent.v1.PortEntry
-	(*MetricsBatch)(nil),          // 44: trassa.agent.v1.MetricsBatch
-	(*Metric)(nil),                // 45: trassa.agent.v1.Metric
-	(*Event)(nil),                 // 46: trassa.agent.v1.Event
-	(*LogChunk)(nil),              // 47: trassa.agent.v1.LogChunk
-	(*LogSource)(nil),             // 48: trassa.agent.v1.LogSource
-	(*LogRecord)(nil),             // 49: trassa.agent.v1.LogRecord
-	(*LogSourceStatus)(nil),       // 50: trassa.agent.v1.LogSourceStatus
-	(*LogsSubscribeResult)(nil),   // 51: trassa.agent.v1.LogsSubscribeResult
-	(*LogsReadResult)(nil),        // 52: trassa.agent.v1.LogsReadResult
-	(*Subscribe)(nil),             // 53: trassa.agent.v1.Subscribe
-	(*Unsubscribe)(nil),           // 54: trassa.agent.v1.Unsubscribe
-	nil,                           // 55: trassa.agent.v1.Metric.LabelsEntry
-	nil,                           // 56: trassa.agent.v1.Event.AttributesEntry
-	nil,                           // 57: trassa.agent.v1.LogRecord.FieldsEntry
-	nil,                           // 58: trassa.agent.v1.Subscribe.OptionsEntry
+	(ProtocolVersion)(0),              // 0: trassa.agent.v1.ProtocolVersion
+	(CloseReason)(0),                  // 1: trassa.agent.v1.CloseReason
+	(RollbackKind)(0),                 // 2: trassa.agent.v1.RollbackKind
+	(InventoryKind)(0),                // 3: trassa.agent.v1.InventoryKind
+	(OperationPhase)(0),               // 4: trassa.agent.v1.OperationPhase
+	(LogStream)(0),                    // 5: trassa.agent.v1.LogStream
+	(OperationOutcome)(0),             // 6: trassa.agent.v1.OperationOutcome
+	(FileChangeKind)(0),               // 7: trassa.agent.v1.FileChangeKind
+	(EventSeverity)(0),                // 8: trassa.agent.v1.EventSeverity
+	(LogLevel)(0),                     // 9: trassa.agent.v1.LogLevel
+	(LogSourceKind)(0),                // 10: trassa.agent.v1.LogSourceKind
+	(*AgentMessage)(nil),              // 11: trassa.agent.v1.AgentMessage
+	(*GatewayMessage)(nil),            // 12: trassa.agent.v1.GatewayMessage
+	(*Challenge)(nil),                 // 13: trassa.agent.v1.Challenge
+	(*Hello)(nil),                     // 14: trassa.agent.v1.Hello
+	(*Welcome)(nil),                   // 15: trassa.agent.v1.Welcome
+	(*Heartbeat)(nil),                 // 16: trassa.agent.v1.Heartbeat
+	(*Close)(nil),                     // 17: trassa.agent.v1.Close
+	(*SignedOperation)(nil),           // 18: trassa.agent.v1.SignedOperation
+	(*OperationBody)(nil),             // 19: trassa.agent.v1.OperationBody
+	(*OperationParams)(nil),           // 20: trassa.agent.v1.OperationParams
+	(*SystemInfoParams)(nil),          // 21: trassa.agent.v1.SystemInfoParams
+	(*SystemInventoryParams)(nil),     // 22: trassa.agent.v1.SystemInventoryParams
+	(*AgentUpdateParams)(nil),         // 23: trassa.agent.v1.AgentUpdateParams
+	(*ReleaseArtifact)(nil),           // 24: trassa.agent.v1.ReleaseArtifact
+	(*AgentUninstallParams)(nil),      // 25: trassa.agent.v1.AgentUninstallParams
+	(*RollbackRestoreParams)(nil),     // 26: trassa.agent.v1.RollbackRestoreParams
+	(*LogsSubscribeParams)(nil),       // 27: trassa.agent.v1.LogsSubscribeParams
+	(*LogsReadParams)(nil),            // 28: trassa.agent.v1.LogsReadParams
+	(*TestConfigWriteParams)(nil),     // 29: trassa.agent.v1.TestConfigWriteParams
+	(*SignedConfirm)(nil),             // 30: trassa.agent.v1.SignedConfirm
+	(*ConfirmBody)(nil),               // 31: trassa.agent.v1.ConfirmBody
+	(*OperationAck)(nil),              // 32: trassa.agent.v1.OperationAck
+	(*OperationProgress)(nil),         // 33: trassa.agent.v1.OperationProgress
+	(*OperationResult)(nil),           // 34: trassa.agent.v1.OperationResult
+	(*InboundAck)(nil),                // 35: trassa.agent.v1.InboundAck
+	(*Preview)(nil),                   // 36: trassa.agent.v1.Preview
+	(*FileChange)(nil),                // 37: trassa.agent.v1.FileChange
+	(*RollbackPoint)(nil),             // 38: trassa.agent.v1.RollbackPoint
+	(*SystemInfoResult)(nil),          // 39: trassa.agent.v1.SystemInfoResult
+	(*SystemInventoryResult)(nil),     // 40: trassa.agent.v1.SystemInventoryResult
+	(*ServiceEntry)(nil),              // 41: trassa.agent.v1.ServiceEntry
+	(*ContainerEntry)(nil),            // 42: trassa.agent.v1.ContainerEntry
+	(*PortEntry)(nil),                 // 43: trassa.agent.v1.PortEntry
+	(*MetricsBatch)(nil),              // 44: trassa.agent.v1.MetricsBatch
+	(*Metric)(nil),                    // 45: trassa.agent.v1.Metric
+	(*Event)(nil),                     // 46: trassa.agent.v1.Event
+	(*LogChunk)(nil),                  // 47: trassa.agent.v1.LogChunk
+	(*LogSource)(nil),                 // 48: trassa.agent.v1.LogSource
+	(*LogRecord)(nil),                 // 49: trassa.agent.v1.LogRecord
+	(*LogSourceStatus)(nil),           // 50: trassa.agent.v1.LogSourceStatus
+	(*LogsSubscribeResult)(nil),       // 51: trassa.agent.v1.LogsSubscribeResult
+	(*LogsReadResult)(nil),            // 52: trassa.agent.v1.LogsReadResult
+	(*Subscribe)(nil),                 // 53: trassa.agent.v1.Subscribe
+	(*Unsubscribe)(nil),               // 54: trassa.agent.v1.Unsubscribe
+	nil,                               // 55: trassa.agent.v1.Metric.LabelsEntry
+	nil,                               // 56: trassa.agent.v1.Event.AttributesEntry
+	nil,                               // 57: trassa.agent.v1.LogRecord.FieldsEntry
+	nil,                               // 58: trassa.agent.v1.Subscribe.OptionsEntry
+	(*SecurityScanParams)(nil),        // 59: trassa.agent.v1.SecurityScanParams
+	(*PackagesListUpdatesParams)(nil), // 60: trassa.agent.v1.PackagesListUpdatesParams
+	(*SecurityScanResult)(nil),        // 61: trassa.agent.v1.SecurityScanResult
+	(*PackagesListUpdatesResult)(nil), // 62: trassa.agent.v1.PackagesListUpdatesResult
 }
 var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	14, // 0: trassa.agent.v1.AgentMessage.hello:type_name -> trassa.agent.v1.Hello
@@ -4408,45 +4480,49 @@ var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	26, // 26: trassa.agent.v1.OperationParams.rollback_restore:type_name -> trassa.agent.v1.RollbackRestoreParams
 	27, // 27: trassa.agent.v1.OperationParams.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeParams
 	28, // 28: trassa.agent.v1.OperationParams.logs_read:type_name -> trassa.agent.v1.LogsReadParams
-	29, // 29: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
-	3,  // 30: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
-	24, // 31: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
-	48, // 32: trassa.agent.v1.LogsSubscribeParams.sources:type_name -> trassa.agent.v1.LogSource
-	9,  // 33: trassa.agent.v1.LogsSubscribeParams.min_level:type_name -> trassa.agent.v1.LogLevel
-	48, // 34: trassa.agent.v1.LogsReadParams.source:type_name -> trassa.agent.v1.LogSource
-	4,  // 35: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
-	5,  // 36: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
-	6,  // 37: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
-	36, // 38: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
-	38, // 39: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
-	39, // 40: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
-	40, // 41: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
-	51, // 42: trassa.agent.v1.OperationResult.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeResult
-	52, // 43: trassa.agent.v1.OperationResult.logs_read:type_name -> trassa.agent.v1.LogsReadResult
-	37, // 44: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
-	7,  // 45: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
-	2,  // 46: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
-	41, // 47: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
-	42, // 48: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
-	43, // 49: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
-	45, // 50: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
-	55, // 51: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
-	8,  // 52: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
-	56, // 53: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
-	49, // 54: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
-	10, // 55: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
-	9,  // 56: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
-	48, // 57: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
-	57, // 58: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
-	48, // 59: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
-	50, // 60: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
-	49, // 61: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
-	58, // 62: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
-	63, // [63:63] is the sub-list for method output_type
-	63, // [63:63] is the sub-list for method input_type
-	63, // [63:63] is the sub-list for extension type_name
-	63, // [63:63] is the sub-list for extension extendee
-	0,  // [0:63] is the sub-list for field type_name
+	59, // 29: trassa.agent.v1.OperationParams.security_scan:type_name -> trassa.agent.v1.SecurityScanParams
+	60, // 30: trassa.agent.v1.OperationParams.packages_list_updates:type_name -> trassa.agent.v1.PackagesListUpdatesParams
+	29, // 31: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
+	3,  // 32: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
+	24, // 33: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
+	48, // 34: trassa.agent.v1.LogsSubscribeParams.sources:type_name -> trassa.agent.v1.LogSource
+	9,  // 35: trassa.agent.v1.LogsSubscribeParams.min_level:type_name -> trassa.agent.v1.LogLevel
+	48, // 36: trassa.agent.v1.LogsReadParams.source:type_name -> trassa.agent.v1.LogSource
+	4,  // 37: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
+	5,  // 38: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
+	6,  // 39: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
+	36, // 40: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
+	38, // 41: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
+	39, // 42: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
+	40, // 43: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
+	51, // 44: trassa.agent.v1.OperationResult.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeResult
+	52, // 45: trassa.agent.v1.OperationResult.logs_read:type_name -> trassa.agent.v1.LogsReadResult
+	61, // 46: trassa.agent.v1.OperationResult.security_scan:type_name -> trassa.agent.v1.SecurityScanResult
+	62, // 47: trassa.agent.v1.OperationResult.packages_list_updates:type_name -> trassa.agent.v1.PackagesListUpdatesResult
+	37, // 48: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
+	7,  // 49: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
+	2,  // 50: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
+	41, // 51: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
+	42, // 52: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
+	43, // 53: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
+	45, // 54: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
+	55, // 55: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
+	8,  // 56: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
+	56, // 57: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
+	49, // 58: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
+	10, // 59: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
+	9,  // 60: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
+	48, // 61: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
+	57, // 62: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
+	48, // 63: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
+	50, // 64: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
+	49, // 65: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
+	58, // 66: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
+	67, // [67:67] is the sub-list for method output_type
+	67, // [67:67] is the sub-list for method input_type
+	67, // [67:67] is the sub-list for extension type_name
+	67, // [67:67] is the sub-list for extension extendee
+	0,  // [0:67] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_agent_proto_init() }
@@ -4454,6 +4530,7 @@ func file_trassa_agent_v1_agent_proto_init() {
 	if File_trassa_agent_v1_agent_proto != nil {
 		return
 	}
+	file_trassa_agent_v1_security_proto_init()
 	file_trassa_agent_v1_agent_proto_msgTypes[0].OneofWrappers = []any{
 		(*AgentMessage_Hello)(nil),
 		(*AgentMessage_Heartbeat)(nil),
@@ -4482,6 +4559,8 @@ func file_trassa_agent_v1_agent_proto_init() {
 		(*OperationParams_RollbackRestore)(nil),
 		(*OperationParams_LogsSubscribe)(nil),
 		(*OperationParams_LogsRead)(nil),
+		(*OperationParams_SecurityScan)(nil),
+		(*OperationParams_PackagesListUpdates)(nil),
 		(*OperationParams_TestConfigWrite)(nil),
 	}
 	file_trassa_agent_v1_agent_proto_msgTypes[23].OneofWrappers = []any{
@@ -4489,6 +4568,8 @@ func file_trassa_agent_v1_agent_proto_init() {
 		(*OperationResult_SystemInventory)(nil),
 		(*OperationResult_LogsSubscribe)(nil),
 		(*OperationResult_LogsRead)(nil),
+		(*OperationResult_SecurityScan)(nil),
+		(*OperationResult_PackagesListUpdates)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -45,6 +45,7 @@ import (
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/identity"
+	"github.com/NogMeer/trassa-agent/internal/security"
 	"github.com/NogMeer/trassa-agent/internal/verify"
 )
 
@@ -53,7 +54,10 @@ const (
 	operation = "01a1f4b6-f2f2-7e66-85b4-000000000001"
 	// logsOperation — подписка на журналы после system.info.
 	logsOperation = "01a1f4b6-f2f2-7e66-85b4-000000000002"
-	panelKeyID    = "stub"
+	// scanOperation и updatesOperation — security.scan и packages.list_updates после подписки на журналы.
+	scanOperation    = "01a1f4b6-f2f2-7e66-85b4-000000000003"
+	updatesOperation = "01a1f4b6-f2f2-7e66-85b4-000000000004"
+	panelKeyID       = "stub"
 )
 
 type panel struct {
@@ -413,6 +417,21 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			}
 		case m.GetOperationResult().GetOperationId() == logsOperation:
 			p.writeJSON("subscribe.json", m.GetOperationResult())
+			// Центр безопасности (E10, блок A): скан по всем кодам помощника и список обновлений.
+			for _, op := range []*agentv1.SignedOperation{
+				p.sign(scanOperation, "security.scan", &agentv1.OperationParams{Params: &agentv1.OperationParams_SecurityScan{
+					SecurityScan: &agentv1.SecurityScanParams{Checks: security.Codes()}}}),
+				p.sign(updatesOperation, "packages.list_updates", &agentv1.OperationParams{Params: &agentv1.OperationParams_PackagesListUpdates{
+					PackagesListUpdates: &agentv1.PackagesListUpdatesParams{}}}),
+			} {
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
+					return
+				}
+			}
+		case m.GetOperationResult().GetOperationId() == scanOperation:
+			p.writeJSON("security.json", m.GetOperationResult())
+		case m.GetOperationResult().GetOperationId() == updatesOperation:
+			p.writeJSON("packages.json", m.GetOperationResult())
 		case m.GetMetrics() != nil:
 			if names != nil {
 				break

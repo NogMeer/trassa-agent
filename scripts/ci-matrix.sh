@@ -108,6 +108,18 @@ x grep -qF '"message":"ci line one"' "$STUB/logs.jsonl" || fail "строки ж
 ! x grep -qF "root:" "$STUB/logs.jsonl" || fail "прочитан файл вне /var/log"
 x grep -F '"level":"LOG_LEVEL_ERROR"' "$STUB/logs.jsonl" | grep -qF "ERROR db" || fail "уровень строки ERROR"
 
+# Центр безопасности (E10, блок A): скан по всем кодам и список обновлений на настоящей ОС, без TIMEOUT.
+for f in security.json packages.json; do
+	for _ in $(seq 1 90); do x test -s "$STUB/$f" && break; sleep 1; done
+	podman cp "$NAME:$STUB/$f" "$ctx/$f" 2>/dev/null || fail "нет итога $f"
+	jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/$f" >/dev/null || fail "$f: $(cat "$ctx/$f")"
+done
+jq -e '[.security_scan.checks[] | select(.error == "TIMEOUT")] | length == 0' "$ctx/security.json" >/dev/null ||
+	fail "проверки не уложились в срок: $(jq -c '[.security_scan.checks[] | select(.error == "TIMEOUT") | .code]' "$ctx/security.json")"
+jq -e '.security_scan.checks | length > 30' "$ctx/security.json" >/dev/null || fail "в скане мало проверок"
+jq -r '.security_scan.checks[] | "\(.code) \(.state) \(.subject // "") \(.error // "")"' "$ctx/security.json"
+jq -c '{updates: (.packages_list_updates.packages // [] | length), security: ([.packages_list_updates.packages[]? | select(.security)] | length)}' "$ctx/packages.json"
+
 # События (E08-T12): упавшая служба даёт service.down за 30 с, сброс — resolved.
 x systemd-run --quiet --unit=ci-broken --property=Type=oneshot /bin/false || true
 event_seen() {
@@ -138,9 +150,10 @@ left=$(x sh -c "find /etc /usr/local/bin /var/lib /run /usr/lib/systemd -name '*
 
 arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
-	--slurpfile run "$ctx/result.json" \
+	--slurpfile run "$ctx/result.json" --slurpfile scan "$ctx/security.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "events", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
+	  security: $scan[0].security_scan.checks,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"
 echo "OK $osid $arch: установка ${installed} с, на связи через ${online} с"
