@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
@@ -468,11 +469,18 @@ func readContainers(ctx context.Context, sys *System) ([]container, error) {
 
 // lines читает файл построчно без комментариев и пустых строк.
 func (s *System) lines(p string) ([]string, error) {
-	f, err := os.Open(s.path(p))
+	// Файлы пользователя (authorized_keys) могут оказаться каналом или устройством по ссылке: O_NONBLOCK не даёт
+	// повиснуть на открытии, читается только обычный файл.
+	f, err := os.OpenFile(s.path(p), os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
+	if st, err := f.Stat(); err != nil {
+		return nil, err
+	} else if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: не обычный файл", p)
+	}
 	var out []string
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64<<10), 1<<20)

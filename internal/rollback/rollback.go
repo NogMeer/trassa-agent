@@ -433,14 +433,13 @@ func validUnit(n string) bool {
 }
 
 func restoreFile(dir string, f File) error {
+	// Ни удаление, ни запись, ни права не идут по ссылкам на пути: каталог над файлом мог стать ссылкой (домашний
+	// каталог пользователя), и root не должен писать или менять права в чужом месте.
 	if !f.Existed {
-		return fsutil.RemoveSync(f.Path)
+		return fsutil.RemoveNoFollow(f.Path)
 	}
 	if f.Dir {
-		if err := os.Lchown(f.Path, f.UID, f.GID); err != nil {
-			return err
-		}
-		if err := os.Chmod(f.Path, fullMode(f)); err != nil {
+		if err := fsutil.ChmodChownNoFollow(f.Path, fsutil.FileID{}, fullMode(f), f.UID, f.GID); err != nil {
 			return err
 		}
 		return Matches(f)
@@ -450,18 +449,12 @@ func restoreFile(dir string, f File) error {
 		return err
 	}
 	defer src.Close()
-	err = fsutil.WriteAtomic(f.Path, os.FileMode(f.Mode), fsutil.Owner{UID: f.UID, GID: f.GID}, func(w io.Writer) error {
+	err = fsutil.WriteAtomicNoFollow(f.Path, fullMode(f), fsutil.Owner{UID: f.UID, GID: f.GID}, func(w io.Writer) error {
 		_, err := io.Copy(w, src)
 		return err
 	})
 	if err != nil {
 		return err
-	}
-	if f.Special != 0 {
-		// chown при записи снимает setuid и setgid: особые биты ставятся после владельца.
-		if err := os.Chmod(f.Path, fullMode(f)); err != nil {
-			return err
-		}
 	}
 	return Matches(f)
 }

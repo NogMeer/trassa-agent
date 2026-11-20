@@ -95,3 +95,49 @@ func TestStateRestore(t *testing.T) {
 		t.Fatal("validUnit")
 	}
 }
+
+// Каталог над файлом подменён ссылкой после точки отката (домашний каталог пользователя): возврат отказывает,
+// ни запись, ни удаление, ни права не уходят за ссылку.
+func TestRestoreRefusesSymlinkedDir(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	other := filepath.Join(root, "other")
+	for _, d := range []string{home, other} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keys := filepath.Join(home, "authorized_keys")
+	created := filepath.Join(home, "new")
+	if err := os.WriteFile(keys, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	victim := filepath.Join(other, "authorized_keys")
+	if err := os.WriteFile(victim, []byte("victim"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "new"), []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Store{Dir: filepath.Join(root, "rb")}
+	if _, err := s.Create(op, []string{keys, created}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(home, home+".old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(other, home); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Restore(op); err == nil {
+		t.Fatal("возврат через каталог-ссылку прошёл")
+	}
+	raw, _ := os.ReadFile(victim)
+	st, _ := os.Stat(victim)
+	if string(raw) != "victim" || st.Mode().Perm() != 0o644 {
+		t.Fatalf("чужой файл изменён: %q %v", raw, st.Mode())
+	}
+	if _, err := os.Stat(filepath.Join(other, "new")); err != nil {
+		t.Fatalf("чужой файл удалён: %v", err)
+	}
+}

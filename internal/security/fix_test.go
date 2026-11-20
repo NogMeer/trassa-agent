@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestFixCodesAreChecks(t *testing.T) {
@@ -152,5 +155,78 @@ func TestPermFixKeepsSpecialBits(t *testing.T) {
 	}
 	if err := plan.Verify(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Подмена между планом и применением: файл заменён ссылкой на чужой файл, другим файлом или каталог над ним —
+// ссылкой. Применение отказывает, цель ссылки не меняется.
+func TestPermFixSwapBetweenPlanAndApply(t *testing.T) {
+	swaps := map[string]func(t *testing.T, root, p, victim string){
+		"файл → ссылка": func(t *testing.T, _, p, victim string) {
+			_ = os.Remove(p)
+			if err := os.Symlink(victim, p); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"файл → другой файл": func(t *testing.T, _, p, _ string) {
+			_ = os.Remove(p)
+			if err := os.WriteFile(p, []byte("other"), 0o777); err != nil {
+				t.Fatal(err)
+			}
+			_ = os.Chmod(p, 0o777)
+		},
+		"каталог → ссылка": func(t *testing.T, root, _, victim string) {
+			bin := filepath.Join(root, "usr/bin")
+			if err := os.Rename(bin, bin+".old"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Dir(victim), bin); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, swap := range swaps {
+		t.Run(name, func(t *testing.T) {
+			sys := build(t, tree{"usr/bin/tool": "bin", "home/u/tool": "secret"})
+			p := filepath.Join(sys.Root, "usr/bin/tool")
+			victim := filepath.Join(sys.Root, "home/u/tool")
+			_ = os.Chmod(p, 0o777)
+			_ = os.Chmod(victim, 0o777)
+			plan, err := PlanFix(context.Background(), sys, "PERM_WORLD_WRITABLE", []string{"/usr/bin/tool"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			swap(t, sys.Root, p, victim)
+			if err := plan.Apply(context.Background()); err == nil {
+				t.Fatal("применение после подмены прошло")
+			}
+			if st, _ := os.Stat(victim); st.Mode().Perm() != 0o777 {
+				t.Fatalf("права чужого файла изменены: %v", st.Mode())
+			}
+			if name == "файл → другой файл" {
+				if st, _ := os.Stat(p); st.Mode().Perm() != 0o777 {
+					t.Fatalf("права подменённого файла изменены: %v", st.Mode())
+				}
+			}
+		})
+	}
+}
+
+// Канал вместо authorized_keys не подвешивает чтение.
+func TestLinesRefusesFIFO(t *testing.T) {
+	sys := build(t, tree{"etc/hostname": "h"})
+	p := filepath.Join(sys.Root, "fifo")
+	if err := unix.Mkfifo(p, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, err := sys.lines("/fifo"); done <- err }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("канал прочитан")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("чтение канала повисло")
 	}
 }

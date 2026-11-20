@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/sys/unix"
+
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
@@ -240,6 +242,7 @@ func permPlan(sys *System, targets []permTarget, newMode func(cur, lim fs.FileMo
 	p := &FixPlan{}
 	type step struct {
 		real string
+		id   fsutil.FileID
 		mode fs.FileMode
 		uid  int
 		gid  int
@@ -254,6 +257,21 @@ func permPlan(sys *System, targets []permTarget, newMode func(cur, lim fs.FileMo
 		if st.Mode()&fs.ModeSymlink != 0 {
 			return nil, fmt.Errorf("%w: %s — ссылка", ErrSubject, t.path)
 		}
+		// Файл, который увидел план (dev, inode): применение сверяет его и не идёт по ссылкам ни в одном
+		// компоненте пути — подмена на ссылку между планом и применением даёт отказ, а не чужой файл.
+		f, err := fsutil.OpenNoFollow(real, unix.O_RDONLY)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s: %v", ErrSubject, t.path, err)
+		}
+		id, err := fsutil.IDOf(f)
+		if err == nil {
+			// Права — того же открытого файла, что и id: между Lstat и открытием его могли подменить.
+			st, err = f.Stat()
+		}
+		f.Close()
+		if err != nil {
+			return nil, err
+		}
 		special := st.Mode() & (fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky)
 		m := newMode(st.Mode().Perm(), t.mode) | special
 		_, uid, gid, _ := sys.fileMode(t.path)
@@ -262,7 +280,7 @@ func permPlan(sys *System, targets []permTarget, newMode func(cur, lim fs.FileMo
 			to = t.uid
 		}
 		p.Paths = append(p.Paths, real)
-		steps = append(steps, step{real: real, mode: m, uid: to, gid: gid})
+		steps = append(steps, step{real: real, id: id, mode: m, uid: to, gid: gid})
 		diff := fmt.Sprintf("права %04o → %04o", st.Mode().Perm(), m.Perm())
 		if to != uid {
 			diff += fmt.Sprintf(", владелец uid %d → %d", uid, to)
@@ -272,11 +290,7 @@ func permPlan(sys *System, targets []permTarget, newMode func(cur, lim fs.FileMo
 	p.Summary = fmt.Sprintf("Исправить права: объектов %d", len(steps))
 	p.Apply = func(context.Context) error {
 		for _, s := range steps {
-			if err := os.Lchown(s.real, s.uid, s.gid); err != nil {
-				return err
-			}
-			// chown снимает setuid и setgid — права ставятся после владельца.
-			if err := os.Chmod(s.real, s.mode); err != nil {
+			if err := fsutil.ChmodChownNoFollow(s.real, s.id, s.mode, s.uid, s.gid); err != nil {
 				return err
 			}
 		}
