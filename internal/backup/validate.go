@@ -223,10 +223,13 @@ func checkTool(t *agentv1.BackupTool, what string) error {
 	return nil
 }
 
-// plainPath — путь без пробелов и кавычек: он попадает в строку ForceCommand sshd.
+var plainPathRe = regexp.MustCompile(`^[A-Za-z0-9/_.-]+$`)
+
+// plainPath — путь цели только из букв, цифр и /_.-: он попадает в ForceCommand, которую sshd запускает через
+// оболочку пользователя.
 func plainPath(p string) error {
-	if strings.ContainsAny(p, " \t\"'\\") {
-		return fmt.Errorf("%w: в пути цели пробел или кавычка", ErrPathForbidden)
+	if !plainPathRe.MatchString(p) {
+		return fmt.Errorf("%w: в пути цели допустимы только буквы, цифры и /_.-", ErrPathForbidden)
 	}
 	return checkPath(p)
 }

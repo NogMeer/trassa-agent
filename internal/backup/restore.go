@@ -116,20 +116,29 @@ func (e *Env) restoreFiles(ctx context.Context, r *Restic, snap *Snapshot, j Res
 		if !ok {
 			return nil, fmt.Errorf("%s: нет в снимке", x)
 		}
-		// Путь из снимка: в чужом репозитории мог оказаться любой — восстановление не пишет в каталоги Trassa.
-		if !AllowedPath(x) && !snap.IsDump() {
+		// Путь из снимка: в чужом репозитории мог оказаться любой — восстановление не пишет в каталоги Trassa, а
+		// знаки шаблонов restic (--include) не допускаются: путь только буквальный. Дамп — один файл в корне.
+		if !AllowedPath(x) || strings.ContainsAny(x, "*?[\\") {
 			return nil, fmt.Errorf("%w: %s", ErrPathForbidden, x)
 		}
+		if snap.IsDump() && strings.Count(x, "/") != 1 {
+			return nil, fmt.Errorf("%w: дамп %s не в корне снимка", ErrPathForbidden, x)
+		}
 	}
+	// restic пишет только в каталог помощника (root, 0700); на место (IN_PLACE, OTHER_SERVER) переносятся лишь
+	// выбранные пути — по дескрипторам без ссылок. Узлы снимка вне выбора (в чужом репозитории дерево может не
+	// совпадать с paths снимка) и метаданные каталогов-предков на систему не попадают.
+	staging := filepath.Join(e.WorkDir, "restore", strings.ToLower(j.OpID))
 	var target string
 	switch p.GetMode() {
 	case agentv1.RestoreMode_RESTORE_MODE_TEMP_DIR:
-		target = filepath.Join(e.WorkDir, "restore", strings.ToLower(j.OpID))
+		target = staging
 	case agentv1.RestoreMode_RESTORE_MODE_IN_PLACE:
 		target = "/"
 	case agentv1.RestoreMode_RESTORE_MODE_OTHER_SERVER:
 		target = p.GetDestPath()
 	}
+	inPlace := target != staging
 	dest := func(x string) string { return filepath.Join(target, x) }
 	nodes, truncated, err := List(ctx, r, snap.ID, maxListNodes)
 	if err != nil {
@@ -151,11 +160,16 @@ func (e *Env) restoreFiles(ctx context.Context, r *Restic, snap *Snapshot, j Res
 			}
 		}
 	}
-	if err := os.MkdirAll(target, 0o700); err != nil {
+	if err := os.MkdirAll(staging, 0o700); err != nil {
 		return nil, err
 	}
-	if free, err := FreeBytes(target); err == nil && free < need+need/20+(64<<20) {
-		return nil, fmt.Errorf("%w: нужно %d байт, свободно %d", ErrNoSpace, need, free)
+	if inPlace {
+		defer os.RemoveAll(staging)
+	}
+	for _, d := range []string{staging, target} {
+		if free, err := FreeBytes(d); err == nil && free < need+need/20+(64<<20) {
+			return nil, fmt.Errorf("%w: %s: нужно %d байт, свободно %d", ErrNoSpace, d, need, free)
+		}
 	}
 	var lc *localCopy
 	if p.GetMode() != agentv1.RestoreMode_RESTORE_MODE_TEMP_DIR && j.Rollback == agentv1.RollbackKind_ROLLBACK_KIND_LOCAL_COPY {
@@ -168,12 +182,16 @@ func (e *Env) restoreFiles(ctx context.Context, r *Restic, snap *Snapshot, j Res
 		}
 		j.log("Сохранена локальная копия заменяемых путей: %d", len(lc.Paths))
 	}
-	var includes []string
-	if !sel.GetAll() {
-		includes = paths
-	}
-	sum, err := Restore(ctx, r, RestoreSpec{Snapshot: snap.ID, Target: target, Includes: includes, Deadline: j.Deadline, Progress: j.Progress})
+	// Выбор — всегда явными буквальными путями, даже «всё»: restic не распакует лишнего.
+	sum, err := Restore(ctx, r, RestoreSpec{Snapshot: snap.ID, Target: staging, Includes: paths, Deadline: j.Deadline, Progress: j.Progress})
 	verr := err
+	if verr == nil && inPlace {
+		for _, x := range paths {
+			if verr = copyBack(filepath.Join(staging, x), dest(x)); verr != nil {
+				break
+			}
+		}
+	}
 	if verr == nil {
 		verr = checkRestored(want, dest)
 	}
@@ -270,7 +288,7 @@ func (e *Env) restoreLocalCopy(op string, lc *localCopy) error {
 	var errs []error
 	for _, c := range lc.Paths {
 		if !c.Existed {
-			if err := os.RemoveAll(c.Path); err != nil {
+			if err := removeNoFollow(c.Path); err != nil {
 				errs = append(errs, err)
 			}
 			continue

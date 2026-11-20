@@ -9,15 +9,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"syscall"
-	"time"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
 )
 
-// treeSize — сумма размеров обычных файлов под path (ссылки не проходятся); нет пути — 0.
+// treeSize — сумма размеров обычных файлов под path (ссылки не проходятся); нет пути — 0. Только оценка места.
 func treeSize(path string) (uint64, error) {
 	var total uint64
 	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
@@ -39,116 +37,152 @@ func treeSize(path string) (uint64, error) {
 	return total, err
 }
 
-// copyTree копирует src в dst с правами, владельцами и временем: ссылки — ссылками (не проходятся), устройства,
-// сокеты и каналы пропускаются (их нет в копиях restic). dst не должен существовать.
+// copyTree копирует src в dst (dst не существует) с правами, владельцами и временем. И чтение, и запись идут
+// относительно дескрипторов каталогов, открытых без ссылок: пользователь, владеющий каталогом на пути, не может
+// подменой компонента на ссылку увести root читать или писать в чужое место. Ссылки копируются ссылками,
+// устройства, сокеты и каналы пропускаются.
 func copyTree(src, dst string) error {
-	// Права и время каталогов — после содержимого: иначе запись внутрь сдвинет время, а 0555 запретит запись.
-	type dirMeta struct {
-		path string
-		info fs.FileInfo
-	}
-	var dirs []dirMeta
-	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, p)
-		if err != nil {
-			return err
-		}
-		to := filepath.Join(dst, rel)
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		switch {
-		case d.IsDir():
-			if err := os.Mkdir(to, 0o700); err != nil {
-				return err
-			}
-			dirs = append(dirs, dirMeta{to, info})
-			return nil
-		case d.Type()&fs.ModeSymlink != 0:
-			target, err := os.Readlink(p)
-			if err != nil {
-				return err
-			}
-			if err := os.Symlink(target, to); err != nil {
-				return err
-			}
-		case d.Type().IsRegular():
-			if err := copyFile(p, to); err != nil {
-				return err
-			}
-		default:
-			return nil
-		}
-		return applyMeta(to, info)
-	})
+	sp, err := fsutil.OpenDirNoFollow(filepath.Dir(src))
 	if err != nil {
 		return err
 	}
-	for i := len(dirs) - 1; i >= 0; i-- {
-		if err := applyMeta(dirs[i].path, dirs[i].info); err != nil {
-			return err
-		}
+	defer unix.Close(sp)
+	dp, err := fsutil.MkdirAllNoFollow(filepath.Dir(dst), 0o755)
+	if err != nil {
+		return err
 	}
-	return nil
+	defer unix.Close(dp)
+	return copyAt(sp, filepath.Base(src), dp, filepath.Base(dst))
 }
 
-// copyFile — содержимое по дескриптору, открытому без ссылок: подмена файла ссылкой во время копии не даёт root
-// прочитать чужой файл (его содержимое вернулось бы потом на место откатом).
-func copyFile(src, dst string) error {
-	in, err := fsutil.OpenNoFollow(src, unix.O_RDONLY)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	if st, err := in.Stat(); err != nil || !st.Mode().IsRegular() {
-		return fmt.Errorf("%s: не обычный файл", src)
-	}
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
-}
+func unixMode(st *unix.Stat_t) uint32 { return uint32(st.Mode) & 0o7777 }
 
-// applyMeta — владелец, права (с особыми битами — после chown) и время изменения; для ссылки — только владелец.
-func applyMeta(p string, info fs.FileInfo) error {
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if ok {
-		if err := os.Lchown(p, int(st.Uid), int(st.Gid)); err != nil && !errors.Is(err, fs.ErrPermission) {
+// copyAt — srcName из каталога sdir в dstName каталога ddir.
+func copyAt(sdir int, srcName string, ddir int, dstName string) error {
+	var st unix.Stat_t
+	if err := unix.Fstatat(sdir, srcName, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	switch uint32(st.Mode) & unix.S_IFMT {
+	case unix.S_IFDIR:
+		sfd, err := unix.Openat(sdir, srcName, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		if err != nil {
 			return err
 		}
-	}
-	if info.Mode()&fs.ModeSymlink != 0 {
+		sf := os.NewFile(uintptr(sfd), srcName)
+		defer sf.Close()
+		if err := unix.Mkdirat(ddir, dstName, 0o700); err != nil {
+			return err
+		}
+		dfd, err := unix.Openat(ddir, dstName, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer unix.Close(dfd)
+		names, err := sf.Readdirnames(-1)
+		if err != nil {
+			return err
+		}
+		for _, n := range names {
+			if err := copyAt(sfd, n, dfd, n); err != nil {
+				return err
+			}
+		}
+		// Права и время каталога — после содержимого и по его дескриптору.
+		var cur unix.Stat_t
+		if err := unix.Fstat(sfd, &cur); err != nil {
+			return err
+		}
+		return applyMetaFd(dfd, &cur)
+	case unix.S_IFREG:
+		sfd, err := unix.Openat(sdir, srcName, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		in := os.NewFile(uintptr(sfd), srcName)
+		defer in.Close()
+		var cur unix.Stat_t
+		if err := unix.Fstat(sfd, &cur); err != nil || uint32(cur.Mode)&unix.S_IFMT != unix.S_IFREG {
+			return fmt.Errorf("%s: не обычный файл", srcName)
+		}
+		dfd, err := unix.Openat(ddir, dstName, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+		if err != nil {
+			return err
+		}
+		out := os.NewFile(uintptr(dfd), dstName)
+		defer out.Close()
+		if _, err := io.Copy(out, in); err != nil {
+			return err
+		}
+		return applyMetaFd(dfd, &cur)
+	case unix.S_IFLNK:
+		buf := make([]byte, 4096)
+		n, err := unix.Readlinkat(sdir, srcName, buf)
+		if err != nil {
+			return err
+		}
+		if err := unix.Symlinkat(string(buf[:n]), ddir, dstName); err != nil {
+			return err
+		}
+		if err := unix.Fchownat(ddir, dstName, int(st.Uid), int(st.Gid), unix.AT_SYMLINK_NOFOLLOW); err != nil && !errors.Is(err, unix.EPERM) {
+			return err
+		}
 		return nil
 	}
-	mode := info.Mode().Perm() | info.Mode()&(fs.ModeSetuid|fs.ModeSetgid|fs.ModeSticky)
-	if err := os.Chmod(p, mode); err != nil {
-		return err
-	}
-	return os.Chtimes(p, time.Now(), info.ModTime())
+	return nil // устройства, сокеты, каналы
 }
 
-// copyBack возвращает копию на место: прежнее содержимое пути удаляется, копия переносится.
+// applyMetaFd — владелец (до прав: chown снимает setuid), права с особыми битами и время — по дескриптору.
+func applyMetaFd(fd int, st *unix.Stat_t) error {
+	if err := unix.Fchown(fd, int(st.Uid), int(st.Gid)); err != nil && !errors.Is(err, unix.EPERM) {
+		return err
+	}
+	if err := unix.Fchmod(fd, unixMode(st)); err != nil {
+		return err
+	}
+	mt := unix.NsecToTimeval(unix.TimespecToNsec(statMtime(st)))
+	return unix.Futimes(fd, []unix.Timeval{mt, mt})
+}
+
+// copyBack возвращает копию на место: прежнее содержимое пути удаляется, копия переносится (renameat) или,
+// на другой файловой системе, копируется. Всё — относительно дескриптора каталога-родителя без ссылок.
 func copyBack(copyPath, dst string) error {
-	if err := os.RemoveAll(dst); err != nil {
+	dp, err := fsutil.MkdirAllNoFollow(filepath.Dir(dst), 0o755)
+	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	defer unix.Close(dp)
+	name := filepath.Base(dst)
+	if err := fsutil.RemoveAllAt(dp, name); err != nil {
 		return err
 	}
-	if err := os.Rename(copyPath, dst); err == nil {
+	sp, err := fsutil.OpenDirNoFollow(filepath.Dir(copyPath))
+	if err != nil {
+		return err
+	}
+	defer unix.Close(sp)
+	if err := unix.Renameat(sp, filepath.Base(copyPath), dp, name); err == nil {
 		return nil
+	} else if !errors.Is(err, unix.EXDEV) {
+		return fmt.Errorf("возврат %s: %w", dst, err)
 	}
-	if err := copyTree(copyPath, dst); err != nil {
+	if err := copyAt(sp, filepath.Base(copyPath), dp, name); err != nil {
 		return fmt.Errorf("возврат %s: %w", dst, err)
 	}
 	return nil
 }
+
+// removeNoFollow — удалить path со всем содержимым через дескриптор родителя без ссылок; нет пути — не ошибка.
+func removeNoFollow(path string) error {
+	dp, err := fsutil.OpenDirNoFollow(filepath.Dir(path))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer unix.Close(dp)
+	return fsutil.RemoveAllAt(dp, filepath.Base(path))
+}
+
+func statMtime(st *unix.Stat_t) unix.Timespec { return st.Mtim }

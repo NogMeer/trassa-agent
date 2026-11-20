@@ -186,3 +186,70 @@ func RemoveNoFollow(path string) error {
 	}
 	return unix.Fsync(dir)
 }
+
+// OpenDirNoFollow — дескриптор каталога path, пройденного от «/» без ссылок (закрывает вызывающий).
+func OpenDirNoFollow(path string) (int, error) { return openDirNoFollow(path) }
+
+// MkdirAllNoFollow — каталог path и недостающие предки (perm), пройденные без ссылок: подмена компонента
+// ссылкой даёт ошибку, а не каталог в чужом месте. Возвращает дескриптор path (закрывает вызывающий).
+func MkdirAllNoFollow(path string, perm os.FileMode) (int, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return -1, fmt.Errorf("путь %q не абсолютный или не очищен", path)
+	}
+	fd, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return -1, err
+	}
+	for _, c := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
+		if c == "" {
+			continue
+		}
+		if err := unix.Mkdirat(fd, c, uint32(perm)); err != nil && !errors.Is(err, unix.EEXIST) {
+			unix.Close(fd)
+			return -1, err
+		}
+		next, err := unix.Openat(fd, c, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		unix.Close(fd)
+		if err != nil {
+			if errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR) {
+				return -1, fmt.Errorf("%w: %s (%s)", ErrSymlink, path, c)
+			}
+			return -1, err
+		}
+		fd = next
+	}
+	return fd, nil
+}
+
+// RemoveAllAt — удалить name в каталоге dirfd со всем содержимым, не проходя ссылки (сами ссылки удаляются);
+// нет name — не ошибка. Каждый уровень открывается O_NOFOLLOW от уже открытого родителя.
+func RemoveAllAt(dirfd int, name string) error {
+	if name == "" || name == "." || name == ".." || strings.ContainsRune(name, '/') {
+		return fmt.Errorf("имя %q", name)
+	}
+	err := unix.Unlinkat(dirfd, name, 0)
+	if err == nil || errors.Is(err, unix.ENOENT) {
+		return nil
+	}
+	if !errors.Is(err, unix.EISDIR) && !errors.Is(err, unix.EPERM) {
+		return err
+	}
+	fd, err := unix.Openat(dirfd, name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return err
+	}
+	d := os.NewFile(uintptr(fd), name)
+	names, err := d.Readdirnames(-1)
+	if err != nil {
+		d.Close()
+		return err
+	}
+	for _, n := range names {
+		if err := RemoveAllAt(fd, n); err != nil {
+			d.Close()
+			return err
+		}
+	}
+	d.Close()
+	return unix.Unlinkat(dirfd, name, unix.AT_REMOVEDIR)
+}

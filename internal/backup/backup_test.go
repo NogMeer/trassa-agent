@@ -406,7 +406,7 @@ func TestRestoreInPlaceRollsBack(t *testing.T) {
 `, 0)
 	// restore пишет файл не того размера (как оборванное восстановление).
 	f.on("restore", `{"message_type":"summary","total_files":1,"files_restored":1,"total_bytes":8,"bytes_restored":3}`+"\n", 0,
-		`printf bad > '`+data+`/config'`)
+		`t=""; prev=""; for a in "$@"; do [ "$prev" = "--target" ] && t="$a"; prev="$a"; done; mkdir -p "$t`+data+`"; printf bad > "$t`+data+`/config"`)
 	e := &Env{WorkDir: filepath.Join(root, "work")}
 	op := "01a1f4b6-f2f2-7e66-85b4-000000000001"
 	out, err := e.Restore(context.Background(), r, RestoreJob{OpID: op, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_LOCAL_COPY,
@@ -419,15 +419,19 @@ func TestRestoreInPlaceRollsBack(t *testing.T) {
 	}
 	// Удачное восстановление: файл нужного размера.
 	f.on("restore", `{"message_type":"summary","total_files":1,"files_restored":1,"total_bytes":8,"bytes_restored":8}`+"\n", 0,
-		`printf restored > '`+data+`/config'`)
+		`t=""; prev=""; for a in "$@"; do [ "$prev" = "--target" ] && t="$a"; prev="$a"; done; mkdir -p "$t`+data+`"; printf restored > "$t`+data+`/config"`)
 	op2 := "01a1f4b6-f2f2-7e66-85b4-000000000002"
 	out, err = e.Restore(context.Background(), r, RestoreJob{OpID: op2, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_LOCAL_COPY,
 		Params: &agentv1.BackupRestoreParams{PlanId: planID, SnapshotId: "dddddddd", Mode: agentv1.RestoreMode_RESTORE_MODE_IN_PLACE, Selection: &agentv1.RestoreSelection{All: true}}})
 	if err != nil || out.Result.GetRestoredBytes() != 8 || out.Result.GetPath() != "/" {
 		t.Fatalf("%+v %v", out, err)
 	}
-	if !strings.Contains(f.calls()[len(f.calls())-1], "restore dddddddd44 --target /") {
-		t.Fatalf("%v", f.calls())
+	// restic распаковывает в каталог помощника и только выбранные пути; на место их переносит помощник.
+	if c := f.calls()[len(f.calls())-1]; !strings.Contains(c, "restore dddddddd44 --target "+e.WorkDir+"/restore/") || !strings.Contains(c, "--include "+data) {
+		t.Fatalf("%s", c)
+	}
+	if _, err := os.Stat(filepath.Join(e.WorkDir, "restore", op2)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("каталог распаковки остался")
 	}
 	// Копия хранится 72 часа: потом её убирает задача помощника.
 	if _, err := os.Stat(e.LocalCopyDir(op2)); err != nil {
@@ -644,5 +648,59 @@ func TestInstallRclone(t *testing.T) {
 	}
 	if st, _ := os.Stat(p); st.Mode().Perm() != 0o755 {
 		t.Fatalf("права %v", st.Mode())
+	}
+}
+
+// Откат и перенос на место не идут по ссылкам: каталог-родитель, подменённый ссылкой, — отказ, чужое не тронуто.
+func TestCopyBackRefusesSymlinkedParent(t *testing.T) {
+	root := tmp(t)
+	cp := filepath.Join(root, "copy", "site")
+	_ = os.MkdirAll(cp, 0o755)
+	_ = os.WriteFile(filepath.Join(cp, "ld.so.preload"), []byte("/home/x.so"), 0o644)
+	victim := filepath.Join(root, "etc")
+	_ = os.MkdirAll(victim, 0o755)
+	home := filepath.Join(root, "home")
+	if err := os.Symlink(victim, home); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyBack(cp, filepath.Join(home, "site")); err == nil {
+		t.Fatal("перенос через каталог-ссылку прошёл")
+	}
+	if _, err := os.Stat(filepath.Join(victim, "site")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("запись ушла за ссылку")
+	}
+	// Удаление «созданного восстановлением» тоже не уходит за ссылку.
+	_ = os.WriteFile(filepath.Join(victim, "keep"), []byte("x"), 0o644)
+	if err := removeNoFollow(filepath.Join(home, "keep")); err == nil {
+		t.Fatal("удаление через каталог-ссылку прошло")
+	}
+	if _, err := os.Stat(filepath.Join(victim, "keep")); err != nil {
+		t.Fatal("чужой файл удалён")
+	}
+	// Ссылка внутри удаляемого дерева удаляется сама, её цель цела.
+	tree := filepath.Join(root, "tree")
+	_ = os.MkdirAll(tree, 0o755)
+	_ = os.Symlink(victim, filepath.Join(tree, "link"))
+	if err := removeNoFollow(tree); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(victim, "keep")); err != nil {
+		t.Fatal("удаление прошло по ссылке внутри дерева")
+	}
+}
+
+// Пути снимка с шаблонами restic и дампы не в корне — отказ до восстановления.
+func TestRestoreRejectsPatternPaths(t *testing.T) {
+	f := newFake(t)
+	r := f.restic("rest:https://bk.example/p", nil)
+	f.on("snapshots", `[{"id":"abababab11","time":"2026-11-20T10:00:00Z","paths":["/srv/*"],"tags":["trassa","source=x","kind=path"]},
+{"id":"cdcdcdcd22","time":"2026-11-20T10:00:00Z","paths":["/../../etc/x.pgdump"],"tags":["trassa","source=db","kind=postgres","database=app"]}]`, 0)
+	e := &Env{WorkDir: filepath.Join(tmp(t), "work")}
+	for _, id := range []string{"abababab", "cdcdcdcd"} {
+		_, err := e.Restore(context.Background(), r, RestoreJob{OpID: "01a1f4b6-f2f2-7e66-85b4-000000000009",
+			Params: &agentv1.BackupRestoreParams{SnapshotId: id, Mode: agentv1.RestoreMode_RESTORE_MODE_TEMP_DIR, Selection: &agentv1.RestoreSelection{All: true}}})
+		if !errors.Is(err, ErrPathForbidden) {
+			t.Errorf("%s: %v", id, err)
+		}
 	}
 }
