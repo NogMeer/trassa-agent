@@ -152,7 +152,7 @@ jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/fw-apply.json" >/dev/nul
 x test -s "$STUB/fw-await.json" || fail "firewall.apply прошёл без ожидания подтверждения"
 jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/fw-revert.json" >/dev/null || fail "возврат firewall: $(cat "$ctx/fw-revert.json")"
 ! x nft list table inet trassa >/dev/null 2>&1 || fail "таблица inet trassa осталась после возврата"
-x test ! -e /etc/trassa/firewall.nft -a ! -e /etc/systemd/system/trassa-firewall.service || fail "файлы firewall Trassa остались"
+x test ! -e /etc/trassa/firewall.nft -a ! -e /etc/trassa/firewall.confirmed.nft -a ! -e /etc/systemd/system/trassa-firewall.service || fail "файлы firewall Trassa остались"
 x systemctl is-active --quiet trassa-agent.service || fail "агент упал после firewall"
 echo "firewall: план, отказ запирающему набору, применение, подтверждение и возврат"
 

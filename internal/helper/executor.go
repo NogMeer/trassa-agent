@@ -499,7 +499,7 @@ func (r *run) perform(ctx context.Context) *agentv1.OperationResult {
 			return fail
 		}
 		res := r.succeeded("")
-		res.Preview = p
+		res.Preview = redactPreview(p)
 		return res
 	}
 	r.phase = agentv1.OperationPhase_OPERATION_PHASE_APPLY
@@ -563,6 +563,15 @@ func (e *Executor) Confirm(ctx context.Context, raw []byte) ([]byte, string) {
 	res.FinishedAtMs = e.now().UnixMilli()
 	if err := e.saveResult(st, &res); err != nil {
 		return nil, CodeInternal
+	}
+	// Набор межсетевого экрана Trassa подтверждён (firewall.apply или возврат его точки): при загрузке системы
+	// служба берёт только подтверждённый набор, неподтверждённый до старта помощника не действует.
+	if e.Security != nil {
+		if m, _ := e.Rollback.Load(op); m != nil && m.State.NftFile != "" {
+			if err := security.ConfirmFirewall(e.Security); err != nil {
+				e.log().Error("helper: подтверждённый набор межсетевого экрана не записан", "err", err)
+			}
+		}
 	}
 	// Ключи WireGuard, отправленные в отставку ротацией или удалением, — только после подтверждения: до него
 	// откат должен их найти.
@@ -749,4 +758,28 @@ func (e *Executor) disarmAuto(ctx context.Context, op string) {
 	if err := e.Auto.Delete(op); err != nil {
 		e.log().Error("helper: запись автооткатa не удалена", "op", op, "err", err)
 	}
+}
+
+// maxPreviewDiff — предел разницы одного файла в предпросмотре (FileChange.diff).
+const maxPreviewDiff = 64 << 10
+
+// redactPreview — предпросмотр уходит в панель: разницы файлов, пути, сводка и заметки проходят redact (в
+// конфигурации может оказаться пароль или ключ), разница обрезается до 64 КиБ по границе символа.
+func redactPreview(p *agentv1.Preview) *agentv1.Preview {
+	if p == nil {
+		return nil
+	}
+	p.Summary = redact.String(p.GetSummary())
+	for i, n := range p.GetNotes() {
+		p.Notes[i] = redact.String(n)
+	}
+	for _, f := range p.GetFiles() {
+		f.Path = redact.String(f.GetPath())
+		d := redact.Text(f.GetDiff())
+		if len(d) > maxPreviewDiff {
+			d = strings.ToValidUTF8(d[:maxPreviewDiff], "") + "\n… (разница обрезана)"
+		}
+		f.Diff = d
+	}
+	return p
 }

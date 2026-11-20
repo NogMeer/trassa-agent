@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/proto"
 
@@ -359,5 +360,29 @@ func TestUninstallSchedules(t *testing.T) {
 	s := f.services.scheduled[0]
 	if s.unit != "trassa-uninstall" || s.argv[1] != "uninstall" || s.argv[2] != "--purge-rollback" {
 		t.Fatalf("%+v", s)
+	}
+}
+
+// Предпросмотр уходит в панель без секретов и не больше 64 КиБ на файл.
+func TestRedactPreview(t *testing.T) {
+	big := strings.Repeat("+ж\n", 40<<10)
+	p := redactPreview(&agentv1.Preview{
+		Summary: "token=abc123", Notes: []string{"password: hunter2"},
+		Files: []*agentv1.FileChange{
+			{Path: "/etc/app.conf", Diff: "-api_key=old\n+api_key=new\n+-----BEGIN OPENSSH PRIVATE KEY-----\n+AAAA\n+-----END OPENSSH PRIVATE KEY-----\n"},
+			{Path: "/etc/big.conf", Diff: big},
+		},
+	})
+	all := p.GetSummary() + strings.Join(p.GetNotes(), "") + p.GetFiles()[0].GetDiff()
+	for _, secret := range []string{"abc123", "hunter2", "old", "new", "AAAA"} {
+		if strings.Contains(all, secret) {
+			t.Errorf("в предпросмотре %q: %s", secret, all)
+		}
+	}
+	if d := p.GetFiles()[1].GetDiff(); len(d) > maxPreviewDiff+64 || !utf8.ValidString(d) || !strings.HasSuffix(d, "(разница обрезана)") {
+		t.Fatalf("обрезка: %d байт", len(d))
+	}
+	if redactPreview(nil) != nil {
+		t.Fatal("nil")
 	}
 }

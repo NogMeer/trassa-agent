@@ -27,7 +27,9 @@ import (
 // nftables.service не трогаются.
 const (
 	FirewallFile = "/etc/trassa/firewall.nft"
-	FirewallUnit = "trassa-firewall.service"
+	// FirewallConfirmedFile — набор, связь после которого подтверждена; его загружает служба при старте.
+	FirewallConfirmedFile = "/etc/trassa/firewall.confirmed.nft"
+	FirewallUnit          = "trassa-firewall.service"
 	// FirewallUnitFile — служба загружает набор при старте системы.
 	FirewallUnitFile = "/etc/systemd/system/" + FirewallUnit
 )

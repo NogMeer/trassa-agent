@@ -27,10 +27,13 @@ After=nftables.service
 Before=network-pre.target
 Wants=network-pre.target
 
+# Только подтверждённый набор: неподтверждённый (ждёт связи) после перезагрузки не загружается.
+ConditionPathExists=/etc/trassa/firewall.confirmed.nft
+
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/sbin/nft -f /etc/trassa/firewall.nft
+ExecStart=/usr/sbin/nft -f /etc/trassa/firewall.confirmed.nft
 ExecStop=/usr/sbin/nft delete table inet trassa
 
 [Install]
@@ -232,4 +235,18 @@ func PlanFirewallApply(ctx context.Context, sys *System, p *agentv1.FirewallAppl
 			return nil
 		},
 	}, nil
+}
+
+// ConfirmFirewall — после подтверждения связи: подтверждённый набор (его загружает служба при старте) равен
+// текущему файлу набора; файла нет (таблица снята) — подтверждённого тоже нет.
+func ConfirmFirewall(sys *System) error {
+	src, dst := sys.path(FirewallFile), sys.path(FirewallConfirmedFile)
+	raw, err := fsutil.ReadLimited(src, 1<<20)
+	if errors.Is(err, os.ErrNotExist) {
+		return fsutil.RemoveSync(dst)
+	}
+	if err != nil {
+		return err
+	}
+	return fsutil.WriteFileAtomic(dst, raw, 0o600, fsutil.Keep)
 }

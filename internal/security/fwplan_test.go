@@ -190,3 +190,28 @@ func TestImportUfw(t *testing.T) {
 }
 
 func itoa(n uint32) string { return strconv.FormatUint(uint64(n), 10) }
+
+// Подтверждённый набор — копия текущего; набора нет — подтверждённого нет. Служба грузит только подтверждённый.
+func TestConfirmFirewall(t *testing.T) {
+	sys := build(t, tree{"etc/trassa/firewall.nft": "table inet trassa {}\n"})
+	if err := ConfirmFirewall(sys); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(sys.path(FirewallConfirmedFile))
+	if err != nil || string(raw) != "table inet trassa {}\n" {
+		t.Fatalf("%q %v", raw, err)
+	}
+	if err := os.Remove(sys.path(FirewallFile)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ConfirmFirewall(sys); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(sys.path(FirewallConfirmedFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("подтверждённый набор остался")
+	}
+	if !strings.Contains(firewallUnit, "ExecStart=/usr/sbin/nft -f "+FirewallConfirmedFile+"\n") ||
+		!strings.Contains(firewallUnit, "ConditionPathExists="+FirewallConfirmedFile+"\n") {
+		t.Fatal("служба грузит не подтверждённый набор")
+	}
+}
