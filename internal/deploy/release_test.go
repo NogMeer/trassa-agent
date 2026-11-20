@@ -191,6 +191,15 @@ func (fd *fakeDocker) serve(w http.ResponseWriter, r *http.Request) {
 			delete(fd.containers, parts[1])
 		}
 		w.WriteHeader(http.StatusNoContent)
+	case strings.HasPrefix(p, "/images/") && strings.HasSuffix(p, "/push"):
+		fd.auth = append(fd.auth, r.Header.Get("X-Registry-Auth"))
+		if fd.pullErr != "" {
+			_, _ = fmt.Fprintf(w, "{\"error\":%q}\n", fd.pullErr)
+			return
+		}
+		_, _ = w.Write([]byte("{\"status\":\"Pushed\"}\n{\"aux\":{\"Tag\":\"x\",\"Digest\":\"sha256:" + strings.Repeat("f", 64) + "\",\"Size\":10}}\n"))
+	case strings.HasPrefix(p, "/containers/buildx_buildkit_"):
+		_, _ = w.Write([]byte(`{"State":{"OOMKilled":false}}`))
 	case strings.HasPrefix(p, "/images/") && strings.HasSuffix(p, "/json"):
 		ref := strings.TrimSuffix(strings.TrimPrefix(p, "/images/"), "/json")
 		if _, ok := fd.images[ref]; !ok {

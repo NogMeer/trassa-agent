@@ -219,6 +219,12 @@ func (c *Client) TerminalRenew(ctx context.Context, signed []byte) error {
 	return err
 }
 
+// Cancel — передать подписанную отмену релиза или сборки; отказ — код помощника (CANCEL_TOO_LATE и др.).
+func (c *Client) Cancel(ctx context.Context, signed []byte) error {
+	_, err := c.call(ctx, Request{Method: MethodCancel, Signed: signed}, KindOK)
+	return err
+}
+
 // TerminalClose — закрыть терминал (простой, клиент закрыл): сужение доступа, подпись не нужна.
 func (c *Client) TerminalClose(ctx context.Context, sessionID string, reason int32) error {
 	_, err := c.call(ctx, Request{Method: MethodTerminalClose, SessionID: sessionID, Reason: reason}, KindOK)

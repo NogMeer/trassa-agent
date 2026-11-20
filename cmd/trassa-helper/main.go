@@ -343,5 +343,5 @@ func wgEnv(p config.Paths) *wireguard.Env {
 func deployEnv(p config.Paths) *deploy.Env {
 	return &deploy.Env{Root: "/", Docker: &dockerapi.Client{}, Run: backup.RunCommand,
 		Stage: func(op string) string { return helper.StageDir(p, op) }, StateDir: filepath.Join(p.StateDir, "deploy"),
-		AppsDir: filepath.Join(p.StateDir, "apps")}
+		AppsDir: filepath.Join(p.StateDir, "apps"), BuildDir: filepath.Join(p.StateDir, "build")}
 }

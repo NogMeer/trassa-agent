@@ -15,6 +15,8 @@ import (
 const (
 	ContextOperation = "trassa-operation-v1"
 	ContextConfirm   = "trassa-confirm-v1"
+	// ContextCancel — отмена релиза или сборки (E17, SignedCancel).
+	ContextCancel = "trassa-cancel-v1"
 )
 
 // PanelKey — открытый ключ подписи панели. Ключей в агенте один или два (ротация, E26).

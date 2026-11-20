@@ -33,6 +33,7 @@ const (
 	// Терминал (E16): продление по подписанному SignedTerminalRenew и закрытие (сужение — без подписи).
 	MethodTerminalRenew = "terminal.renew"
 	MethodTerminalClose = "terminal.close"
+	MethodCancel        = "deploy.cancel"
 )
 
 // Виды ответных кадров.

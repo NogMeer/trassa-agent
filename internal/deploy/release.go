@@ -412,6 +412,16 @@ func (e *Env) Release(ctx context.Context, j ReleaseJob) (*agentv1.DeployRelease
 			res.PreviousReleaseId = c.Labels[LabelRelease]
 		}
 	}
+	for _, c := range old {
+		if c.Labels[LabelRelease] != p.GetReleaseId() {
+			continue
+		}
+		// Остаток прерванной попытки того же релиза убирается; работающий релиз не пересоздаётся.
+		if c.State == "running" && c.Labels["trassa.role"] == "" {
+			return res, false, fmt.Errorf("релиз %s уже работает", p.GetReleaseId())
+		}
+		_ = e.remove(ctx, c.ID)
+	}
 	step(agentv1.DeployStep_DEPLOY_STEP_PULL, 0)
 	if err := e.pull(ctx, p.GetImageRef(), auth, secrets); err != nil {
 		res.FailedStep = agentv1.DeployStep_DEPLOY_STEP_PULL
@@ -442,19 +452,10 @@ func (e *Env) Release(ctx context.Context, j ReleaseJob) (*agentv1.DeployRelease
 	}
 	port, err := e.freePort(ctx)
 	if err != nil {
+		res.FailedStep = agentv1.DeployStep_DEPLOY_STEP_START
 		return res, false, err
 	}
 	name := ContainerName(p.GetAppId(), p.GetReleaseId())
-	for _, c := range old {
-		if c.Labels[LabelRelease] != p.GetReleaseId() {
-			continue
-		}
-		// Остаток прерванной попытки того же релиза убирается; работающий релиз не пересоздаётся.
-		if c.State == "running" && c.Labels["trassa.role"] == "" {
-			return res, false, fmt.Errorf("релиз %s уже работает", p.GetReleaseId())
-		}
-		_ = e.remove(ctx, c.ID)
-	}
 	step(agentv1.DeployStep_DEPLOY_STEP_START, 0)
 	id, err := e.create(ctx, name, e.containerSpec(p, env, port, nil))
 	if err != nil {
@@ -477,6 +478,10 @@ func (e *Env) Release(ctx context.Context, j ReleaseJob) (*agentv1.DeployRelease
 		return fail(agentv1.DeployStep_DEPLOY_STEP_HEALTHCHECK, err)
 	}
 	step(agentv1.DeployStep_DEPLOY_STEP_SWITCH, 0)
+	// Отмена, пришедшая до SWITCH, видна здесь; после отметки SWITCH помощник её уже не принимает.
+	if err := ctx.Err(); err != nil {
+		return fail(agentv1.DeployStep_DEPLOY_STEP_SWITCH, err)
+	}
 	hash, err := e.switchRoutes(ctx, p, fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return fail(agentv1.DeployStep_DEPLOY_STEP_SWITCH, err)

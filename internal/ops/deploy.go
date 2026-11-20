@@ -20,6 +20,7 @@ const (
 	TypeDeployControl   = "deploy.control"
 	TypeDeployRemove    = "deploy.remove"
 	TypeDeployPrune     = "deploy.images.prune"
+	TypeDeployBuild     = "deploy.build"
 )
 
 func deployCoded(err error) error {
@@ -89,6 +90,14 @@ func deploySpecs() []Spec {
 			Type: TypeDeployRemove, Class: Destructive, Rollback: none, Long: true, Queue: QueueDeploy,
 			match:    func(p *agentv1.OperationParams) bool { return p.GetDeployRemove() != nil },
 			Validate: func(b *agentv1.OperationBody) error { return deploy.ValidateRemove(b.GetParams().GetDeployRemove()) },
+		},
+		{
+			// Рабочие контейнеры сборка не трогает: откатывать нечего, каталог сборки удаляется в любом исходе.
+			Type: TypeDeployBuild, Class: Change, Rollback: none, Long: true, Queue: QueueDeploy,
+			match: func(p *agentv1.OperationParams) bool { return p.GetDeployBuild() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				return deployCoded(deploy.ValidateBuild(b.GetParams().GetDeployBuild(), b.GetIssuedAtMs()))
+			},
 		},
 		{
 			Type: TypeDeployPrune, Class: Change, Rollback: none, Long: true, Queue: QueueDeploy,

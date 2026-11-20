@@ -31,6 +31,7 @@ func (e *Executor) deployHandlers() map[string]handler {
 		ops.TypeDeployControl:   {apply: e.applyDeployControl},
 		ops.TypeDeployRemove:    {apply: e.applyDeployRemove},
 		ops.TypeDeployPrune:     {apply: e.applyDeployPrune},
+		ops.TypeDeployBuild:     {apply: e.applyDeployBuild},
 	}
 }
 
@@ -174,16 +175,23 @@ func (e *Executor) runRelease(ctx context.Context, r *run, p *agentv1.DeployRele
 	}
 	ctx, cancel := context.WithDeadline(ctx, time.UnixMilli(p.GetDeadlineMs()))
 	defer cancel()
+	ctx, step, untrack := e.trackCancel(ctx, r.body.GetOperationId(), r.deployProgress(p.GetReleaseId()))
+	defer untrack()
 	job := deploy.ReleaseJob{
-		Params: p, Open: &deploy.Opener{Key: e.Secrets, Body: r.body, App: p.GetAppId()},
-		Step: r.deployProgress(p.GetReleaseId()),
-		Log:  func(s string) { r.log(agentv1.LogStream_LOG_STREAM_STDERR, s) },
+		Params: p, Open: &deploy.Opener{Key: e.Secrets, Body: r.body, App: p.GetAppId()}, Step: step,
+		Log: func(s string) { r.log(agentv1.LogStream_LOG_STREAM_STDERR, s) },
 	}
 	out, rolledBack, err := env.Release(ctx, job)
 	var res *agentv1.OperationResult
 	switch {
 	case err == nil:
 		res = r.succeeded("")
+	case cancelled(ctx) && (rolledBack || untouched(out)):
+		// Отмена до SWITCH: новый контейнер убран, трафик на прежнем релизе.
+		res = r.rolledBack(CodeCancelled, "релиз отменён: "+err.Error())
+	case cancelled(ctx):
+		// RECREATE: прежний релиз уже остановлен — вернуть нечего.
+		res = r.failed(CodeCancelled, "релиз отменён после остановки прежнего: "+err.Error())
 	case rolledBack:
 		res = r.rolledBack(releaseCode(ctx, err), err.Error())
 	default:
@@ -200,6 +208,8 @@ func releaseCode(ctx context.Context, err error) string {
 	for _, known := range []error{
 		deploy.ErrRegistry, deploy.ErrRegistryAuth, deploy.ErrImageGone, deploy.ErrPreDeploy, deploy.ErrHealthcheck,
 		deploy.ErrNoFreePort, deploy.ErrReleaseTimeout, deploy.ErrComposeDenied, deploy.ErrAppMissing,
+		deploy.ErrBuildOOM, deploy.ErrBuildUnsupported, deploy.ErrGitDenied, deploy.ErrGitCommit, deploy.ErrRepoAddress,
+		deploy.ErrDeadline, deploy.ErrBuildFailed, deploy.ErrChecksum, deploy.ErrToolUnknown,
 	} {
 		if errors.Is(err, known) {
 			return known.Error()
@@ -264,4 +274,47 @@ func (e *Executor) applyDeployPrune(ctx context.Context, r *run) *agentv1.Operat
 	res := r.succeeded("")
 	res.Data = &agentv1.OperationResult_DeployImagesPrune{DeployImagesPrune: out}
 	return res
+}
+
+func (e *Executor) applyDeployBuild(ctx context.Context, r *run) *agentv1.OperationResult {
+	env, fail := e.deployRunEnv(r)
+	if fail != nil {
+		return fail
+	}
+	if e.Secrets == nil {
+		return r.failed(CodeDeployUnavailable, "нет ключа секретов помощника")
+	}
+	p := r.body.GetParams().GetDeployBuild()
+	ctx, cancel := context.WithDeadline(ctx, time.UnixMilli(p.GetDeadlineMs()))
+	defer cancel()
+	ctx, step, untrack := e.trackCancel(ctx, r.body.GetOperationId(), r.deployProgress(p.GetReleaseId()))
+	defer untrack()
+	out, err := env.Build(ctx, deploy.BuildJob{
+		Params: p, Open: &deploy.Opener{Key: e.Secrets, Body: r.body, App: p.GetAppId()}, OpID: r.body.GetOperationId(),
+		Step: step,
+		Log:  func(s string) { r.log(agentv1.LogStream_LOG_STREAM_STDOUT, s) },
+	})
+	res := r.succeeded("")
+	if err != nil && cancelled(ctx) {
+		res = r.rolledBack(CodeCancelled, "сборка отменена")
+	} else if err != nil {
+		code := releaseCode(ctx, err)
+		if code == deploy.ErrReleaseTimeout.Error() {
+			code = deploy.ErrDeadline.Error()
+		}
+		res = r.failed(code, err.Error())
+	}
+	if out != nil {
+		res.Data = &agentv1.OperationResult_DeployBuild{DeployBuild: out}
+	}
+	return res
+}
+
+// untouched — релиз остановился до создания контейнеров: на сервере ничего не изменилось.
+func untouched(out *agentv1.DeployReleaseResult) bool {
+	switch out.GetFailedStep() {
+	case agentv1.DeployStep_DEPLOY_STEP_UNSPECIFIED, agentv1.DeployStep_DEPLOY_STEP_PULL, agentv1.DeployStep_DEPLOY_STEP_PRE_DEPLOY:
+		return true
+	}
+	return false
 }

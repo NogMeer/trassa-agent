@@ -387,6 +387,12 @@ func ValidateBuild(p *agentv1.DeployBuildParams, issuedAtMs int64) error {
 	if err := checkEnv(p.GetBuildSecrets(), p.GetBuildArgs()); err != nil {
 		return err
 	}
+	// BUILDKIT_* меняют фронтенд и поведение BuildKit (BUILDKIT_SYNTAX — чужой образ фронтенда): только агент.
+	for k := range p.GetBuildArgs() {
+		if strings.HasPrefix(strings.ToUpper(k), "BUILDKIT_") {
+			return fmt.Errorf("build_args: %s задаёт агент", k)
+		}
+	}
 	if m := p.GetMemoryLimitMb(); m < 256 || m > 65536 {
 		return errors.New("memory_limit_mb: 256–65536")
 	}

@@ -210,6 +210,10 @@ func (e *Env) releaseCompose(ctx context.Context, j ReleaseJob) (*agentv1.Deploy
 		break
 	}
 	step(agentv1.DeployStep_DEPLOY_STEP_SWITCH, 0)
+	if err := ctx.Err(); err != nil {
+		res.FailedStep = agentv1.DeployStep_DEPLOY_STEP_SWITCH
+		return res, restore(), err
+	}
 	hash, err := e.composeRoutes(ctx, p, ports)
 	if err != nil {
 		res.FailedStep = agentv1.DeployStep_DEPLOY_STEP_SWITCH

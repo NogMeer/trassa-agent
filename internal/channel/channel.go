@@ -441,8 +441,9 @@ func (a *Agent) readLoop(ctx context.Context, c *conn) error {
 			r := p.TerminalRenew
 			go a.terminalRenew(context.WithoutCancel(ctx), r)
 		case *agentv1.GatewayMessage_Cancel:
-			// Отмена релиза (E17): операций деплоя в этой версии нет.
-			a.cfg.Log.Debug("отмена: операций деплоя нет")
+			// Отмена релиза или сборки (E17): подпись, сроки и шаг проверяет помощник.
+			r := p.Cancel
+			go a.cancelOperation(context.WithoutCancel(ctx), r)
 		case *agentv1.GatewayMessage_Close:
 			return closeErr(p.Close)
 		case *agentv1.GatewayMessage_Subscribe, *agentv1.GatewayMessage_Unsubscribe:
@@ -482,7 +483,8 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 	}
 	stageTools := body.GetType() == ops.TypeBackupInit || body.GetType() == ops.TypeBackupTargetEnsure ||
 		(body.GetType() == ops.TypeBackupRestore && body.GetParams().GetBackupRestore().GetRestic() != nil) ||
-		body.GetType() == ops.TypeDockerEnsure || body.GetType() == ops.TypeProxyEnsure
+		body.GetType() == ops.TypeDockerEnsure || body.GetType() == ops.TypeProxyEnsure ||
+		(body.GetType() == ops.TypeDeployBuild && body.GetParams().GetDeployBuild().GetRailpack() != nil)
 	if stageTools && !body.GetDryRun() {
 		if dir := a.stageBackupTools(context.WithoutCancel(sctx), &body); dir != "" {
 			defer os.RemoveAll(dir)
@@ -556,6 +558,9 @@ func (a *Agent) stageBackupTools(ctx context.Context, b *agentv1.OperationBody) 
 		files[deploy.StagedName(t)] = download{t.GetUrl(), deploy.MaxToolDownload}
 	}
 	if t := b.GetParams().GetProxyEnsure().GetCaddy(); t != nil {
+		files[deploy.StagedName(t)] = download{t.GetUrl(), deploy.MaxToolDownload}
+	}
+	if t := b.GetParams().GetDeployBuild().GetRailpack(); t != nil {
 		files[deploy.StagedName(t)] = download{t.GetUrl(), deploy.MaxToolDownload}
 	}
 	if p := b.GetParams().GetBackupTargetEnsure(); p != nil {

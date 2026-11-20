@@ -109,6 +109,7 @@ type Executor struct {
 	long     map[string]chan struct{}
 	reads    chan struct{}
 	mu       sync.Mutex
+	cancels  map[string]*cancelable
 	running  map[string]chan struct{}
 }
 
@@ -231,6 +232,13 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 		if err := e.TerminalRenew(req.Signed); err != nil {
 			e.log().Warn("helper: продление терминала отклонено", "err", err)
 			_ = send(helperrpc.Response{Kind: helperrpc.KindError, Code: CodeRenewBad})
+			return
+		}
+		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})
+	case helperrpc.MethodCancel:
+		if code := e.Cancel(req.Signed); code != "" {
+			e.log().Warn("helper: отмена отклонена", "code", code)
+			_ = send(helperrpc.Response{Kind: helperrpc.KindError, Code: code})
 			return
 		}
 		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})

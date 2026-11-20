@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -58,6 +60,11 @@ type Env struct {
 	AppsDir  string                 // /var/lib/trassa/apps (решение E17 п. 6)
 	// RouteLock — общая блокировка помощника для долгих операций деплоя (nil — вызывающий уже держит её).
 	RouteLock func(ctx context.Context) (func(), error)
+	BuildDir  string // /var/lib/trassa/build
+	// ExecAs — программа от имени пользователя (git, railpack, buildx); nil — RunCmd.
+	ExecAs     func(ctx context.Context, c Cmd) ([]byte, error)
+	LookupUser func(name string) (*user.User, error)
+	Resolve    func(ctx context.Context, network, host string) ([]netip.Addr, error)
 	// Exec — программа с заданным окружением (compose, git, buildx); nil — RunEnv.
 	Exec func(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
 }
