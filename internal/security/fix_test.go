@@ -169,7 +169,10 @@ func TestPermFixSwapBetweenPlanAndApply(t *testing.T) {
 			}
 		},
 		"файл → другой файл": func(t *testing.T, _, p, _ string) {
-			_ = os.Remove(p)
+			// Прежний файл жив (переименован): иначе Linux отдаст новому тот же inode.
+			if err := os.Rename(p, p+".old"); err != nil {
+				t.Fatal(err)
+			}
 			if err := os.WriteFile(p, []byte("other"), 0o777); err != nil {
 				t.Fatal(err)
 			}

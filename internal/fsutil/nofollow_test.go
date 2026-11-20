@@ -75,8 +75,11 @@ func TestChmodChownNoFollow(t *testing.T) {
 	f, _ := OpenNoFollow(p, unix.O_RDONLY)
 	id, _ := IDOf(f)
 	f.Close()
-	// Подмена другим файлом под тем же именем.
-	_ = os.Remove(p)
+	// Подмена другим файлом под тем же именем. Прежний файл остаётся жив (переименован), иначе Linux отдаст новому
+	// файлу тот же inode.
+	if err := os.Rename(p, p+".old"); err != nil {
+		t.Fatal(err)
+	}
 	write(t, p, "b", 0o666)
 	if err := ChmodChownNoFollow(p, id, 0o644, -1, -1); err == nil || !strings.Contains(err.Error(), "подменён") {
 		t.Fatalf("подмена файлом: %v", err)
