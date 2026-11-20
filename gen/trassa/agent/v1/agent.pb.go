@@ -4279,7 +4279,8 @@ type NetCheckResult struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Reachable bool                   `protobuf:"varint,1,opt,name=reachable,proto3" json:"reachable,omitempty"`
 	LatencyMs uint32                 `protobuf:"varint,2,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
-	// Если не достучался: TIMEOUT, REFUSED, UNRESOLVED, UNREACHABLE, ERROR.
+	// Если не достучался: TIMEOUT, REFUSED, UNRESOLVED, UNREACHABLE, ERROR; FORBIDDEN_TARGET — цель или один из её
+	// адресов loopback, link-local (в том числе 169.254.169.254), unspecified или multicast; соединения не было.
 	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

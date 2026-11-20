@@ -522,6 +522,7 @@ message NetCheckParams {
 message NetCheckResult {
   bool reachable = 1;
   uint32 latency_ms = 2;
-  // Если не достучался: TIMEOUT, REFUSED, UNRESOLVED, UNREACHABLE, ERROR.
+  // Если не достучался: TIMEOUT, REFUSED, UNRESOLVED, UNREACHABLE, ERROR; FORBIDDEN_TARGET — цель или один из её
+  // адресов loopback, link-local (в том числе 169.254.169.254), unspecified или multicast; соединения не было.
   string error = 3;
 }

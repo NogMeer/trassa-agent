@@ -532,9 +532,9 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 					ServiceRestart: &agentv1.ServiceRestartParams{Unit: "ssh.service"}}}),
 				p.sign(upgradeOp, "packages.upgrade", &agentv1.OperationParams{Params: &agentv1.OperationParams_PackagesUpgrade{
 					PackagesUpgrade: &agentv1.PackagesUpgradeParams{Scope: agentv1.UpgradeScope_UPGRADE_SCOPE_SECURITY}}}),
-				// net.check (E07) исполняет сам агент: соединение с sshd контейнера.
+				// net.check (E07) исполняет сам агент: соединение с sshd контейнера по его адресу (loopback запрещён).
 				p.sign(netCheckOp, "net.check", &agentv1.OperationParams{Params: &agentv1.OperationParams_NetCheck{
-					NetCheck: &agentv1.NetCheckParams{Host: "127.0.0.1", Port: 22, TimeoutMs: 2000}}}),
+					NetCheck: &agentv1.NetCheckParams{Host: ownIPv4(), Port: 22, TimeoutMs: 2000}}}),
 			} {
 				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
 					return
@@ -762,4 +762,15 @@ func (p *panel) signFirewallApply(hash string) *agentv1.SignedOperation {
 		Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG, ConfirmWithinSec: 120,
 	})
 	return &agentv1.SignedOperation{Body: body, KeyId: panelKeyID, Signature: ed25519.Sign(p.panel, verify.Input(verify.ContextOperation, body))}
+}
+
+// ownIPv4 — первый адрес IPv4 интерфейса контейнера, не loopback.
+func ownIPv4() string {
+	addrs, _ := net.InterfaceAddrs()
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && !n.IP.IsLoopback() && !n.IP.IsLinkLocalUnicast() {
+			return n.IP.String()
+		}
+	}
+	return "192.0.2.1"
 }

@@ -512,7 +512,20 @@ func TestLogsDelivery(t *testing.T) {
 
 // net.check (E07): исполняет сам агент — проверки 1–6, своё окно nonce, итог без помощника.
 func TestNetCheckLocal(t *testing.T) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	// Адрес интерфейса машины: loopback проверка связи не трогает (FORBIDDEN_TARGET).
+	var ip string
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && !n.IP.IsLoopback() && !n.IP.IsLinkLocalUnicast() {
+				ip = n.IP.String()
+				break
+			}
+		}
+	}
+	if ip == "" {
+		t.Skip("нет адреса IPv4 кроме loopback")
+	}
+	l, err := net.Listen("tcp", net.JoinHostPort(ip, "0"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,8 +554,8 @@ func TestNetCheckLocal(t *testing.T) {
 	id := newIdentity(t)
 	g := newGateway(t, id.PublicKey(), func(ctx context.Context, c *gwConn) {
 		for _, so := range []*agentv1.SignedOperation{
-			sign(opID(1), n, &agentv1.NetCheckParams{Host: "127.0.0.1", Port: port, TimeoutMs: 1000}),
-			sign(opID(2), n, &agentv1.NetCheckParams{Host: "127.0.0.1", Port: port}), // тот же nonce — повтор
+			sign(opID(1), n, &agentv1.NetCheckParams{Host: ip, Port: port, TimeoutMs: 1000}),
+			sign(opID(2), n, &agentv1.NetCheckParams{Host: ip, Port: port}), // тот же nonce — повтор
 			sign(opID(3), []byte("0123456789abcdef"), &agentv1.NetCheckParams{Host: "a b", Port: port}),
 		} {
 			_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: so}})
