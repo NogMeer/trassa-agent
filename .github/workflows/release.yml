@@ -1,0 +1,76 @@
+# Выпуск агента (E05-T29) по тегу vX.Y.Z: сборка на двух исполнителях, сравнение sha256, подпись minisign ключом
+# владельца из секретов, проверка подписи кодом install.sh и только потом публикация. Нет секрета подписи — шаг
+# пропускается с предупреждением и выпуск не публикуется; install.sh и обновление без подписи не работают (R12).
+name: release
+on:
+  push:
+    tags: ["v*.*.*"]
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: Версия из тега
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || { echo "::error::тег $GITHUB_REF_NAME не semver"; exit 1; }
+          echo "VERSION=$v" >>"$GITHUB_ENV"
+      - run: make release VERSION="$VERSION"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-${{ matrix.runner }}
+          path: dist/
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: dist-*
+      - name: Сборки совпали
+        run: |
+          for f in SHA256SUMS trassa-agent-linux-amd64 trassa-agent-linux-arm64 trassa-helper-linux-amd64 trassa-helper-linux-arm64; do
+            cmp "dist-ubuntu-24.04/$f" "dist-ubuntu-24.04-arm/$f"
+          done
+          mv dist-ubuntu-24.04 dist
+          echo "VERSION=${GITHUB_REF_NAME#v}" >>"$GITHUB_ENV"
+      - name: Подпись
+        id: sign
+        env:
+          TRASSA_MINISIGN_KEY: ${{ secrets.TRASSA_MINISIGN_KEY }}
+          TRASSA_MINISIGN_PASSWORD: ${{ secrets.TRASSA_MINISIGN_PASSWORD }}
+        run: |
+          if [ -z "$TRASSA_MINISIGN_KEY" ]; then
+            echo "::warning::Нет секрета TRASSA_MINISIGN_KEY: выпуск $VERSION не подписан и не публикуется (E05-T29)"
+            echo "signed=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          go run ./tools/release-sign -version "$VERSION" dist/SHA256SUMS
+          echo "signed=true" >>"$GITHUB_OUTPUT"
+      - name: Проверка перед публикацией
+        if: steps.sign.outputs.signed == 'true'
+        run: sh scripts/release-gate.sh dist "$VERSION"
+      - name: Публикация
+        if: steps.sign.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "trassa-agent $VERSION" --notes-file - \
+            dist/SHA256SUMS dist/SHA256SUMS.minisig dist/trassa-agent-linux-amd64 dist/trassa-agent-linux-arm64 \
+            dist/trassa-helper-linux-amd64 dist/trassa-helper-linux-arm64 scripts/install.sh <<NOTES
+          Проверка выпуска — раздел «Проверить выпуск» в README.
+          NOTES

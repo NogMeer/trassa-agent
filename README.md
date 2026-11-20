@@ -114,10 +114,31 @@ Trassa не хостинг и не VPN. Серверы остаются ваши
 | `internal/rollback`, `internal/autorollback` | Точка отката и автооткат по таймеру systemd |
 | `internal/update`, `internal/uninstall`, `internal/redact`, `internal/sysinfo` | Обновление по подписи minisign, удаление, очистка секретов в выводе, сведения о системе |
 | [`scripts/install.sh`](scripts/install.sh), [`packaging/systemd/`](packaging/systemd/) | Установщик и службы |
+| `test/stubpanel`, `scripts/ci-matrix.sh`, `tools/release-sign`, `scripts/release-gate.sh` | Матрица ОС в CI на заглушке панели, подпись выпуска и проверка перед публикацией |
 
 Обновление скачивает сетевой процесс; помощник в сеть не выходит, он только проверяет подпись и суммы скачанного и ставит бинарники.
 
-Сборка и проверки: Go 1.26, `make tools`, затем `make check` (генерат protobuf, `go vet`, staticcheck, тесты в обычной сборке и со служебным тегом `testops`, проверка выпускного бинарника). Тестовая операция `test.config_write` есть только в сборке с тегом `testops`; `make release-check` проверяет, что в выпускном бинарнике её нет. Воспроизводимая сборка и подписанные выпуски появятся вместе с первой версией.
+Сборка и проверки: Go 1.26, `make tools`, затем `make check` (генерат protobuf, `go vet`, staticcheck, тесты в обычной сборке и со служебным тегом `testops`, проверка выпускного бинарника). Тестовая операция `test.config_write` есть только в сборке с тегом `testops`; `make release-check` проверяет, что в выпускном бинарнике её нет. В CI на каждый коммит: матрица ОС (Ubuntu 22.04 и 24.04, Debian 12 и 13 на amd64 и arm64 в контейнерах с systemd: установка командой панели, отказ при испорченной подписи, выход на связь, `system.info`, повторная установка, удаление; отчёт — артефакт `matrix-report-*`) и сборка выпуска на двух исполнителях со сравнением `sha256`.
+
+## Проверить выпуск
+
+Выпуск собирается воспроизводимо: из того же тега любой получает те же байты.
+
+```sh
+git clone https://github.com/NogMeer/trassa-agent && cd trassa-agent
+git checkout v1.2.3
+make release VERSION=1.2.3    # нужен Go 1.26+; точную версию компилятора из go.mod он скачает сам (GOTOOLCHAIN=auto)
+diff dist/SHA256SUMS <(curl -fsSL https://github.com/NogMeer/trassa-agent/releases/download/v1.2.3/SHA256SUMS)
+```
+
+Подпись файла `SHA256SUMS` — [minisign](https://jedisct1.github.io/minisign/), ключи — в `TRASSA_RELEASE_KEYS` в [`scripts/install.sh`](scripts/install.sh):
+
+```sh
+minisign -V -P <ключ> -m SHA256SUMS    # доверенный комментарий: trassa-agent 1.2.3
+sha256sum -c SHA256SUMS
+```
+
+Выпуск без подписи не публикуется: `scripts/release-gate.sh` проверяет её тем же кодом и ключами, что `install.sh`. Пока владелец не внёс ключи, список пуст, и установка и обновление намеренно отказывают.
 
 ## Безопасность
 

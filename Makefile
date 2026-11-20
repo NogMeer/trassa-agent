@@ -4,7 +4,7 @@ PROTOC_GEN_GO_VERSION := v1.36.12
 STATICCHECK_VERSION := 2026.2.2
 GOBIN ?= $(shell go env GOPATH)/bin
 
-.PHONY: tools proto proto-check vet staticcheck test build release-check check
+.PHONY: tools proto proto-check vet staticcheck test build release-check release check
 
 tools:
 	GOBIN=$(GOBIN) go install github.com/bufbuild/buf/cmd/buf@v$(BUF_VERSION)
@@ -50,5 +50,17 @@ release-check: build
 	  if go version -m $$f | grep -q testops; then echo "$$f: собран с testops"; exit 1; fi; \
 	  if grep -qF 'test.config_write' $$f; then echo "$$f: есть test.config_write"; exit 1; fi; \
 	done
+
+# Выпуск (E05-T29): обе архитектуры и SHA256SUMS. Только на toolchain из go.mod — другой компилятор даёт другой хэш.
+# Время в бинарник Go не попадает, публикуются сами файлы без архивов, поэтому SOURCE_DATE_EPOCH закреплять нечего.
+RELEASE_FILES := trassa-agent-linux-amd64 trassa-agent-linux-arm64 trassa-helper-linux-amd64 trassa-helper-linux-arm64
+release:
+	@want=$$(awk '/^toolchain /{ print $$2 }' go.mod); got=$$(go env GOVERSION); \
+	  [ "$$got" = "$$want" ] || { echo "Выпуск собирается только на $$want, сейчас $$got (нужен GOTOOLCHAIN=auto)"; exit 1; }
+	rm -f dist/trassa-*-linux-* dist/SHA256SUMS dist/SHA256SUMS.minisig
+	$(MAKE) release-check GOARCH=amd64
+	$(MAKE) release-check GOARCH=arm64
+	cd dist && if command -v sha256sum >/dev/null; then sha256sum $(RELEASE_FILES); else shasum -a 256 $(RELEASE_FILES); fi >SHA256SUMS
+	cat dist/SHA256SUMS
 
 check: proto-check vet staticcheck test release-check

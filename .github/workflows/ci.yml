@@ -58,3 +58,32 @@ jobs:
           name: matrix-report-${{ matrix.runner }}-${{ strategy.job-index }}
           path: matrix-report/
           if-no-files-found: ignore
+  # Воспроизводимая сборка (E05-T29): выпуск собирается на amd64- и arm64-исполнителе в разных каталогах,
+  # SHA256SUMS обязаны совпасть байт в байт.
+  reproducible-build:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: src-${{ matrix.runner }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: src-${{ matrix.runner }}/go.mod
+      - run: make -C src-${{ matrix.runner }} release VERSION=0.0.0-repro
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sums-${{ matrix.runner }}
+          path: src-${{ matrix.runner }}/dist/SHA256SUMS
+  reproducible:
+    needs: reproducible-build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: sums-*
+      - run: |
+          cat sums-ubuntu-24.04/SHA256SUMS
+          cmp sums-ubuntu-24.04/SHA256SUMS sums-ubuntu-24.04-arm/SHA256SUMS

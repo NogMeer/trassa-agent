@@ -114,10 +114,31 @@ Updates are signed and rolled out in waves. If a new version fails to start, the
 | `internal/rollback`, `internal/autorollback` | Rollback points and timer-based auto-rollback via systemd |
 | `internal/update`, `internal/uninstall`, `internal/redact`, `internal/sysinfo` | minisign-verified updates, uninstall, secret redaction in output, system facts |
 | [`scripts/install.sh`](scripts/install.sh), [`packaging/systemd/`](packaging/systemd/) | Installer and service units |
+| `test/stubpanel`, `scripts/ci-matrix.sh`, `tools/release-sign`, `scripts/release-gate.sh` | CI OS matrix against a stub panel, release signing and the pre-publish check |
 
 Updates are downloaded by the network process; the helper never goes online, it only verifies the signature and checksums of what was downloaded and installs the binaries.
 
-Build and checks: Go 1.26, `make tools`, then `make check` (protobuf codegen, `go vet`, staticcheck, tests in the regular build and with the internal `testops` tag, release binary check). The test operation `test.config_write` exists only in builds with the `testops` tag; `make release-check` verifies the release binary does not contain it. Reproducible builds and signed releases will arrive with the first version.
+Build and checks: Go 1.26, `make tools`, then `make check` (protobuf codegen, `go vet`, staticcheck, tests in the regular build and with the internal `testops` tag, release binary check). The test operation `test.config_write` exists only in builds with the `testops` tag; `make release-check` verifies the release binary does not contain it. CI on every commit: the OS matrix (Ubuntu 22.04 and 24.04, Debian 12 and 13 on amd64 and arm64 in containers with systemd: install with the panel command, refusal on a tampered signature, coming online, `system.info`, reinstall, removal; the report is the `matrix-report-*` artifact) and a release build on two runners with a `sha256` comparison.
+
+## Verifying a release
+
+Releases are reproducible: anyone building the same tag gets the same bytes.
+
+```sh
+git clone https://github.com/NogMeer/trassa-agent && cd trassa-agent
+git checkout v1.2.3
+make release VERSION=1.2.3    # needs Go 1.26+; it downloads the exact compiler from go.mod (GOTOOLCHAIN=auto)
+diff dist/SHA256SUMS <(curl -fsSL https://github.com/NogMeer/trassa-agent/releases/download/v1.2.3/SHA256SUMS)
+```
+
+`SHA256SUMS` is signed with [minisign](https://jedisct1.github.io/minisign/); the keys are in `TRASSA_RELEASE_KEYS` in [`scripts/install.sh`](scripts/install.sh):
+
+```sh
+minisign -V -P <key> -m SHA256SUMS    # trusted comment: trassa-agent 1.2.3
+sha256sum -c SHA256SUMS
+```
+
+An unsigned release is never published: `scripts/release-gate.sh` checks the signature with the same code and keys as `install.sh`. Until the owner adds the keys the list is empty, and installation and updates deliberately refuse.
 
 ## Security
 
