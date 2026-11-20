@@ -22,6 +22,7 @@ import (
 	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/dockerapi"
 )
 
 // Unit — служба systemd.
@@ -104,41 +105,13 @@ type dockerContainer struct {
 	Ports []dockerPort `json:"Ports"`
 }
 
-// maxDockerAPI — версия API, которой говорит клиент; с демоном договариваемся на min(своя, его).
-const maxDockerAPI = "1.44"
-
 func (inv *Inventory) containers(ctx context.Context) ([]*agentv1.ContainerEntry, string) {
-	sock := inv.DockerSocket
-	if sock == "" {
-		sock = "/var/run/docker.sock"
-	}
-	if _, err := os.Stat(sock); errors.Is(err, os.ErrNotExist) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	resp, err := (&dockerapi.Client{Socket: inv.DockerSocket}).Get(ctx, "/containers/json?all=true")
+	if errors.Is(err, dockerapi.ErrNoDocker) {
 		return nil, "Docker не установлен"
 	}
-	c := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				var d net.Dialer
-				return d.DialContext(ctx, "unix", sock)
-			},
-			DisableKeepAlives: true,
-		},
-	}
-	get := func(path string) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker"+path, nil)
-		if err != nil {
-			return nil, err
-		}
-		return c.Do(req)
-	}
-	resp, err := get("/_ping")
-	if err != nil {
-		return nil, "ошибка Docker API: " + Clean(err.Error())
-	}
-	resp.Body.Close()
-	ver := DockerAPIVersion(resp.Header.Get("Api-Version"))
-	resp, err = get("/v" + ver + "/containers/json?all=true")
 	if err != nil {
 		return nil, "ошибка Docker API: " + Clean(err.Error())
 	}
@@ -151,35 +124,6 @@ func (inv *Inventory) containers(ctx context.Context) ([]*agentv1.ContainerEntry
 		return nil, "ошибка Docker API: " + Clean(err.Error())
 	}
 	return list, ""
-}
-
-// DockerAPIVersion — min(1.44, версия демона); пустой или кривой заголовок — 1.44.
-func DockerAPIVersion(daemon string) string {
-	if cmpVersion(daemon, maxDockerAPI) < 0 {
-		return daemon
-	}
-	return maxDockerAPI
-}
-
-func cmpVersion(a, b string) int {
-	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
-	if len(pa) != 2 || len(pb) != 2 {
-		return 1
-	}
-	for i := 0; i < 2; i++ {
-		x, e1 := strconv.Atoi(pa[i])
-		y, e2 := strconv.Atoi(pb[i])
-		if e1 != nil || e2 != nil {
-			return 1
-		}
-		if x != y {
-			if x < y {
-				return -1
-			}
-			return 1
-		}
-	}
-	return 0
 }
 
 // ParseContainers разбирает ответ GET /containers/json.

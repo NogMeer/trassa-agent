@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -23,6 +25,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/dockerapi"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/redact"
 )
@@ -52,11 +55,17 @@ const (
 type Reader struct {
 	Root    string
 	Journal func(ctx context.Context, args []string) (io.ReadCloser, func() error, error)
-	Now     func() time.Time
+	// Docker — Docker API для журналов контейнеров; nil — источник DOCKER не поддержан.
+	Docker interface {
+		Get(ctx context.Context, path string) (*http.Response, error)
+	}
+	Now func() time.Time
 }
 
 // New — читатель настоящей системы.
-func New() *Reader { return &Reader{Root: "/", Journal: journalctl, Now: time.Now} }
+func New() *Reader {
+	return &Reader{Root: "/", Journal: journalctl, Docker: &dockerapi.Client{}, Now: time.Now}
+}
 
 func journalctl(ctx context.Context, args []string) (io.ReadCloser, func() error, error) {
 	cmd := exec.CommandContext(ctx, "journalctl", args...)
@@ -440,6 +449,8 @@ func (r *Reader) Poll(ctx context.Context, sub *Subscription, pos map[string]str
 				p = sub.Start[k]
 			}
 			recs, np, m, err = r.pollFile(src, p, sub.MinLevel, leftRec, leftBytes)
+		case agentv1.LogSourceKind_LOG_SOURCE_KIND_DOCKER:
+			recs, np, m, err = r.pollDocker(ctx, src, p, sub.CreatedAtMs, sub.MinLevel, leftRec, leftBytes)
 		case agentv1.LogSourceKind_LOG_SOURCE_KIND_SYSTEM, agentv1.LogSourceKind_LOG_SOURCE_KIND_SSH, agentv1.LogSourceKind_LOG_SOURCE_KIND_UNIT:
 			var extra []string
 			if had && p != "" {
@@ -476,6 +487,8 @@ func (r *Reader) Read(ctx context.Context, src *agentv1.LogSource, lines int, gr
 	switch src.GetKind() {
 	case agentv1.LogSourceKind_LOG_SOURCE_KIND_FILE:
 		recs, _, err = r.readFile(src, lines, grep)
+	case agentv1.LogSourceKind_LOG_SOURCE_KIND_DOCKER:
+		recs, err = r.readDocker(ctx, src, lines, grep)
 	case agentv1.LogSourceKind_LOG_SOURCE_KIND_SYSTEM, agentv1.LogSourceKind_LOG_SOURCE_KIND_SSH, agentv1.LogSourceKind_LOG_SOURCE_KIND_UNIT:
 		recs, _, _, err = r.journal(ctx, src, []string{"--lines=" + strconv.Itoa(lines)}, agentv1.LogLevel_LOG_LEVEL_DEBUG, lines, MaxReadBytes*2, grep)
 	default:
@@ -523,7 +536,14 @@ func (r *Reader) Open(sources []*agentv1.LogSource) ([]*agentv1.LogSourceStatus,
 		case seen[k]:
 			res.Reason = ReasonDuplicate
 		case s.GetKind() == agentv1.LogSourceKind_LOG_SOURCE_KIND_DOCKER:
-			res.Reason = ReasonUnsupported
+			ictx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			_, _, reason, err := r.inspect(ictx, s.GetName())
+			cancel()
+			if err != nil {
+				res.Reason = reason
+				break
+			}
+			res.Opened = true
 		case s.GetKind() == agentv1.LogSourceKind_LOG_SOURCE_KIND_FILE:
 			f, reason, err := r.OpenFile(s.GetName())
 			if err != nil {
@@ -545,4 +565,193 @@ func (r *Reader) Open(sources []*agentv1.LogSource) ([]*agentv1.LogSourceStatus,
 		}
 	}
 	return st, ok, start
+}
+
+// ---------- Контейнеры (Docker API, decisions E08 п. 10) ----------
+
+// inspect — id контейнера по имени и включён ли TTY (тогда вывод не мультиплексирован).
+func (r *Reader) inspect(ctx context.Context, name string) (id string, tty bool, reason string, err error) {
+	if r.Docker == nil {
+		return "", false, ReasonUnsupported, errUnsupported
+	}
+	resp, err := r.Docker.Get(ctx, "/containers/"+url.PathEscape(name)+"/json")
+	if errors.Is(err, dockerapi.ErrNoDocker) {
+		return "", false, ReasonUnsupported, err
+	}
+	if err != nil {
+		return "", false, ReasonNotFound, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return "", false, ReasonNotFound, fmt.Errorf("контейнер %s не найден", name)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", false, ReasonNotFound, fmt.Errorf("docker api: HTTP %d", resp.StatusCode)
+	}
+	var c struct {
+		ID     string `json:"Id"`
+		Config struct {
+			Tty bool `json:"Tty"`
+		} `json:"Config"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&c); err != nil || c.ID == "" {
+		return "", false, ReasonNotFound, fmt.Errorf("docker api: ответ inspect: %v", err)
+	}
+	return c.ID, c.Config.Tty, "", nil
+}
+
+// dockerLine — строка журнала контейнера: «<RFC3339Nano> сообщение» (timestamps=1).
+type dockerLine struct {
+	ts     time.Time
+	stream string
+	text   string
+}
+
+// dockerLines читает журнал контейнера и отдаёт строки в fn, пока fn возвращает true. Без TTY поток
+// мультиплексирован кадрами с заголовком 8 байт, с TTY — простой текст.
+func dockerLines(body io.Reader, tty bool, fn func(dockerLine) bool) error {
+	emit := func(stream string, payload []byte) bool {
+		for _, l := range strings.Split(strings.TrimRight(string(payload), "\n"), "\n") {
+			ts, text, ok := strings.Cut(strings.TrimRight(l, "\r"), " ")
+			t, err := time.Parse(time.RFC3339Nano, ts)
+			if !ok || err != nil {
+				continue
+			}
+			if !fn(dockerLine{ts: t, stream: stream, text: text}) {
+				return false
+			}
+		}
+		return true
+	}
+	if tty {
+		sc := bufio.NewScanner(body)
+		sc.Buffer(make([]byte, 64<<10), dockerapi.MaxFrame)
+		for sc.Scan() {
+			if !emit("tty", sc.Bytes()) {
+				return nil
+			}
+		}
+		return sc.Err()
+	}
+	for {
+		st, payload, err := dockerapi.ReadFrame(body)
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		name := "stdout"
+		if st == dockerapi.StreamStderr {
+			name = "stderr"
+		}
+		if !emit(name, payload) {
+			return nil
+		}
+	}
+}
+
+// dockerPos — позиция «id контейнера@время последней строки».
+func dockerPos(id string, ts time.Time) string { return id + "@" + ts.UTC().Format(time.RFC3339Nano) }
+
+func (r *Reader) dockerRecord(src *agentv1.LogSource, l dockerLine, id string) *agentv1.LogRecord {
+	return &agentv1.LogRecord{
+		TimeMs: l.ts.UnixMilli(), Level: fileLevel(l.text), Source: src, Message: clean(l.text),
+		Fields: map[string]string{"container": src.GetName(), "stream": l.stream},
+		Cursor: dockerPos(id, l.ts),
+	}
+}
+
+// pollDocker — строки контейнера после позиции; без позиции или после пересоздания контейнера — с момента
+// подписки. Строки с тем же временем, что последняя отправленная, не повторяются.
+func (r *Reader) pollDocker(ctx context.Context, src *agentv1.LogSource, pos string, sinceMs int64, min agentv1.LogLevel, maxRec, maxBytes int) ([]*agentv1.LogRecord, string, bool, error) {
+	dctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	id, tty, _, err := r.inspect(dctx, src.GetName())
+	if err != nil {
+		return nil, pos, false, err
+	}
+	since := time.UnixMilli(sinceMs)
+	var last time.Time
+	if pid, ts, ok := strings.Cut(pos, "@"); ok && pid == id {
+		if t, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+			since, last = t, t
+		}
+	}
+	q := url.Values{"stdout": {"1"}, "stderr": {"1"}, "timestamps": {"1"},
+		"since": {strconv.FormatInt(since.Unix(), 10) + "." + fmt.Sprintf("%09d", since.Nanosecond())}}
+	resp, err := r.Docker.Get(dctx, "/containers/"+url.PathEscape(id)+"/logs?"+q.Encode())
+	if err != nil {
+		return nil, pos, false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, pos, false, fmt.Errorf("docker api: HTTP %d", resp.StatusCode)
+	}
+	var out []*agentv1.LogRecord
+	size := 0
+	np := pos
+	if np == "" || !strings.HasPrefix(np, id+"@") {
+		np = dockerPos(id, since)
+	}
+	more := false
+	err = dockerLines(resp.Body, tty, func(l dockerLine) bool {
+		if !last.IsZero() && !l.ts.After(last) {
+			return true
+		}
+		if len(out) >= maxRec || size >= maxBytes {
+			more = true
+			return false
+		}
+		np = dockerPos(id, l.ts)
+		lvl := fileLevel(l.text)
+		if !passes(lvl, min) {
+			return true
+		}
+		rec := r.dockerRecord(src, l, id)
+		out = append(out, rec)
+		size += recSize(rec)
+		return true
+	})
+	if err != nil && len(out) == 0 {
+		return nil, pos, false, err
+	}
+	return out, np, more, nil
+}
+
+// readDocker — logs.read: последние строки контейнера с отбором grep (подстрока).
+func (r *Reader) readDocker(ctx context.Context, src *agentv1.LogSource, lines int, grep string) ([]*agentv1.LogRecord, error) {
+	dctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	id, tty, _, err := r.inspect(dctx, src.GetName())
+	if err != nil {
+		return nil, err
+	}
+	tail := lines
+	if grep != "" {
+		tail = 10000 // отбор идёт по последним 10 000 строкам
+	}
+	q := url.Values{"stdout": {"1"}, "stderr": {"1"}, "timestamps": {"1"}, "tail": {strconv.Itoa(tail)}}
+	resp, err := r.Docker.Get(dctx, "/containers/"+url.PathEscape(id)+"/logs?"+q.Encode())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("docker api: HTTP %d", resp.StatusCode)
+	}
+	var keep []*agentv1.LogRecord
+	err = dockerLines(resp.Body, tty, func(l dockerLine) bool {
+		if grep == "" || strings.Contains(l.text, grep) {
+			keep = append(keep, r.dockerRecord(src, l, id))
+			if len(keep) > lines {
+				keep = keep[1:]
+			}
+		}
+		return true
+	})
+	if err != nil && len(keep) == 0 {
+		return nil, err
+	}
+	return keep, nil
 }

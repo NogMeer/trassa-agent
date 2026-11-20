@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/dockerapi"
 )
 
 // Сохранённые образцы четырёх ОС на двух архитектурах (8 сочетаний).
@@ -120,7 +121,7 @@ func TestParseContainers(t *testing.T) {
 	if len(got[0].PublishedPorts) != 2 || got[0].PublishedPorts[0] != "0.0.0.0:8080->80/tcp" || got[0].PublishedPorts[1] != "[::]:8080->80/tcp" {
 		t.Fatalf("%v", got[0].PublishedPorts)
 	}
-	if DockerAPIVersion("1.41") != "1.41" || DockerAPIVersion("1.57") != "1.44" || DockerAPIVersion("") != "1.44" {
+	if dockerapi.Version("1.41") != "1.41" || dockerapi.Version("1.57") != "1.44" || dockerapi.Version("") != "1.44" {
 		t.Fatal("версия API")
 	}
 }

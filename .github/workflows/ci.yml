@@ -34,6 +34,8 @@ jobs:
           go-version-file: go.mod
       - run: make build
       - run: sudo sh scripts/ci-systemd-smoke.sh dist
+      # Журналы контейнеров через настоящий Docker API раннера (E08-T15).
+      - run: go test -tags dockerint -run TestDockerReal -count=1 ./internal/logsrc
   # Матрица ОС (E05-T28): контейнер с systemd на каждую ОС и архитектуру, команда установки как в панели, заглушка
   # панели, «Сервер на связи», system.info, повторная установка, удаление. Отчёт — артефакт matrix-report-*.
   matrix:
