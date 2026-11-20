@@ -1,0 +1,44 @@
+[
+  {
+    "comment": "HPKE RFC 9180 DHKEM(X25519,HKDF-SHA256)/HKDF-SHA256/AES-256-GCM, одноразовый Seal панели (@hpke/core 1.10.0); тестовый ключ; operation_id в верхнем регистре — в info он в нижнем",
+    "private_key_hex": "c4d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d54e",
+    "public_key_b64": "9vIQPA2WWDdt7nmKBvrNJWSlguSp5rHCYf7cpJI/2lc=",
+    "kid": "0f613a53313d538d",
+    "server_id": "01a1f4b6-f327-7a5d-ac23-e95c272c0fe8",
+    "operation_id": "01A1F4B6-F2F2-7E66-85B4-0000000004A1",
+    "type": "backup.init",
+    "plan_id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+    "field": "password",
+    "info_hex": "7472617373612f7365637265742f76310030316131663462362d663332372d376135642d616332332d65393563323732633066653800306636313361353333313364353338640030316131663462362d663266322d376536362d383562342d303030303030303030346131006261636b75702e696e69740030313939613162322d633364342d376535662d386139622d3063316432653366346135620070617373776f7264",
+    "plaintext": "панель: пароль репозитория ✓",
+    "enc_ct_b64": "9BSGxbL5hYnPhSgStPHlPtnLuK6H6qVhCMWj6TYZnn/LCPkiIxnyVmEopRZ8e7OyHPOGQ+zvk0LU8zBDR4aaUY6tUpmKaCZQRLN4CeSbJa9g+I9/H/gL8BOCFDBk0z2+CbbvhY0="
+  },
+  {
+    "comment": "HPKE RFC 9180 DHKEM(X25519,HKDF-SHA256)/HKDF-SHA256/AES-256-GCM, одноразовый Seal панели (@hpke/core 1.10.0); тестовый ключ; operation_id в верхнем регистре — в info он в нижнем",
+    "private_key_hex": "c4d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d54e",
+    "public_key_b64": "9vIQPA2WWDdt7nmKBvrNJWSlguSp5rHCYf7cpJI/2lc=",
+    "kid": "0f613a53313d538d",
+    "server_id": "01a1f4b6-f327-7a5d-ac23-e95c272c0fe8",
+    "operation_id": "01A1F4B6-F2F2-7E66-85B4-0000000004A1",
+    "type": "backup.init",
+    "plan_id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+    "field": "env:AWS_SECRET_ACCESS_KEY",
+    "info_hex": "7472617373612f7365637265742f76310030316131663462362d663332372d376135642d616332332d65393563323732633066653800306636313361353333313364353338640030316131663462362d663266322d376536362d383562342d303030303030303030346131006261636b75702e696e69740030313939613162322d633364342d376535662d386139622d30633164326533663461356200656e763a4157535f5345435245545f4143434553535f4b4559",
+    "plaintext": "example-s3-secret-from-panel",
+    "enc_ct_b64": "0r8meVQSYJUcYfXQ92rEtQcrisUdy1tLjHFvhW23yEARSpYHDxwcY8HxDdbGfrQKFdCCIerGpIXpHoqlogtdmum+H5peDPvbd1VN0g=="
+  },
+  {
+    "comment": "HPKE RFC 9180 DHKEM(X25519,HKDF-SHA256)/HKDF-SHA256/AES-256-GCM, одноразовый Seal панели (@hpke/core 1.10.0); тестовый ключ; operation_id в верхнем регистре — в info он в нижнем",
+    "private_key_hex": "c4d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d54e",
+    "public_key_b64": "9vIQPA2WWDdt7nmKBvrNJWSlguSp5rHCYf7cpJI/2lc=",
+    "kid": "0f613a53313d538d",
+    "server_id": "01a1f4b6-f327-7a5d-ac23-e95c272c0fe8",
+    "operation_id": "01A1F4B6-F2F2-7E66-85B4-0000000004A1",
+    "type": "backup.init",
+    "plan_id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+    "field": "env:RESTIC_REST_PASSWORD",
+    "info_hex": "7472617373612f7365637265742f76310030316131663462362d663332372d376135642d616332332d65393563323732633066653800306636313361353333313364353338640030316131663462362d663266322d376536362d383562342d303030303030303030346131006261636b75702e696e69740030313939613162322d633364342d376535662d386139622d30633164326533663461356200656e763a5245535449435f524553545f50415353574f5244",
+    "plaintext": "rest-server-password-from-panel",
+    "enc_ct_b64": "R8M/3HyF2NTI3CJ3mxDjXLKLbtu2mhCdsHCM+v5Bmn8bgBTMAPdpcbEkAx7a0qjoacy3u87UACrScxTpjg75tEgiZzszhPchM7hbbq+zTA=="
+  }
+]
