@@ -221,7 +221,7 @@ jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/wg-apply.json" >/dev/nul
 [ "$(x sh -c 'iptables -S DOCKER-USER | grep -c "trassa:e14:wg0"')" = 1 ] || fail "правило DOCKER-USER не одно: $(x iptables -S DOCKER-USER)"
 x ip netns exec wa ping -c 3 -W 3 10.77.0.3 >/dev/null || fail "транзит wg → wg через хаб не прошёл: $(x wg show 2>&1)"
 x grep -q "10.77.0.3 b.ci.internal" /etc/hosts || fail "блок имён не записан"
-x sh -c ": >$STUB/wg-remove"
+x sh -c "echo remove >$STUB/wg-remove"
 for _ in $(seq 1 120); do x test -s "$STUB/wg-remove.json" && break; sleep 1; done
 podman cp "$NAME:$STUB/wg-remove.json" "$ctx/wg-remove.json" 2>/dev/null || fail "нет итога wireguard.remove"
 jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/wg-remove.json" >/dev/null || fail "wireguard.remove: $(cat "$ctx/wg-remove.json")"
