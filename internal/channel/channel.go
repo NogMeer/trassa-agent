@@ -97,6 +97,9 @@ type Agent struct {
 	mu       sync.Mutex
 	sessions int
 	opWG     sync.WaitGroup
+	// cur — соединение текущего сеанса шлюза (кадры терминала); terms — открытые терминалы (E16).
+	cur   *conn
+	terms map[string]*termBridge
 }
 
 // New создаёт агента.
@@ -271,6 +274,14 @@ func (a *Agent) session(ctx context.Context) error {
 		}
 	}
 
+	a.setConn(c)
+	defer func() {
+		a.mu.Lock()
+		if a.cur == c {
+			a.cur = nil
+		}
+		a.mu.Unlock()
+	}()
 	errc := make(chan error, 5)
 	go func() { errc <- a.heartbeat(sctx, c, hb) }()
 	go func() { errc <- a.readLoop(sctx, c) }()
@@ -423,6 +434,14 @@ func (a *Agent) readLoop(ctx context.Context, c *conn) error {
 			}()
 		case *agentv1.GatewayMessage_InboundAck:
 			a.inboundAck(ctx, c, p.InboundAck.GetSeq())
+		case *agentv1.GatewayMessage_Terminal:
+			a.terminalFrame(ctx, p.Terminal)
+		case *agentv1.GatewayMessage_TerminalRenew:
+			r := p.TerminalRenew
+			go a.terminalRenew(context.WithoutCancel(ctx), r)
+		case *agentv1.GatewayMessage_Cancel:
+			// Отмена релиза (E17): операций деплоя в этой версии нет.
+			a.cfg.Log.Debug("отмена: операций деплоя нет")
 		case *agentv1.GatewayMessage_Close:
 			return closeErr(p.Close)
 		case *agentv1.GatewayMessage_Subscribe, *agentv1.GatewayMessage_Unsubscribe:
@@ -467,12 +486,19 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 			defer os.RemoveAll(dir)
 		}
 	}
-	res, err := a.cfg.Helper.Execute(context.WithoutCancel(sctx), raw, ack, func(p []byte) {
+	progress := func(p []byte) {
 		var pr agentv1.OperationProgress
 		if proto.Unmarshal(p, &pr) == nil {
 			_, _ = c.send(sctx, &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_OperationProgress{OperationProgress: &pr}})
 		}
-	})
+	}
+	var res []byte
+	var err error
+	if th, ok := a.terminalHelper(); ok && body.GetType() == ops.TypeTerminalOpen && !body.GetDryRun() {
+		res, err = a.runTerminal(context.WithoutCancel(sctx), th, raw, ack, progress)
+	} else {
+		res, err = a.cfg.Helper.Execute(context.WithoutCancel(sctx), raw, ack, progress)
+	}
 	if err != nil {
 		a.cfg.Log.Error("помощник: операция", "op", opID, "err", err)
 		return

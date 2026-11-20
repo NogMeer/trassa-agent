@@ -173,3 +173,35 @@ var shells = map[agentv1.AccessShell]string{
 	agentv1.AccessShell_ACCESS_SHELL_SH:          "/bin/sh",
 	agentv1.AccessShell_ACCESS_SHELL_ZSH:         "/usr/bin/zsh",
 }
+
+// Языки терминала.
+var terminalLangs = map[string]bool{"ru_RU.UTF-8": true, "en_US.UTF-8": true, "C.UTF-8": true}
+
+// ValidateTerminalOpen — terminal.open: UUID сеанса, пользователь, размер, сроки, язык из белого списка; подпись
+// живёт не дольше 60 с (терминал открывается сразу).
+func ValidateTerminalOpen(p *agentv1.TerminalOpenParams, issuedAtMs, notAfterMs int64) error {
+	if !config.IsUUID(p.GetSessionId()) {
+		return errors.New("session_id")
+	}
+	if p.GetUnixUser() != RescueUser {
+		if err := CheckUser(p.GetUnixUser()); err != nil {
+			return err
+		}
+	}
+	if p.GetCols() < 1 || p.GetCols() > 1000 || p.GetRows() < 1 || p.GetRows() > 500 {
+		return errors.New("cols, rows")
+	}
+	if p.GetIdleTimeoutSec() < 60 || p.GetIdleTimeoutSec() > 3600 {
+		return errors.New("idle_timeout_sec: 60–3600")
+	}
+	if p.GetMaxDurationSec() < 60 || p.GetMaxDurationSec() > 28800 {
+		return errors.New("max_duration_sec: 60–28800")
+	}
+	if !terminalLangs[p.GetEnvLang()] {
+		return errors.New("env_lang")
+	}
+	if issuedAtMs <= 0 || notAfterMs-issuedAtMs > 60_000 {
+		return errors.New("terminal.open: подпись живёт не дольше 60 с")
+	}
+	return nil
+}

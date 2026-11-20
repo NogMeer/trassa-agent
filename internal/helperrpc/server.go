@@ -11,6 +11,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // Handler обрабатывает запрос; send пишет кадр ответа.
@@ -135,11 +137,40 @@ func (s *Server) handle(ctx context.Context, c *net.UnixConn) {
 		return
 	}
 	_ = c.SetReadDeadline(time.Time{})
+	// Агент после запроса ничего не пишет: чтение вернётся, только когда он закроет соединение. Обработчики,
+	// которым это важно (терминал), видят это через Disconnected(ctx).
+	gone := make(chan struct{})
+	go func() {
+		var b [1]byte
+		_, _ = c.Read(b[:])
+		close(gone)
+	}()
+	ctx = context.WithValue(ctx, goneKey{}, (<-chan struct{})(gone))
 	var mu sync.Mutex
 	s.Handler.Serve(ctx, req, func(r Response) error {
 		mu.Lock()
 		defer mu.Unlock()
 		_ = c.SetWriteDeadline(time.Now().Add(30 * time.Second))
-		return WriteFrame(c, r)
+		if r.FD == nil {
+			return WriteFrame(c, r)
+		}
+		b, err := EncodeFrame(r)
+		if err != nil {
+			return err
+		}
+		// Дескриптор привязан к первому байту кадра (SCM_RIGHTS).
+		n, _, err := c.WriteMsgUnix(b, unix.UnixRights(int(r.FD.Fd())), nil)
+		if err == nil && n != len(b) {
+			err = errors.New("helperrpc: кадр с дескриптором записан не целиком")
+		}
+		return err
 	})
+}
+
+type goneKey struct{}
+
+// Disconnected — канал закрывается, когда агент закрыл соединение этого запроса (nil — вне сервера).
+func Disconnected(ctx context.Context) <-chan struct{} {
+	ch, _ := ctx.Value(goneKey{}).(<-chan struct{})
+	return ch
 }

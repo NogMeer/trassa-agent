@@ -708,3 +708,26 @@ func (e *Env) StateRead(ctx context.Context) (*agentv1.AccessStateResult, error)
 	}
 	return res, nil
 }
+
+// ShellOf — оболочка пользователя для терминала: пользователь из реестра доступа или trassa-rescue с ещё
+// действующей выдачей. Иначе ACCESS_USER_NOT_MANAGED (root и чужие учётные записи терминала не получают).
+func (e *Env) ShellOf(u string, now time.Time) (string, error) {
+	st, err := e.loadState()
+	if err != nil {
+		return "", err
+	}
+	if u == RescueUser {
+		if st.RescueCreated && st.RescueExpiry > now.UnixMilli() {
+			return "/bin/bash", nil
+		}
+		return "", fmt.Errorf("%w: выдачи trassa-rescue нет или срок вышел", ErrNotManaged)
+	}
+	us, ok := st.Users[u]
+	if !ok {
+		return "", fmt.Errorf("%w: %s", ErrNotManaged, u)
+	}
+	if us.Shell == "" {
+		return "/bin/bash", nil
+	}
+	return us.Shell, nil
+}

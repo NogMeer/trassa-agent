@@ -94,3 +94,58 @@ func TestFrameLimit(t *testing.T) {
 		t.Fatalf("круг: %v %v", v, err)
 	}
 }
+
+// termServer — Execute отвечает кадром terminal с дескриптором (концом канала) и ждёт закрытия соединения
+// агентом (Disconnected), затем отдаёт итог.
+type termServer struct{ disconnected chan struct{} }
+
+func (s *termServer) Serve(ctx context.Context, req Request, send func(Response) error) {
+	r, w, _ := os.Pipe()
+	defer r.Close()
+	defer w.Close()
+	_, _ = w.Write([]byte("hello from pty"))
+	_ = send(Response{Kind: KindAck, Accepted: true})
+	_ = send(Response{Kind: KindTerminal, FD: r, Terminal: &TerminalInfo{SessionID: "s1", UnixUser: "ops", Lang: "C.UTF-8"}})
+	select {
+	case <-Disconnected(ctx):
+		close(s.disconnected)
+	case <-time.After(200 * time.Millisecond):
+		_ = send(Response{Kind: KindResult, Result: []byte("done")})
+	}
+}
+
+func TestTerminalFDPassing(t *testing.T) {
+	p := sockPath(t)
+	l, err := Listen(p, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &termServer{disconnected: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { _ = (&Server{AllowedUID: os.Getuid(), Handler: srv}).Serve(ctx, l) }()
+	t.Cleanup(cancel)
+	var got string
+	res, err := (&Client{Path: p}).ExecuteTerminal(context.Background(), []byte("op"), func(bool, string) {}, nil,
+		func(info TerminalInfo, f *os.File) {
+			defer f.Close()
+			b := make([]byte, 64)
+			n, _ := f.Read(b)
+			got = info.SessionID + ":" + string(b[:n])
+		})
+	if err != nil || string(res) != "done" || got != "s1:hello from pty" {
+		t.Fatalf("%q %v %q", res, err, got)
+	}
+	// Агент закрыл соединение посреди сеанса — обработчик это видит.
+	cctx, ccancel := context.WithCancel(context.Background())
+	go func() {
+		_, _ = (&Client{Path: p}).ExecuteTerminal(cctx, []byte("op"), func(bool, string) {}, nil, func(_ TerminalInfo, f *os.File) {
+			f.Close()
+			ccancel()
+		})
+	}()
+	select {
+	case <-srv.disconnected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("обработчик не увидел закрытия соединения")
+	}
+}

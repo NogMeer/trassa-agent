@@ -96,8 +96,9 @@ type Executor struct {
 	// Backup — бэкапы restic (E13); BackupTarget — цель SERVER; nil — BACKUP_UNAVAILABLE.
 	Backup       *backup.Env
 	BackupTarget *backup.Target
-	// Access — доступ (E16); nil — ACCESS_UNAVAILABLE.
-	Access *access.Env
+	// Access — доступ (E16); nil — ACCESS_UNAVAILABLE. Terminals — терминалы через помощник (E16).
+	Access    *access.Env
+	Terminals *Terminals
 
 	once     sync.Once
 	handlers map[string]handler
@@ -223,6 +224,19 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 			}
 		}
 		_ = send(helperrpc.Response{Kind: helperrpc.KindEvents, Events: raw})
+	case helperrpc.MethodTerminalRenew:
+		if err := e.TerminalRenew(req.Signed); err != nil {
+			e.log().Warn("helper: продление терминала отклонено", "err", err)
+			_ = send(helperrpc.Response{Kind: helperrpc.KindError, Code: CodeRenewBad})
+			return
+		}
+		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})
+	case helperrpc.MethodTerminalClose:
+		if !e.TerminalClose(req.SessionID, agentv1.TerminalEndReason(req.Reason)) {
+			_ = send(helperrpc.Response{Kind: helperrpc.KindError, Code: "TERMINAL_NOT_FOUND"})
+			return
+		}
+		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})
 	case helperrpc.MethodRunning:
 		_ = send(helperrpc.Response{Kind: helperrpc.KindRunning, Running: e.Running()})
 	default:
@@ -279,7 +293,9 @@ func (e *Executor) Execute(ctx context.Context, raw []byte, send func(helperrpc.
 
 	mutating := checked.Spec.Class.Mutating() && !b.GetDryRun()
 	var release func()
-	if mutating && checked.Spec.Long {
+	if checked.Spec.Session && !b.GetDryRun() {
+		release, err = func() {}, nil
+	} else if mutating && checked.Spec.Long {
 		release, err = e.acquireLong(ctx)
 	} else {
 		release, err = e.acquire(ctx, mutating)

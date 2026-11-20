@@ -9,7 +9,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/access"
 )
 
-// Типы доступа (E16, раздел 6; decisions/E16-access.md). terminal.open — отдельным шагом.
+// Типы доступа (E16, раздел 6; decisions/E16-access.md).
 const (
 	TypeSSHCATrust              = "sshca.trust"
 	TypeSSHCAUntrust            = "sshca.untrust"
@@ -19,6 +19,7 @@ const (
 	TypeAccessRescueGrant       = "access.rescue.grant"
 	TypeAccessRescueRevoke      = "access.rescue.revoke"
 	TypeAccessStateRead         = "access.state.read"
+	TypeTerminalOpen            = "terminal.open"
 )
 
 func accessCoded(err error) error {
@@ -75,6 +76,14 @@ func accessSpecs() []Spec {
 			Type: TypeAccessRescueRevoke, Class: Change, Rollback: config,
 			match:    func(p *agentv1.OperationParams) bool { return p.GetAccessRescueRevoke() != nil },
 			Validate: func(*agentv1.OperationBody) error { return nil },
+		},
+		{
+			// Сеанс до 8 часов: без блокировок и очередей изменений; предел сеансов и сроки — у помощника.
+			Type: TypeTerminalOpen, Class: Change, Rollback: none, Session: true,
+			match: func(p *agentv1.OperationParams) bool { return p.GetTerminalOpen() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				return accessCoded(access.ValidateTerminalOpen(b.GetParams().GetTerminalOpen(), b.GetIssuedAtMs(), b.GetNotAfterMs()))
+			},
 		},
 		{
 			Type: TypeAccessStateRead, Class: Read, Rollback: none,

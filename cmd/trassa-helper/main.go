@@ -43,6 +43,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/security"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo/sdunits"
+	"github.com/NogMeer/trassa-agent/internal/terminal"
 	"github.com/NogMeer/trassa-agent/internal/uninstall"
 	"github.com/NogMeer/trassa-agent/internal/update"
 	"github.com/NogMeer/trassa-agent/internal/wireguard"
@@ -186,6 +187,10 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 			Docker: &dockerapi.Client{}, Run: backup.RunCommand, Look: backup.LookPath,
 		},
 		Access: &access.Env{Root: "/", Run: backup.RunCommand},
+		Terminals: &helper.Terminals{Units: terminal.Systemd{}, OpenPTY: terminal.OpenPTY, Locales: func(ctx context.Context) []string {
+			out, _ := backup.RunCommand(ctx, "locale", "-a")
+			return strings.Fields(string(out))
+		}},
 		BackupTarget: &backup.Target{Root: "/", BinDir: p.TargetBin, Run: backup.RunCommand,
 			StageDir: func(op string) string { return helper.StageDir(p, op) }},
 	}
@@ -222,6 +227,8 @@ func serve(ctx context.Context, log *slog.Logger) error {
 	if err := ex.Recover(ctx); err != nil {
 		return fmt.Errorf("восстановление: %w", err)
 	}
+	// Терминалы прошлого запуска без таймеров продления жить не должны (decisions E16, 9.3).
+	ex.StopOrphanTerminals(ctx)
 	p := config.Default()
 	// /run/trassa создаёт systemd (RuntimeDirectory, root:root 0750); агенту нужна группа, чтобы дойти до сокета.
 	if err := os.MkdirAll(p.RunDir, 0o750); err != nil {

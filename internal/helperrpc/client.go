@@ -7,8 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // Client — сторона агента.
@@ -119,6 +122,13 @@ func (c *Client) Running(ctx context.Context) ([]string, error) {
 // Execute передаёт SignedOperation. onAck вызывается один раз (принята или код отказа), onProgress — на каждый
 // кусок вывода. Возвращает итог (OperationResult) или nil, если операция отклонена.
 func (c *Client) Execute(ctx context.Context, signed []byte, onAck func(accepted bool, code string), onProgress func([]byte)) ([]byte, error) {
+	return c.ExecuteTerminal(ctx, signed, onAck, onProgress, nil)
+}
+
+// ExecuteTerminal — Execute с кадром terminal: onTerminal получает сведения и ведущую сторону PTY (закрывает
+// получатель). Без onTerminal пришедший дескриптор закрывается.
+func (c *Client) ExecuteTerminal(ctx context.Context, signed []byte, onAck func(accepted bool, code string), onProgress func([]byte),
+	onTerminal func(TerminalInfo, *os.File)) ([]byte, error) {
 	conn, err := c.dial(ctx)
 	if err != nil {
 		return nil, err
@@ -127,10 +137,12 @@ func (c *Client) Execute(ctx context.Context, signed []byte, onAck func(accepted
 	if err := writeRequest(conn, Request{Method: MethodExecute, Signed: signed}); err != nil {
 		return nil, err
 	}
+	fr := &fdReader{c: conn}
+	defer fr.closeAll()
 	acked := false
 	for {
 		var r Response
-		if err := ReadFrame(conn, &r); err != nil {
+		if err := ReadFrame(fr, &r); err != nil {
 			if acked {
 				return nil, fmt.Errorf("%w: %v", ErrNoResult, err)
 			}
@@ -151,6 +163,16 @@ func (c *Client) Execute(ctx context.Context, signed []byte, onAck func(accepted
 			}
 		case KindResult:
 			return r.Result, nil
+		case KindTerminal:
+			f := fr.take()
+			if f == nil || r.Terminal == nil {
+				return nil, errors.New("helper: кадр terminal без дескриптора")
+			}
+			if onTerminal == nil {
+				f.Close()
+				continue
+			}
+			onTerminal(*r.Terminal, f)
 		default:
 			return nil, fmt.Errorf("helper: неожиданный кадр %s", r.Kind)
 		}
@@ -189,4 +211,54 @@ func (c *Client) EventsPoll(ctx context.Context) ([][]byte, error) {
 func (c *Client) WgStats(ctx context.Context) ([]byte, error) {
 	r, err := c.call(ctx, Request{Method: MethodWgStats}, KindWgStats)
 	return r.Result, err
+}
+
+// TerminalRenew — передать подписанное продление терминала.
+func (c *Client) TerminalRenew(ctx context.Context, signed []byte) error {
+	_, err := c.call(ctx, Request{Method: MethodTerminalRenew, Signed: signed}, KindOK)
+	return err
+}
+
+// TerminalClose — закрыть терминал (простой, клиент закрыл): сужение доступа, подпись не нужна.
+func (c *Client) TerminalClose(ctx context.Context, sessionID string, reason int32) error {
+	_, err := c.call(ctx, Request{Method: MethodTerminalClose, SessionID: sessionID, Reason: reason}, KindOK)
+	return err
+}
+
+// fdReader — чтение с приёмом дескрипторов SCM_RIGHTS: пришедшие дескрипторы копятся до take.
+type fdReader struct {
+	c   *net.UnixConn
+	fds []*os.File
+}
+
+func (r *fdReader) Read(p []byte) (int, error) {
+	oob := make([]byte, unix.CmsgSpace(4*4))
+	n, oobn, _, _, err := r.c.ReadMsgUnix(p, oob)
+	if oobn > 0 {
+		if msgs, perr := unix.ParseSocketControlMessage(oob[:oobn]); perr == nil {
+			for _, m := range msgs {
+				if fds, ferr := unix.ParseUnixRights(&m); ferr == nil {
+					for _, fd := range fds {
+						r.fds = append(r.fds, os.NewFile(uintptr(fd), "pty"))
+					}
+				}
+			}
+		}
+	}
+	return n, err
+}
+
+func (r *fdReader) take() *os.File {
+	if len(r.fds) == 0 {
+		return nil
+	}
+	f := r.fds[0]
+	r.fds = r.fds[1:]
+	return f
+}
+
+func (r *fdReader) closeAll() {
+	for _, f := range r.fds {
+		f.Close()
+	}
 }

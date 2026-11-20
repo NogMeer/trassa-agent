@@ -27,6 +27,7 @@ func (e *Executor) accessHandlers() map[string]handler {
 		ops.TypeAccessRescueGrant:       {preview: e.previewRescueGrant, apply: e.applyRescueGrant},
 		ops.TypeAccessRescueRevoke:      {apply: e.applyRescueRevoke},
 		ops.TypeAccessStateRead:         {apply: e.applyAccessState},
+		ops.TypeTerminalOpen:            {apply: e.applyTerminalOpen},
 	}
 }
 

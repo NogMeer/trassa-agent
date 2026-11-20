@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 )
 
 // MaxFrame — предел кадра. Подписанная операция не больше кадра WSS (1 МиБ); итог с запасом под base64.
@@ -29,6 +30,9 @@ const (
 	MethodLogsPoll   = "logs.poll"   // новые записи журналов по действующей подписке (E08-T15)
 	MethodEventsPoll = "events.poll" // события детектора (E10-T7)
 	MethodWgStats    = "wg.stats"    // метрики пиров WireGuard (E14-T14)
+	// Терминал (E16): продление по подписанному SignedTerminalRenew и закрытие (сужение — без подписи).
+	MethodTerminalRenew = "terminal.renew"
+	MethodTerminalClose = "terminal.close"
 )
 
 // Виды ответных кадров.
@@ -42,6 +46,8 @@ const (
 	KindLogs     = "logs"
 	KindEvents   = "events"
 	KindWgStats  = "wg.stats"
+	// KindTerminal — терминал открыт: в кадре сведения, к кадру приложен дескриптор ведущей стороны PTY.
+	KindTerminal = "terminal"
 	KindOK       = "ok"
 	KindError    = "error"
 )
@@ -59,6 +65,17 @@ type Request struct {
 	// Subscription и Positions — для logs.poll: какой подписке принадлежат позиции агента в источниках.
 	Subscription string            `json:"subscription,omitempty"`
 	Positions    map[string]string `json:"positions,omitempty"`
+	// terminal.close: сеанс и причина (TerminalEndReason).
+	SessionID string `json:"session_id,omitempty"`
+	Reason    int32  `json:"reason,omitempty"`
+}
+
+// TerminalInfo — открытый терминал (кадр terminal).
+type TerminalInfo struct {
+	SessionID      string `json:"session_id"`
+	UnixUser       string `json:"unix_user"`
+	Lang           string `json:"lang"`
+	IdleTimeoutSec uint32 `json:"idle_timeout_sec"`
 }
 
 // Response — кадр ответа помощника. Execute отвечает кадрами ack, progress…, result.
@@ -82,23 +99,33 @@ type Response struct {
 	More         bool              `json:"more,omitempty"`
 	// events.poll: события Event (protobuf).
 	Events [][]byte `json:"events,omitempty"`
+	// terminal: сведения; FD — дескриптор, который уходит по SCM_RIGHTS вместе с кадром (не в JSON).
+	Terminal *TerminalInfo `json:"terminal,omitempty"`
+	FD       *os.File      `json:"-"`
 }
 
 // ErrFrameTooLarge — кадр больше MaxFrame.
 var ErrFrameTooLarge = errors.New("helperrpc: кадр больше предела")
 
-// WriteFrame пишет кадр.
-func WriteFrame(w io.Writer, v any) error {
+// EncodeFrame — кадр целиком: 4 байта длины и JSON.
+func EncodeFrame(v any) ([]byte, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(b) > MaxFrame {
-		return ErrFrameTooLarge
+		return nil, ErrFrameTooLarge
 	}
-	var hdr [4]byte
-	binary.BigEndian.PutUint32(hdr[:], uint32(len(b)))
-	if _, err := w.Write(hdr[:]); err != nil {
+	out := make([]byte, 4+len(b))
+	binary.BigEndian.PutUint32(out, uint32(len(b)))
+	copy(out[4:], b)
+	return out, nil
+}
+
+// WriteFrame пишет кадр.
+func WriteFrame(w io.Writer, v any) error {
+	b, err := EncodeFrame(v)
+	if err != nil {
 		return err
 	}
 	_, err = w.Write(b)

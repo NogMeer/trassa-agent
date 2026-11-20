@@ -273,7 +273,7 @@ func TestCatalogNotConfigurable(t *testing.T) {
 		"security.baseline.accept", "security.fix.BRUTEFORCE_NO_PROTECTION", "security.fix.KERNEL_ASLR_OFF", "security.fix.PERM_CRON", "security.fix.PERM_SYSTEM_FILES",
 		"security.fix.PERM_USER_SSH_DIR", "security.fix.PERM_WORLD_WRITABLE", "security.fix.SSH_CONFIG_PERMS", "security.fix.SYSCTL_NETWORK",
 		"security.fix.TIME_SYNC_OFF", "security.fix.UPDATES_AUTO_DISABLED", "security.fix.USER_EMPTY_PASSWORD", "security.fix.USER_SERVICE_SHELL",
-		"security.scan", "service.restart", "ssh.harden", "sshca.trust", "sshca.untrust", "system.info", "system.inventory", "system.reboot",
+		"security.scan", "service.restart", "ssh.harden", "sshca.trust", "sshca.untrust", "system.info", "system.inventory", "system.reboot", "terminal.open",
 		"wireguard.apply", "wireguard.inspect", "wireguard.keygen", "wireguard.remove"}
 	if ops.TestOps {
 		want = append(want, "test.config_write")
