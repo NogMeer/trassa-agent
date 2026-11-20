@@ -34,3 +34,27 @@ jobs:
           go-version-file: go.mod
       - run: make build
       - run: sudo sh scripts/ci-systemd-smoke.sh dist
+  # Матрица ОС (E05-T28): контейнер с systemd на каждую ОС и архитектуру, команда установки как в панели, заглушка
+  # панели, «Сервер на связи», system.info, повторная установка, удаление. Отчёт — артефакт matrix-report-*.
+  matrix:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        image: ["ubuntu:22.04", "ubuntu:24.04", "debian:12", "debian:13"]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - run: make build VERSION=0.0.0-ci
+      - run: CGO_ENABLED=0 go build -trimpath -o dist/stubpanel ./test/stubpanel
+      - run: sudo VERSION=0.0.0-ci sh scripts/ci-matrix.sh "${{ matrix.image }}" matrix-report
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: matrix-report-${{ matrix.runner }}-${{ strategy.job-index }}
+          path: matrix-report/
+          if-no-files-found: ignore
