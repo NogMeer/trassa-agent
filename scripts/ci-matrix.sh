@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-only
 # Матрица ОС (E05-T28): чистая система в контейнере с systemd (decisions п. 12) → команда установки как в панели
-# → регистрация на заглушке → «Сервер на связи» и операция system.info → повторная установка → удаление.
+# → регистрация на заглушке → «Сервер на связи», операция system.info и пачка метрик → повторная установка → удаление.
 # Перед этим — установка с испорченной подписью: отказ с кодом 3, на системе ничего не появилось.
 # Только для одноразового раннера CI. Запуск: sudo sh scripts/ci-matrix.sh <образ, например ubuntu:24.04> <каталог отчёта>
 # Нужны dist/ после «make build» и dist/stubpanel (заглушка панели той же архитектуры).
@@ -90,6 +90,10 @@ want_os=${osid% *}
 want_ver=${osid#* }
 jq -e --arg os "$want_os" --arg v "$want_ver" '.hello.os == $os and .hello.os_version == $v and .result.system_info.cpu_cores > 0 and (.result.system_info.ram_mb | tonumber) > 0' \
 	"$ctx/result.json" >/dev/null || fail "сведения о системе не совпали с $osid: $(cat "$ctx/result.json")"
+# Метрики (E08-T5): первая пачка снята агентом в песочнице службы и подтверждена шлюзом.
+for m in mem_used_percent mem_used_bytes load1 uptime_seconds procs_total tcp_connections; do
+	jq -e --arg m "$m" '.metrics | index($m) != null' "$ctx/result.json" >/dev/null || fail "в пачке метрик нет $m: $(jq -c .metrics "$ctx/result.json")"
+done
 x systemctl is-active --quiet trassa-helper.service trassa-agent.service || fail "службы не активны"
 x test "$(x stat -c '%a %U %G' /run/trassa/helper.sock)" = "660 root trassa" || fail "права сокета помощника"
 
@@ -110,6 +114,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "reinstall-idempotent", "uninstall-clean"],
+	  metrics: $run[0].metrics,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"
 echo "OK $osid $arch: установка ${installed} с, на связи через ${online} с"

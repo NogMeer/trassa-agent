@@ -112,6 +112,7 @@ Trassa не хостинг и не VPN. Серверы остаются ваши
 | `internal/channel`, `internal/identity`, `internal/enroll` | Канал WSS, ключ агента, регистрация |
 | `internal/helper`, `internal/helperrpc`, `internal/ops`, `internal/nonce` | Помощник: сокет с проверкой uid, зашитый список операций, проверки подписи, сроков и одноразовых номеров |
 | `internal/rollback`, `internal/autorollback` | Точка отката и автооткат по таймеру systemd |
+| `internal/metrics` | Метрики сервера из `/proc` и `statfs` без прав root: пачки раз в 15 с, без связи копятся до 10 минут |
 | `internal/update`, `internal/uninstall`, `internal/redact`, `internal/sysinfo` | Обновление по подписи minisign, удаление, очистка секретов в выводе, сведения о системе |
 | [`scripts/install.sh`](scripts/install.sh), [`packaging/systemd/`](packaging/systemd/) | Установщик и службы |
 | `test/stubpanel`, `scripts/ci-matrix.sh`, `tools/release-sign`, `scripts/release-gate.sh` | Матрица ОС в CI на заглушке панели, подпись выпуска и проверка перед публикацией |

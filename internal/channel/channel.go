@@ -26,6 +26,7 @@ import (
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/identity"
+	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/update"
 	"github.com/NogMeer/trassa-agent/internal/verify"
@@ -68,6 +69,8 @@ type Config struct {
 	Now        func() time.Time
 	// UpdateDir — куда скачивать выпуск для agent.update (/var/lib/trassa/agent/update).
 	UpdateDir string
+	// Metrics — пачки метрик для отправки (E08); nil — метрики не отправляются.
+	Metrics *metrics.Buffer
 }
 
 var (
@@ -145,9 +148,19 @@ type conn struct {
 	mu   sync.Mutex
 	seq  uint64
 	sent map[uint64]string // seq кадра итога → operation_id
+	// metricSent — seq кадра метрик → номер пачки в буфере.
+	metricSent map[uint64]uint64
+	// skewMs — поправка часов агента к часам шлюза из Welcome: время пачки метрик в часах шлюза (E08).
+	skewMs int64
 }
 
 func (c *conn) send(ctx context.Context, m *agentv1.AgentMessage) (uint64, error) {
+	return c.sendTracked(ctx, m, 0)
+}
+
+// sendTracked отправляет кадр; metricID ≠ 0 — кадр несёт пачку метрик с этим номером. Номер кадра запоминается
+// под тем же замком, что и запись: InboundAck на него не обгонит отметку.
+func (c *conn) sendTracked(ctx context.Context, m *agentv1.AgentMessage, metricID uint64) (uint64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.seq++
@@ -166,6 +179,9 @@ func (c *conn) send(ctx context.Context, m *agentv1.AgentMessage) (uint64, error
 	}
 	if r := m.GetOperationResult(); r != nil {
 		c.sent[c.seq] = r.GetOperationId()
+	}
+	if metricID != 0 {
+		c.metricSent[c.seq] = metricID
 	}
 	return c.seq, nil
 }
@@ -212,7 +228,7 @@ func (a *Agent) session(ctx context.Context) error {
 	}
 	defer ws.CloseNow()
 	ws.SetReadLimit(MaxMessage)
-	c := &conn{a: a, ws: ws, sent: map[uint64]string{}}
+	c := &conn{a: a, ws: ws, sent: map[uint64]string{}, metricSent: map[uint64]uint64{}}
 	sctx, scancel := context.WithCancel(ctx)
 	defer scancel()
 
@@ -239,9 +255,12 @@ func (a *Agent) session(ctx context.Context) error {
 		}
 	}
 
-	errc := make(chan error, 2)
+	errc := make(chan error, 3)
 	go func() { errc <- a.heartbeat(sctx, c, hb) }()
 	go func() { errc <- a.readLoop(sctx, c) }()
+	if a.cfg.Metrics != nil {
+		go func() { errc <- a.metricsLoop(sctx, c) }()
+	}
 	err = <-errc
 	scancel()
 	if err == nil {
@@ -299,6 +318,9 @@ func (a *Agent) handshake(ctx context.Context, c *conn) (time.Duration, error) {
 	w := m.GetWelcome()
 	if w == nil || w.GetProtocolVersion() != agentv1.ProtocolVersion_PROTOCOL_VERSION_1 {
 		return 0, errors.New("ждали Welcome с протоколом 1")
+	}
+	if gt := w.GetGatewayTimeMs(); gt > 0 {
+		c.skewMs = gt - a.cfg.Now().UnixMilli()
 	}
 	hb := time.Duration(w.GetHeartbeatSec()) * time.Second
 	if hb <= 0 || hb > 5*time.Minute {
@@ -453,7 +475,13 @@ func (a *Agent) inboundAck(ctx context.Context, c *conn, seq uint64) {
 	c.mu.Lock()
 	op, ok := c.sent[seq]
 	delete(c.sent, seq)
+	mid, isMetric := c.metricSent[seq]
+	delete(c.metricSent, seq)
 	c.mu.Unlock()
+	if isMetric {
+		a.cfg.Metrics.Ack(mid)
+		return
+	}
 	if !ok {
 		return
 	}
@@ -466,6 +494,31 @@ func (a *Agent) inboundAck(ctx context.Context, c *conn, seq uint64) {
 		return
 	}
 	a.ob.remove(op, r.GetOutcome())
+}
+
+// metricsLoop отправляет пачки метрик, которых шлюз ещё не подтвердил: накопленные без связи — сразу после
+// рукопожатия, новые — по мере сбора. Пачка, ушедшая в этом соединении, повторно в нём не шлётся; без квитанции
+// она уйдёт снова в следующем. Время пачки переводится в часы шлюза.
+func (a *Agent) metricsLoop(ctx context.Context, c *conn) error {
+	sent := map[uint64]bool{}
+	for {
+		for _, it := range a.cfg.Metrics.Pending() {
+			if sent[it.ID] {
+				continue
+			}
+			b := proto.CloneOf(it.Batch)
+			b.CollectedAtMs += c.skewMs
+			if _, err := c.sendTracked(ctx, &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Metrics{Metrics: b}}, it.ID); err != nil {
+				return err
+			}
+			sent[it.ID] = true
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-a.cfg.Metrics.Notify():
+		}
+	}
 }
 
 // outbox — итоги, ждущие InboundAck. Ключ — operation_id: новый итог той же операции (подтверждение, автооткат)

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/verify"
 )
 
@@ -342,4 +344,82 @@ func updateOp(t *testing.T, op, base string) *agentv1.SignedOperation {
 		NotAfterMs: now.Add(5 * time.Minute).UnixMilli(), IssuedAtMs: now.UnixMilli(), Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
 	})
 	return &agentv1.SignedOperation{Body: body, KeyId: "k1", Signature: ed25519.Sign(panelPriv, verify.Input(verify.ContextOperation, body))}
+}
+
+// Метрики (E08): накопленные без связи пачки уходят после рукопожатия во времени шлюза; подтверждённая пачка
+// больше не шлётся, неподтверждённая уходит снова в следующем соединении, и ровно один раз.
+func TestMetricsDelivery(t *testing.T) {
+	id := newIdentity(t)
+	agentNow := func() time.Time { return time.Now().Add(-time.Hour) } // часы агента отстают от шлюза на час
+	buf := metrics.NewBuffer(agentNow)
+	base := agentNow()
+	buf.Add(&agentv1.MetricsBatch{CollectedAtMs: base.UnixMilli(), Metrics: []*agentv1.Metric{{Name: "load1", Value: 1}}})
+	buf.Add(&agentv1.MetricsBatch{CollectedAtMs: base.Add(15 * time.Second).UnixMilli(), Metrics: []*agentv1.Metric{{Name: "load1", Value: 2}}})
+
+	var mu sync.Mutex
+	got := map[int][]*agentv1.MetricsBatch{}
+	var conns atomic.Int32
+	g := newGateway(t, id.PublicKey(), func(ctx context.Context, c *gwConn) {
+		n := int(conns.Add(1))
+		for {
+			m, err := c.read(ctx)
+			if err != nil {
+				return
+			}
+			b := m.GetMetrics()
+			if b == nil {
+				continue
+			}
+			mu.Lock()
+			got[n] = append(got[n], b)
+			count := len(got[n])
+			mu.Unlock()
+			// Первое соединение подтверждает только первую пачку и рвётся после второй.
+			if n > 1 || b.GetMetrics()[0].GetValue() == 1 {
+				_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_InboundAck{InboundAck: &agentv1.InboundAck{Seq: m.GetSeq()}}})
+			}
+			if n == 1 && count == 2 {
+				return
+			}
+		}
+	})
+	a := newAgent(t, id, g, newFakeHelper())
+	a.cfg.Metrics = buf
+	a.cfg.Now = agentNow
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = a.Run(ctx) }()
+	waitFor(t, 5*time.Second, func() bool { return buf.Len() == 0 }, "все пачки подтверждены")
+
+	mu.Lock()
+	first, second := append([]*agentv1.MetricsBatch(nil), got[1]...), append([]*agentv1.MetricsBatch(nil), got[2]...)
+	mu.Unlock()
+	if len(first) != 2 {
+		t.Fatalf("первое соединение: %d пачек", len(first))
+	}
+	if len(second) != 1 || second[0].GetMetrics()[0].GetValue() != 2 {
+		t.Fatalf("второе соединение: %+v", second)
+	}
+	// Время пачки — в часах шлюза: агент добавил поправку из Welcome (около часа).
+	skew := first[0].GetCollectedAtMs() - base.UnixMilli()
+	if skew < (time.Hour-5*time.Second).Milliseconds() || skew > (time.Hour+5*time.Second).Milliseconds() {
+		t.Fatalf("поправка часов %d мс", skew)
+	}
+
+	// Новая пачка во время соединения уходит сразу и один раз.
+	buf.Add(&agentv1.MetricsBatch{CollectedAtMs: agentNow().UnixMilli(), Metrics: []*agentv1.Metric{{Name: "load1", Value: 3}}})
+	waitFor(t, 5*time.Second, func() bool { return buf.Len() == 0 }, "новая пачка подтверждена")
+	mu.Lock()
+	defer mu.Unlock()
+	threes := 0
+	for _, bs := range got {
+		for _, b := range bs {
+			if b.GetMetrics()[0].GetValue() == 3 {
+				threes++
+			}
+		}
+	}
+	if threes != 1 {
+		t.Fatalf("новая пачка ушла %d раз", threes)
+	}
 }

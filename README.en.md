@@ -112,6 +112,7 @@ Updates are signed and rolled out in waves. If a new version fails to start, the
 | `internal/channel`, `internal/identity`, `internal/enroll` | WSS channel, agent key, enrollment |
 | `internal/helper`, `internal/helperrpc`, `internal/ops`, `internal/nonce` | Helper: socket with caller uid check, built-in operation list, signature, expiry and nonce checks |
 | `internal/rollback`, `internal/autorollback` | Rollback points and timer-based auto-rollback via systemd |
+| `internal/metrics` | Server metrics from `/proc` and `statfs` without root: a batch every 15 s, kept for up to 10 minutes while offline |
 | `internal/update`, `internal/uninstall`, `internal/redact`, `internal/sysinfo` | minisign-verified updates, uninstall, secret redaction in output, system facts |
 | [`scripts/install.sh`](scripts/install.sh), [`packaging/systemd/`](packaging/systemd/) | Installer and service units |
 | `test/stubpanel`, `scripts/ci-matrix.sh`, `tools/release-sign`, `scripts/release-gate.sh` | CI OS matrix against a stub panel, release signing and the pre-publish check |

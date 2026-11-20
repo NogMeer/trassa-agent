@@ -3,7 +3,7 @@
 // Заглушка панели для матрицы ОС в CI (E05-T28). Только для одноразового контейнера CI: свой УЦ, тестовый ключ
 // выпуска и тестовый ключ панели создаются при запуске и живут до конца прогона. Отдаёт то же, что настоящая панель:
 // install.sh, манифест выпуска, файлы выпуска с подписью minisign, регистрацию и шлюз WSS. Шлюз проводит рукопожатие,
-// отправляет подписанную операцию system.info и записывает итог в <out>/result.json.
+// отправляет подписанную операцию system.info, принимает метрики и записывает итог в <out>/result.json.
 //
 // Запуск: stubpanel -release <каталог с бинарниками> -version 1.2.3 -script scripts/install.sh -out <каталог>
 // Файлы в <out>: ca.pem (корневой сертификат), release.pub (ключ выпуска для install.sh), token, result.json.
@@ -376,6 +376,10 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 	if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: p.systemInfo()}}); err != nil {
 		return
 	}
+	// Итог пишется, когда пришли и результат system.info, и первая пачка метрик (E08-T5).
+	var res *agentv1.OperationResult
+	var names []string
+	written := false
 	for {
 		m, err := c.read(ctx)
 		if err != nil {
@@ -383,20 +387,27 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if a := m.GetOperationAck(); a != nil && !a.GetAccepted() {
-			p.result(h, nil, "отказ помощника: "+a.GetRejectCode())
+			p.result(h, nil, nil, "отказ помощника: "+a.GetRejectCode())
 			return
 		}
-		res := m.GetOperationResult()
-		if res == nil || res.GetOperationId() != operation {
+		if r := m.GetOperationResult(); r != nil && r.GetOperationId() == operation {
+			res = r
+		} else if b := m.GetMetrics(); b != nil && names == nil {
+			names = []string{}
+			for _, x := range b.GetMetrics() {
+				names = append(names, x.GetName())
+			}
+			if d := time.Since(time.UnixMilli(b.GetCollectedAtMs())); d > time.Minute || d < -time.Minute {
+				p.result(h, nil, nil, fmt.Sprintf("время пачки метрик сбито на %s", d))
+				return
+			}
+		} else if m.GetMetrics() == nil {
 			continue
 		}
 		_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_InboundAck{InboundAck: &agentv1.InboundAck{Seq: m.GetSeq()}}})
-		p.result(h, res, "")
-		// Соединение держится: агент продолжает пульс, пока CI не удалит его.
-		for {
-			if _, err := c.read(ctx); err != nil {
-				return
-			}
+		if !written && res != nil && names != nil {
+			p.result(h, res, names, "")
+			written = true
 		}
 	}
 }
@@ -414,7 +425,7 @@ func (p *panel) systemInfo() *agentv1.SignedOperation {
 }
 
 // result пишет итог прогона: hello, итог операции и ошибку, если была.
-func (p *panel) result(h *agentv1.Hello, res *agentv1.OperationResult, problem string) {
+func (p *panel) result(h *agentv1.Hello, res *agentv1.OperationResult, metrics []string, problem string) {
 	mo := protojson.MarshalOptions{UseProtoNames: true}
 	hello, _ := mo.Marshal(&agentv1.Hello{Os: h.GetOs(), OsVersion: h.GetOsVersion(), Arch: h.GetArch(),
 		AgentVersion: h.GetAgentVersion(), HelperVersion: h.GetHelperVersion(), Capabilities: h.GetCapabilities()})
@@ -422,7 +433,7 @@ func (p *panel) result(h *agentv1.Hello, res *agentv1.OperationResult, problem s
 	if res != nil {
 		resJSON, _ = mo.Marshal(res)
 	}
-	b, _ := json.MarshalIndent(map[string]any{"problem": problem, "hello": json.RawMessage(hello), "result": resJSON}, "", "  ")
+	b, _ := json.MarshalIndent(map[string]any{"problem": problem, "hello": json.RawMessage(hello), "result": resJSON, "metrics": metrics}, "", "  ")
 	if err := os.WriteFile(filepath.Join(p.out, "result.json"), append(b, '\n'), 0o600); err != nil {
 		log.Printf("result.json: %v", err)
 	}
