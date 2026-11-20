@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -220,8 +221,14 @@ func covers(r *agentv1.FirewallRule, port uint32) bool {
 // checkLockout — каждый порт, на котором sshd слушает по настройкам, и ssh_port набора открыты правилом HOST.
 func checkLockout(ctx context.Context, s *Scan, rs *agentv1.FirewallRuleset) error {
 	ports := []uint32{rs.GetSshPort()}
-	if e, err := s.SSH(ctx); err == nil {
+	// Порты, на которых sshd слушает сейчас, тоже должны остаться открыты. Не прочитали настройки — не знаем, чем
+	// входят на сервер: отказ. Без sshd на сервере (нет программы) проверяется только порт из набора.
+	e, err := s.SSH(ctx)
+	switch {
+	case err == nil:
 		ports = append(ports, e.GetPorts()...)
+	case !errors.Is(err, exec.ErrNotFound):
+		return fmt.Errorf("%w: настройки SSH не прочитаны (%v) — неизвестно, какой порт оставить открытым", ErrPrecondition, err)
 	}
 	for _, p := range ports {
 		ok := false

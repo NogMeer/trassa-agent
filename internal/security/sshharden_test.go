@@ -152,3 +152,43 @@ func TestSSHHardenPreconditions(t *testing.T) {
 		t.Fatalf("занятый порт: %v", err)
 	}
 }
+
+// Пароль уже выключен раньше: запрет root без ключа у пользователя с sudo — отказ, с ключом — можно.
+func TestSSHHardenRootNoWithPasswordAlreadyOff(t *testing.T) {
+	base := "port 22\npasswordauthentication no\npermitrootlogin yes\nkbdinteractiveauthentication no\n"
+	sys := sshSystem(t, false)
+	sys.Run = fakeSSHD(sys, base)
+	if _, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{RootLogin: agentv1.RootLogin_ROOT_LOGIN_NO}); !errors.Is(err, ErrPrecondition) {
+		t.Fatalf("без ключа: %v", err)
+	}
+	sys = sshSystem(t, true)
+	sys.Run = fakeSSHD(sys, base)
+	if _, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{RootLogin: agentv1.RootLogin_ROOT_LOGIN_NO}); err != nil {
+		t.Fatalf("с ключом: %v", err)
+	}
+}
+
+// Межсетевой экран Trassa загружен: новый порт SSH должен быть в нём открыт.
+func TestSSHHardenPortVsTrassaFirewall(t *testing.T) {
+	table := "table inet trassa {\n\tchain input {\n\t\ttcp dport 22 accept\n\t\tip saddr { 10.0.0.0/8 } tcp dport 2000-2100 accept comment \"vpn\"\n\t}\n" +
+		"\tchain forward {\n\t\tmeta l4proto tcp ct original proto-dst 3333 accept\n\t\ttcp dport 4444 accept\n\t}\n}\n"
+	for port, ok := range map[uint32]bool{2022: true, 3333: false, 4444: false, 2222: false} {
+		sys := sshSystem(t, true)
+		sshd := fakeSSHD(sys, "port 22\npasswordauthentication yes\npermitrootlogin yes\nkbdinteractiveauthentication no\n")
+		sys.Run = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			if name == "nft" {
+				return []byte(table), nil
+			}
+			return sshd(ctx, name, args...)
+		}
+		_, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{Port: port})
+		if ok && err != nil || !ok && !errors.Is(err, ErrPrecondition) {
+			t.Errorf("порт %d: %v", port, err)
+		}
+	}
+	// Таблицы Trassa нет — проверка не мешает (остаётся заметка про чужой firewall).
+	sys := sshSystem(t, true)
+	if _, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{Port: 2222}); err != nil {
+		t.Fatal(err)
+	}
+}

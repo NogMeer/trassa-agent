@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -148,6 +149,19 @@ func TestLockoutAndIfaces(t *testing.T) {
 	rs.Rules = append(rs.Rules, &agentv1.FirewallRule{Target: agentv1.FirewallTarget_FIREWALL_TARGET_HOST, Protocol: "tcp", Port: 2000, PortTo: 3000})
 	if err := checkLockout(context.Background(), newScan(sys), rs); err != nil {
 		t.Fatal(err)
+	}
+	// sshd есть, но настройки не прочитаны — отказ; sshd нет вовсе — проверяется только порт набора.
+	sys.Run = func(context.Context, string, ...string) ([]byte, error) {
+		return nil, errors.New("sshd -T: exit status 255")
+	}
+	if err := checkLockout(context.Background(), newScan(sys), sampleRuleset()); !errors.Is(err, ErrPrecondition) {
+		t.Fatalf("ошибка sshd -T: %v", err)
+	}
+	sys.Run = func(_ context.Context, name string, _ ...string) ([]byte, error) {
+		return nil, &exec.Error{Name: name, Err: exec.ErrNotFound}
+	}
+	if err := checkLockout(context.Background(), newScan(sys), sampleRuleset()); err != nil {
+		t.Fatalf("без sshd: %v", err)
 	}
 	if _, err := ExternalIfaces(build(t, tree{"proc/net/route": "Iface\tDestination\n"})); !errors.Is(err, ErrPrecondition) {
 		t.Fatal(err)

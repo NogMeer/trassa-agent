@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -204,7 +205,17 @@ func sshPreconditions(ctx context.Context, s *Scan, cur *agentv1.SshEffective, w
 	if root == "no" && len(admins) == 0 {
 		return fmt.Errorf("%w: для запрета входа root нужен пользователь с sudo", ErrPrecondition)
 	}
-	if want["PasswordAuthentication"] == "no" {
+	// Вход по паролю после изменения: запрошенный или действующий сейчас (PAM через keyboard-interactive тоже
+	// пароль). Без пароля войти можно только ключом — он нужен, даже если пароль выключили раньше.
+	password := cur.GetSettings()["passwordauthentication"]
+	if v, ok := want["PasswordAuthentication"]; ok {
+		password = v
+	}
+	kbd := cur.GetSettings()["kbdinteractiveauthentication"]
+	if v, ok := want["KbdInteractiveAuthentication"]; ok {
+		kbd = v
+	}
+	if password != "yes" && kbd != "yes" {
 		ok := false
 		for _, k := range keys {
 			if isAdmin[k.user] || (k.user == "root" && root != "no") {
@@ -226,8 +237,43 @@ func sshPreconditions(ctx context.Context, s *Scan, cur *agentv1.SshEffective, w
 				return fmt.Errorf("%w: порт %d занят процессом %s", ErrPrecondition, n, l.GetProcess())
 			}
 		}
+		// Межсетевой экран Trassa загружен — новый порт должен быть в нём открыт, иначе после перезапуска sshd
+		// новые соединения не пройдут.
+		if table, err := s.sys.run(ctx, "nft", "list", "table", "inet", "trassa"); err == nil && !nftInputOpens(string(table), uint32(n)) {
+			return fmt.Errorf("%w: порт %d не открыт в межсетевом экране Trassa — сначала добавьте правило", ErrPrecondition, n)
+		}
 	}
 	return nil
+}
+
+var nftTCPAccept = regexp.MustCompile(`\btcp dport (\d+)(?:-(\d+))?\b.*\baccept\b`)
+
+// nftInputOpens — в цепочке input таблицы Trassa (вывод `nft list table`) есть правило accept для tcp-порта.
+func nftInputOpens(table string, port uint32) bool {
+	in := false
+	for _, l := range strings.Split(table, "\n") {
+		l = strings.TrimSpace(l)
+		switch {
+		case strings.HasPrefix(l, "chain "):
+			in = strings.HasPrefix(l, "chain input ")
+			continue
+		case !in:
+			continue
+		}
+		m := nftTCPAccept.FindStringSubmatch(l)
+		if m == nil {
+			continue
+		}
+		from, _ := strconv.ParseUint(m[1], 10, 16)
+		to := from
+		if m[2] != "" {
+			to, _ = strconv.ParseUint(m[2], 10, 16)
+		}
+		if uint64(port) >= from && uint64(port) <= to {
+			return true
+		}
+	}
+	return false
 }
 
 func parseSSHDConfig(s string) map[string]string {
