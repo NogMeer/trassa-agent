@@ -4,8 +4,11 @@ package helper
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/security"
 )
 
@@ -23,6 +26,53 @@ func (e *Executor) applySecurityScan(ctx context.Context, r *run) *agentv1.Opera
 	res := r.succeeded("")
 	res.Data = &agentv1.OperationResult_SecurityScan{SecurityScan: security.Run(ctx, e.Security, r.body.GetParams().GetSecurityScan())}
 	return res
+}
+
+// Коды итога исправлений.
+const (
+	CodeFixSubject      = "FIX_SUBJECT_NOT_FOUND"
+	CodeFixPrecondition = "FIX_PRECONDITION"
+)
+
+func fixCode(t string) string { return strings.TrimPrefix(t, ops.FixPrefix) }
+
+func (e *Executor) planFix(ctx context.Context, r *run) (*security.FixPlan, *agentv1.OperationResult) {
+	if e.Security == nil {
+		return nil, r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
+	}
+	p, err := security.PlanFix(ctx, e.Security, fixCode(r.body.GetType()), r.body.GetParams().GetSecurityFix().GetSubjects())
+	switch {
+	case errors.Is(err, security.ErrSubject):
+		return nil, r.failed(CodeFixSubject, err.Error())
+	case errors.Is(err, security.ErrPrecondition):
+		return nil, r.failed(CodeFixPrecondition, err.Error())
+	case err != nil:
+		return nil, r.failed(CodeApplyFailed, err.Error())
+	}
+	return p, nil
+}
+
+func (e *Executor) previewFix(ctx context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult) {
+	p, fail := e.planFix(ctx, r)
+	if fail != nil {
+		return nil, fail
+	}
+	return &agentv1.Preview{Summary: p.Summary, Files: p.Changes, Services: p.Services, Notes: p.Notes}, nil
+}
+
+// applyFix — security.fix.<код>: план по свежей проверке, точка отката (файлы и состояние), применение,
+// повторная проверка; провал — автоматический возврат (runConfigChange).
+func (e *Executor) applyFix(ctx context.Context, r *run) *agentv1.OperationResult {
+	p, fail := e.planFix(ctx, r)
+	if fail != nil {
+		return fail
+	}
+	r.system("%s", p.Summary)
+	return e.runConfigChange(ctx, r, configChange{
+		paths: p.Paths, services: p.Services, state: p.State,
+		apply:  func() error { return p.Apply(ctx) },
+		verify: func() error { return p.Verify(ctx) },
+	})
 }
 
 // applyListUpdates — packages.list_updates: кэш apt без сети.

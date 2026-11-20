@@ -16,10 +16,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"strconv"
+	"strings"
 	"syscall"
+	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
@@ -134,7 +137,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		Checker:  &helper.Checker{Keys: keys, ServerID: en.ServerID, Catalog: ops.Builtin(), Nonces: n},
 		States:   helper.States{Dir: p.OpsDir},
 		Nonces:   n,
-		Rollback: &rollback.Store{Dir: p.RollbackDir},
+		Rollback: &rollback.Store{Dir: p.RollbackDir, Exec: execNoShell},
 		Auto:     autorollback.Store{Dir: p.AutoRollbackDir},
 		Timer:    autorollback.DefaultSystemd(),
 		Lock:     helper.FileLock{Path: p.HelperLock},
@@ -206,4 +209,22 @@ func rollbackCmd(ctx context.Context, log *slog.Logger, op string) error {
 	}
 	defer closeFn()
 	return ex.AutoRollback(ctx, op)
+}
+
+// execNoShell — systemctl и apt-get для отката состояния (rollback.State): без оболочки, ограниченное окружение,
+// вывод в журнал помощника не идёт, код возврата — ошибка.
+func execNoShell(name string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = []string{"LANG=C", "LC_ALL=C", "PATH=/usr/sbin:/usr/bin:/sbin:/bin", "DEBIAN_FRONTEND=noninteractive"}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		s := strings.TrimSpace(string(out))
+		if len(s) > 500 {
+			s = s[len(s)-500:]
+		}
+		return fmt.Errorf("%w: %s", err, s)
+	}
+	return nil
 }

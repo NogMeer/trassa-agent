@@ -77,6 +77,12 @@ x sh -c 'test ! -e /usr/local/bin/trassa-agent && test ! -e /etc/trassa && test 
 
 # 2. Установка и регистрация. Журнал для подписки E08-T15 и ссылка из /var/log наружу — её читать нельзя.
 x sh -c 'printf "before subscribe\n" >/var/log/ci-logs.log && ln -sf /etc/shadow /var/log/ci-evil.log'
+# Для исправлений E10-T10: файл в /etc, доступный всем на запись; списки пакетов (fail2ban ставится из
+# репозитория системы); исходные параметры ядра для сверки после возврата.
+x sh -c 'printf "ci\n" >/etc/ci-ww.conf && chmod 0666 /etc/ci-ww.conf && apt-get update -qq >/dev/null'
+SYSCTLS="net/ipv4/conf/all/accept_redirects net/ipv4/conf/default/accept_redirects net/ipv4/conf/all/send_redirects net/ipv4/conf/all/log_martians net/ipv6/conf/all/accept_redirects"
+sysctl_snapshot() { x sh -c "for p in $SYSCTLS; do printf '%s=' \$p; cat /proc/sys/\$p 2>/dev/null || echo none; done"; }
+sysctl_before=$(sysctl_snapshot)
 stub
 start=$(date +%s)
 install_cmd || fail "установка не удалась"
@@ -123,6 +129,21 @@ jq -e '[.security_scan.checks[] | select(.state == "CHECK_STATE_ERROR")] | lengt
 jq -r '.security_scan.checks[] | "\(.code) \(.state) \(.subject // "") \(.error // "")"' "$ctx/security.json"
 jq -c '{updates: (.packages_list_updates.packages // [] | length), security: ([.packages_list_updates.packages[]? | select(.security)] | length)}' "$ctx/packages.json"
 
+# Исправления E10-T10: применить с проверкой и вернуть rollback.restore — система как до исправления.
+for code in PERM_WORLD_WRITABLE SYSCTL_NETWORK BRUTEFORCE_NO_PROTECTION; do
+	for _ in $(seq 1 240); do x test -s "$STUB/revert-$code.json" && break; sleep 1; done
+	podman cp "$NAME:$STUB/fix-$code.json" "$ctx/fix.json" 2>/dev/null || fail "нет итога security.fix.$code"
+	jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED" and .rollback_point.kind == "ROLLBACK_KIND_CONFIG"' "$ctx/fix.json" >/dev/null ||
+		fail "security.fix.$code: $(cat "$ctx/fix.json")"
+	podman cp "$NAME:$STUB/revert-$code.json" "$ctx/revert.json" 2>/dev/null || fail "нет итога возврата $code"
+	jq -e '.outcome == "OPERATION_OUTCOME_SUCCEEDED"' "$ctx/revert.json" >/dev/null || fail "возврат $code: $(cat "$ctx/revert.json")"
+	echo "fix $code: применено и возвращено"
+done
+[ "$(x stat -c %a /etc/ci-ww.conf)" = "666" ] || fail "права /etc/ci-ww.conf не вернулись"
+[ "$(sysctl_snapshot)" = "$sysctl_before" ] || fail "параметры ядра не вернулись: было $sysctl_before, стало $(sysctl_snapshot)"
+! x dpkg -s fail2ban >/dev/null 2>&1 || fail "fail2ban остался после возврата"
+x test ! -e /etc/sysctl.d/90-trassa-security.conf || fail "файл параметров Trassa остался"
+
 # События (E08-T12): упавшая служба даёт service.down за 30 с, сброс — resolved.
 x systemd-run --quiet --unit=ci-broken --property=Type=oneshot /bin/false || true
 event_seen() {
@@ -155,7 +176,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" --slurpfile scan "$ctx/security.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "events", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "logs", "security.scan", "packages.list_updates", "security.fix", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
 	  security: $scan[0].security_scan.checks,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"

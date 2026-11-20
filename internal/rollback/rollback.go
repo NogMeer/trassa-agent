@@ -52,6 +52,39 @@ type File struct {
 	Size    int64  `json:"size,omitempty"`
 	SHA256  string `json:"sha256,omitempty"`
 	Copy    string `json:"copy,omitempty"`
+	// Dir — каталог: сохраняются только права и владелец (исправления прав, E10).
+	Dir bool `json:"dir,omitempty"`
+	// Special — биты setuid (04000), setgid (02000) и sticky (01000): их тоже возвращает откат.
+	Special uint32 `json:"special,omitempty"`
+}
+
+func specialBits(m os.FileMode) uint32 {
+	var b uint32
+	if m&os.ModeSetuid != 0 {
+		b |= 0o4000
+	}
+	if m&os.ModeSetgid != 0 {
+		b |= 0o2000
+	}
+	if m&os.ModeSticky != 0 {
+		b |= 0o1000
+	}
+	return b
+}
+
+// fullMode — права вместе с особыми битами для os.Chmod.
+func fullMode(f File) os.FileMode {
+	m := os.FileMode(f.Mode).Perm()
+	if f.Special&0o4000 != 0 {
+		m |= os.ModeSetuid
+	}
+	if f.Special&0o2000 != 0 {
+		m |= os.ModeSetgid
+	}
+	if f.Special&0o1000 != 0 {
+		m |= os.ModeSticky
+	}
+	return m
 }
 
 // Manifest — описание точки.
@@ -61,7 +94,28 @@ type Manifest struct {
 	Files       []File   `json:"files"`
 	Services    []string `json:"services"`
 	TotalBytes  int64    `json:"total_bytes"`
+	State       State    `json:"state,omitempty"`
 }
+
+// State — состояние системы вне файлов, которое возвращает откат (исправления центра безопасности, E10):
+// прежние значения параметров ядра, состояние служб и пакеты, которые поставила сама операция.
+type State struct {
+	// Sysctl — имя параметра (net.ipv4.tcp_syncookies) → прежнее значение.
+	Sysctl map[string]string `json:"sysctl,omitempty"`
+	Units  []UnitState       `json:"units,omitempty"`
+	// Packages — поставлены операцией: откат их удаляет вместе с настройками.
+	Packages []string `json:"packages,omitempty"`
+}
+
+// UnitState — служба до операции.
+type UnitState struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	Active  bool   `json:"active"`
+}
+
+// Empty — откат не трогает ничего, кроме файлов.
+func (s State) Empty() bool { return len(s.Sysctl) == 0 && len(s.Units) == 0 && len(s.Packages) == 0 }
 
 // Store — каталог точек.
 type Store struct {
@@ -70,6 +124,10 @@ type Store struct {
 	MaxAge   time.Duration
 	MaxCount int
 	Now      func() time.Time
+	// ProcSys — корень параметров ядра (/proc/sys); Exec — запуск systemctl и apt-get без оболочки. Нужны
+	// только для точек с State.
+	ProcSys string
+	Exec    func(name string, args ...string) error
 }
 
 func (s *Store) now() time.Time {
@@ -92,7 +150,15 @@ func unavailable(format string, a ...any) error {
 
 // Create сохраняет файлы paths. Поддерживаются обычные файлы и отсутствующие пути (при возврате они удаляются).
 // Любая ошибка — ErrUnavailable, частично созданная точка удаляется.
-func (s *Store) Create(op string, paths, services []string) (m *Manifest, err error) {
+func (s *Store) Create(op string, paths, services []string) (*Manifest, error) {
+	return s.CreateState(op, paths, services, State{})
+}
+
+// CreateState — точка отката с состоянием системы вне файлов.
+func (s *Store) CreateState(op string, paths, services []string, state State) (m *Manifest, err error) {
+	if !state.Empty() && s.Exec == nil {
+		return nil, unavailable("откат состояния системы на этой сборке недоступен")
+	}
 	dir, err := s.dir(op)
 	if err != nil {
 		return nil, unavailable("%v", err)
@@ -115,7 +181,7 @@ func (s *Store) Create(op string, paths, services []string) (m *Manifest, err er
 	if limit <= 0 {
 		limit = DefaultMaxBytes
 	}
-	m = &Manifest{OperationID: op, CreatedAtMs: s.now().UnixMilli(), Services: append([]string{}, services...)}
+	m = &Manifest{OperationID: op, CreatedAtMs: s.now().UnixMilli(), Services: append([]string{}, services...), State: state}
 	seen := map[string]bool{}
 	for i, p := range paths {
 		if !filepath.IsAbs(p) || filepath.Clean(p) != p {
@@ -133,6 +199,14 @@ func (s *Store) Create(op string, paths, services []string) (m *Manifest, err er
 		if lerr != nil {
 			return nil, unavailable("%v", lerr)
 		}
+		if st.IsDir() {
+			f := File{Path: p, Existed: true, Dir: true, Mode: uint32(st.Mode().Perm()), Special: specialBits(st.Mode())}
+			if sys, ok := st.Sys().(*syscall.Stat_t); ok {
+				f.UID, f.GID = int(sys.Uid), int(sys.Gid)
+			}
+			m.Files = append(m.Files, f)
+			continue
+		}
 		if !st.Mode().IsRegular() {
 			return nil, unavailable("%s: не обычный файл", p)
 		}
@@ -140,7 +214,7 @@ func (s *Store) Create(op string, paths, services []string) (m *Manifest, err er
 		if m.TotalBytes > limit {
 			return nil, unavailable("больше %d байт", limit)
 		}
-		f := File{Path: p, Existed: true, Mode: uint32(st.Mode().Perm()), Size: st.Size(), Copy: strconv.Itoa(i)}
+		f := File{Path: p, Existed: true, Mode: uint32(st.Mode().Perm()), Special: specialBits(st.Mode()), Size: st.Size(), Copy: strconv.Itoa(i)}
 		if sys, ok := st.Sys().(*syscall.Stat_t); ok {
 			f.UID, f.GID = int(sys.Uid), int(sys.Gid)
 		}
@@ -223,20 +297,118 @@ func (s *Store) Restore(op string) (*Manifest, error) {
 	}
 	dir, _ := s.dir(op)
 	var errs []error
+	// Сначала службы и пакеты операции (иначе служба держит файлы), потом файлы, потом параметры ядра.
+	errs = append(errs, s.restoreUnits(m.State.Units)...)
+	if len(m.State.Packages) > 0 {
+		args := append([]string{"purge", "-y", "-q"}, m.State.Packages...)
+		if err := s.Exec("apt-get", args...); err != nil {
+			errs = append(errs, fmt.Errorf("apt-get purge %v: %w", m.State.Packages, err))
+		}
+	}
 	for _, f := range m.Files {
 		if err := restoreFile(dir, f); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", f.Path, err))
 		}
 	}
+	errs = append(errs, s.restoreSysctl(m.State.Sysctl)...)
 	if len(errs) > 0 {
 		return m, fmt.Errorf("%w: %v", ErrFailed, errors.Join(errs...))
 	}
 	return m, nil
 }
 
+func (s *Store) restoreUnits(units []UnitState) []error {
+	var errs []error
+	for _, u := range units {
+		if !validUnit(u.Name) {
+			errs = append(errs, fmt.Errorf("служба %q", u.Name))
+			continue
+		}
+		en, act := "disable", "stop"
+		if u.Enabled {
+			en = "enable"
+		}
+		if u.Active {
+			act = "start"
+		}
+		for _, a := range []string{en, act} {
+			if err := s.Exec("systemctl", a, "--", u.Name); err != nil {
+				errs = append(errs, fmt.Errorf("systemctl %s %s: %w", a, u.Name, err))
+			}
+		}
+	}
+	return errs
+}
+
+func (s *Store) restoreSysctl(vals map[string]string) []error {
+	var errs []error
+	names := make([]string, 0, len(vals))
+	for n := range vals {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		p, ok := SysctlPath(s.ProcSys, n)
+		if !ok {
+			errs = append(errs, fmt.Errorf("параметр %q", n))
+			continue
+		}
+		// Значение не менялось (применение упало раньше) — писать нечего.
+		if cur, err := os.ReadFile(p); err == nil && strings.TrimSpace(string(cur)) == vals[n] {
+			continue
+		}
+		if err := os.WriteFile(p, []byte(vals[n]+"\n"), 0o644); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", n, err))
+			continue
+		}
+		got, err := os.ReadFile(p)
+		if err != nil || strings.TrimSpace(string(got)) != vals[n] {
+			errs = append(errs, fmt.Errorf("%s: после возврата %q, ждали %q", n, strings.TrimSpace(string(got)), vals[n]))
+		}
+	}
+	return errs
+}
+
+// SysctlPath — файл параметра ядра под root (обычно /proc/sys). Имя — точки и [a-z0-9_-]: без «..» и «/».
+func SysctlPath(root, name string) (string, bool) {
+	if root == "" {
+		root = "/proc/sys"
+	}
+	if name == "" || strings.Contains(name, "..") {
+		return "", false
+	}
+	for _, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-' || c == '.') {
+			return "", false
+		}
+	}
+	return filepath.Join(root, strings.ReplaceAll(name, ".", "/")), true
+}
+
+func validUnit(n string) bool {
+	if n == "" || strings.HasPrefix(n, "-") || len(n) > 256 {
+		return false
+	}
+	for _, c := range n {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("@._:-\\", c)) {
+			return false
+		}
+	}
+	return true
+}
+
 func restoreFile(dir string, f File) error {
 	if !f.Existed {
 		return fsutil.RemoveSync(f.Path)
+	}
+	if f.Dir {
+		if err := os.Lchown(f.Path, f.UID, f.GID); err != nil {
+			return err
+		}
+		if err := os.Chmod(f.Path, fullMode(f)); err != nil {
+			return err
+		}
+		return Matches(f)
 	}
 	src, err := os.Open(filepath.Join(dir, "files", f.Copy))
 	if err != nil {
@@ -249,6 +421,12 @@ func restoreFile(dir string, f File) error {
 	})
 	if err != nil {
 		return err
+	}
+	if f.Special != 0 {
+		// chown при записи снимает setuid и setgid: особые биты ставятся после владельца.
+		if err := os.Chmod(f.Path, fullMode(f)); err != nil {
+			return err
+		}
 	}
 	return Matches(f)
 }
@@ -265,11 +443,17 @@ func Matches(f File) error {
 	if err != nil {
 		return err
 	}
-	if uint32(st.Mode().Perm()) != f.Mode {
-		return fmt.Errorf("права %o, ждали %o", st.Mode().Perm(), f.Mode)
+	if uint32(st.Mode().Perm()) != f.Mode || specialBits(st.Mode()) != f.Special {
+		return fmt.Errorf("права %o (особые %o), ждали %o (%o)", st.Mode().Perm(), specialBits(st.Mode()), f.Mode, f.Special)
 	}
 	if sys, ok := st.Sys().(*syscall.Stat_t); ok && (int(sys.Uid) != f.UID || int(sys.Gid) != f.GID) {
 		return fmt.Errorf("владелец %d:%d, ждали %d:%d", sys.Uid, sys.Gid, f.UID, f.GID)
+	}
+	if f.Dir {
+		if !st.IsDir() {
+			return fmt.Errorf("ждали каталог")
+		}
+		return nil
 	}
 	sum, err := HashFile(f.Path)
 	if err != nil {

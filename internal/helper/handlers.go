@@ -17,6 +17,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/redact"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
+	"github.com/NogMeer/trassa-agent/internal/security"
 	"github.com/NogMeer/trassa-agent/internal/uninstall"
 	"github.com/NogMeer/trassa-agent/internal/update"
 )
@@ -47,6 +48,9 @@ func (e *Executor) builtinHandlers() map[string]handler {
 		ops.TypeSecurityScan:        {apply: e.applySecurityScan},
 		ops.TypePackagesListUpdates: {apply: e.applyListUpdates},
 	}
+	for _, code := range security.FixCodes() {
+		h[ops.FixPrefix+code] = handler{preview: e.previewFix, apply: e.applyFix}
+	}
 	for t, x := range e.extraHandlers() {
 		h[t] = x
 	}
@@ -75,14 +79,16 @@ func (e *Executor) applyInventory(ctx context.Context, r *run) *agentv1.Operatio
 type configChange struct {
 	paths    []string
 	services []string
-	apply    func() error
-	verify   func() error
+	// state — состояние системы вне файлов для отката (параметры ядра, службы, пакеты операции).
+	state  rollback.State
+	apply  func() error
+	verify func() error
 }
 
 func (e *Executor) runConfigChange(ctx context.Context, r *run, c configChange) *agentv1.OperationResult {
 	op := strings.ToLower(r.body.GetOperationId())
 	r.phase = agentv1.OperationPhase_OPERATION_PHASE_ROLLBACK_POINT
-	m, err := e.Rollback.Create(op, c.paths, c.services)
+	m, err := e.Rollback.CreateState(op, c.paths, c.services, c.state)
 	if err != nil {
 		r.system("Точка отката не создана: %v", err)
 		return r.failed(CodeRollbackUnavailable, err.Error())

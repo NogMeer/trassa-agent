@@ -53,7 +53,7 @@ func Real() *System {
 // runCmd запускает программу без оболочки, с чистым окружением и пределом вывода 4 МиБ.
 func runCmd(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = []string{"LANG=C", "LC_ALL=C", "PATH=/usr/sbin:/usr/bin:/sbin:/bin"}
+	cmd.Env = []string{"LANG=C", "LC_ALL=C", "PATH=/usr/sbin:/usr/bin:/sbin:/bin", "DEBIAN_FRONTEND=noninteractive"}
 	var out limitedBuffer
 	out.max = 4 << 20
 	cmd.Stdout = &out

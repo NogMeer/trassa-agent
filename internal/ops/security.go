@@ -13,8 +13,28 @@ const (
 	TypePackagesListUpdates = "packages.list_updates"
 )
 
+// FixPrefix — тип исправления: security.fix.<код проверки>.
+const FixPrefix = "security.fix."
+
+// destructiveFixes — исправления класса DESTRUCTIVE по каталогу E10 (остальные — CHANGE).
+var destructiveFixes = map[string]bool{"USER_EMPTY_PASSWORD": true, "USER_SERVICE_SHELL": true}
+
 func securitySpecs() []Spec {
-	return []Spec{
+	var fixes []Spec
+	for _, code := range security.FixCodes() {
+		class := Change
+		if destructiveFixes[code] {
+			class = Destructive
+		}
+		fixes = append(fixes, Spec{
+			Type: FixPrefix + code, Class: class, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG,
+			match: func(p *agentv1.OperationParams) bool { return p.GetSecurityFix() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				return security.ValidateFix(code, b.GetParams().GetSecurityFix())
+			},
+		})
+	}
+	return append(fixes, []Spec{
 		{
 			Type: TypeSecurityScan, Class: Read, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
 			match:    func(p *agentv1.OperationParams) bool { return p.GetSecurityScan() != nil },
@@ -25,5 +45,5 @@ func securitySpecs() []Spec {
 			match:    func(p *agentv1.OperationParams) bool { return p.GetPackagesListUpdates() != nil },
 			Validate: func(*agentv1.OperationBody) error { return nil },
 		},
-	}
+	}...)
 }

@@ -215,7 +215,7 @@ func checkSSHTries(ctx context.Context, s *Scan) []Finding {
 	return out
 }
 
-func checkSSHPerms(_ context.Context, s *Scan) []Finding {
+func sshPermRules(s *Scan) []permRule {
 	rules := []permRule{{"/etc/ssh/sshd_config", 0o644}}
 	if ents, err := os.ReadDir(s.sys.path("/etc/ssh/sshd_config.d")); err == nil {
 		for _, e := range ents {
@@ -233,8 +233,10 @@ func checkSSHPerms(_ context.Context, s *Scan) []Finding {
 			}
 		}
 	}
-	return checkPerms(s, rules)
+	return rules
 }
+
+func checkSSHPerms(_ context.Context, s *Scan) []Finding { return checkPerms(s, sshPermRules(s)) }
 
 // authorizedKey — ключ из authorized_keys: тип, длина RSA и отпечаток SHA256 (содержимое ключа не уходит).
 type authorizedKey struct {

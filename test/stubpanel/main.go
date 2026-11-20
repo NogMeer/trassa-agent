@@ -72,6 +72,9 @@ type panel struct {
 	mu       sync.Mutex
 	agentPub ed25519.PublicKey
 	used     bool
+	// pendingFix и pendingRevert — исправления и их возвраты, ждущие итога.
+	pendingFix    map[string]fix
+	pendingRevert map[string]string
 }
 
 func main() {
@@ -150,6 +153,7 @@ func setup(addr, release, version, script, out string, tamper bool) (*panel, tls
 	}
 	p := &panel{
 		addr: addr, version: version, out: out, script: src, files: files, panel: panelPriv,
+		pendingFix: map[string]fix{}, pendingRevert: map[string]string{},
 		token: "trs_enr_" + base64.RawURLEncoding.EncodeToString(tok),
 	}
 	if err := os.MkdirAll(out, 0o700); err != nil {
@@ -430,6 +434,39 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			}
 		case m.GetOperationResult().GetOperationId() == scanOperation:
 			p.writeJSON("security.json", m.GetOperationResult())
+			// Исправления E10-T10 по находкам скана, затем возврат каждого (rollback.restore).
+			for i, fx := range p.fixes(m.GetOperationResult().GetSecurityScan()) {
+				id := fmt.Sprintf("01a1f4b6-f2f2-7e66-85b4-0000000001%02d", i)
+				p.mu.Lock()
+				p.pendingFix[id] = fx
+				p.mu.Unlock()
+				op := p.signRollback(id, "security.fix."+fx.code, &agentv1.OperationParams{Params: &agentv1.OperationParams_SecurityFix{
+					SecurityFix: &agentv1.SecurityFixParams{Subjects: fx.subjects}}})
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
+					return
+				}
+			}
+		case p.isFix(m.GetOperationResult().GetOperationId()):
+			r := m.GetOperationResult()
+			fx := p.takeFix(r.GetOperationId())
+			p.writeJSON("fix-"+fx.code+".json", r)
+			if r.GetOutcome() == agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED {
+				id := strings.Replace(r.GetOperationId(), "-0000000001", "-0000000002", 1)
+				p.mu.Lock()
+				p.pendingRevert[id] = fx.code
+				p.mu.Unlock()
+				op := p.signRollback(id, "rollback.restore", &agentv1.OperationParams{Params: &agentv1.OperationParams_RollbackRestore{
+					RollbackRestore: &agentv1.RollbackRestoreParams{TargetOperationId: r.GetOperationId()}}})
+				if err := c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: op}}); err != nil {
+					return
+				}
+			}
+		case p.isRevert(m.GetOperationResult().GetOperationId()):
+			r := m.GetOperationResult()
+			p.mu.Lock()
+			code := p.pendingRevert[r.GetOperationId()]
+			p.mu.Unlock()
+			p.writeJSON("revert-"+code+".json", r)
 		case m.GetOperationResult().GetOperationId() == updatesOperation:
 			p.writeJSON("packages.json", m.GetOperationResult())
 		case m.GetMetrics() != nil:
@@ -461,12 +498,63 @@ func (p *panel) systemInfo() *agentv1.SignedOperation {
 }
 
 func (p *panel) sign(id, typ string, params *agentv1.OperationParams) *agentv1.SignedOperation {
+	return p.signKind(id, typ, params, agentv1.RollbackKind_ROLLBACK_KIND_NONE)
+}
+
+func (p *panel) signRollback(id, typ string, params *agentv1.OperationParams) *agentv1.SignedOperation {
+	return p.signKind(id, typ, params, agentv1.RollbackKind_ROLLBACK_KIND_CONFIG)
+}
+
+type fix struct {
+	code     string
+	subjects []string
+}
+
+// fixes — что исправляет матрица: файл, доступный всем на запись (его создаёт CI), параметры ядра из находок
+// скана и защита от перебора (ставит fail2ban из репозитория системы).
+func (p *panel) fixes(res *agentv1.SecurityScanResult) []fix {
+	by := map[string][]string{}
+	for _, c := range res.GetChecks() {
+		if c.GetState() == agentv1.CheckState_CHECK_STATE_FAIL {
+			by[c.GetCode()] = append(by[c.GetCode()], c.GetSubject())
+		}
+	}
+	var out []fix
+	for _, code := range []string{"PERM_WORLD_WRITABLE", "SYSCTL_NETWORK", "BRUTEFORCE_NO_PROTECTION"} {
+		if len(by[code]) > 0 {
+			out = append(out, fix{code: code, subjects: by[code]})
+		}
+	}
+	return out
+}
+
+func (p *panel) isFix(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.pendingFix[id]
+	return ok
+}
+
+func (p *panel) takeFix(id string) fix {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.pendingFix[id]
+}
+
+func (p *panel) isRevert(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.pendingRevert[id]
+	return ok
+}
+
+func (p *panel) signKind(id, typ string, params *agentv1.OperationParams, rb agentv1.RollbackKind) *agentv1.SignedOperation {
 	now := time.Now()
 	n := make([]byte, 16)
 	_, _ = rand.Read(n)
 	body, _ := proto.Marshal(&agentv1.OperationBody{
 		OperationId: id, ServerId: serverID, Type: typ, Nonce: n, Params: params,
-		NotAfterMs: now.Add(5 * time.Minute).UnixMilli(), IssuedAtMs: now.UnixMilli(), Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+		NotAfterMs: now.Add(5 * time.Minute).UnixMilli(), IssuedAtMs: now.UnixMilli(), Rollback: rb,
 	})
 	return &agentv1.SignedOperation{Body: body, KeyId: panelKeyID, Signature: ed25519.Sign(p.panel, verify.Input(verify.ContextOperation, body))}
 }
