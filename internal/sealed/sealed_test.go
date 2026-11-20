@@ -69,13 +69,13 @@ func checkVectors(t *testing.T, vs []vector) {
 func TestGoVectors(t *testing.T) { checkVectors(t, readVectors(t, "hpke-go.json")) }
 
 // Вектор TS → Go (перекрёстный тест E13, обязателен): шифротекст делает панель на @hpke/core. Файл кладёт
-// бэкенд-сессия; пока его нет, тест падает в CI, а не пропускается молча.
+// бэкенд панели; без него тест падает в CI, а не пропускается молча.
 func TestTSVectors(t *testing.T) {
 	if _, err := os.Stat(filepath.Join("..", "..", "test", "vectors", "hpke-ts.json")); errors.Is(err, os.ErrNotExist) {
-		if os.Getenv("CI") == "true" && os.Getenv("TRASSA_HPKE_TS_PENDING") == "" {
+		if os.Getenv("CI") == "true" {
 			t.Fatal("нет test/vectors/hpke-ts.json — вектора TS → Go")
 		}
-		t.Skip("вектор TS → Go ещё не положен панелью (TRASSA_HPKE_TS_PENDING)")
+		t.Skip("нет test/vectors/hpke-ts.json")
 	}
 	checkVectors(t, readVectors(t, "hpke-ts.json"))
 }

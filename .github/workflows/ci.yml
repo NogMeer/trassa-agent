@@ -18,10 +18,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make tools
-      # Вектор HPKE TS → Go (E13) кладёт бэкенд панели; до него тест помечен ожидающим явно.
       - run: make check
-        env:
-          TRASSA_HPKE_TS_PENDING: "1"
   # Службы на настоящем systemd раннера: песочница агента, права сокета, отказ чужому uid, удаление (E05-T21, R11).
   systemd:
     needs: check
