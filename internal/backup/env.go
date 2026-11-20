@@ -106,6 +106,11 @@ func (e *Env) EnsureSSHKey(planID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return ensureKeyPair(d)
+}
+
+// ensureKeyPair — пара ed25519 в каталоге d (0700): есть — открытый ключ без изменений.
+func ensureKeyPair(d string) (string, error) {
 	priv, pub := filepath.Join(d, SSHKeyFile), filepath.Join(d, SSHKeyFile+".pub")
 	if raw, err := fsutil.ReadLimited(pub, 4096); err == nil {
 		if _, err := os.Stat(priv); err == nil {
@@ -334,6 +339,10 @@ func (e *Env) PinHostKey(planID, repoURL, key string) error {
 	if err != nil {
 		return err
 	}
+	return pinHostKey(d, repoURL, key)
+}
+
+func pinHostKey(d, repoURL, key string) error {
 	rest := strings.TrimPrefix(strings.TrimPrefix(repoURL, "sftp:"), "rclone:")
 	at, colon := strings.IndexByte(rest, '@'), strings.IndexByte(rest, ':')
 	if rest == repoURL || at < 0 || colon < at {
@@ -341,6 +350,73 @@ func (e *Env) PinHostKey(planID, repoURL, key string) error {
 	}
 	host := rest[at+1 : colon]
 	return fsutil.WriteFileAtomic(filepath.Join(d, knownHostsFile), []byte(host+" "+key+"\n"), 0o600, fsutil.Keep)
+}
+
+// RestoreKeyDir — ключи получателя для восстановления на другой сервер: <Store.Dir>/../backup-restore/<plan>
+// (root, 0700). Пара живёт от backup.restore с ssh_keypair до успешного восстановления.
+func (e *Env) RestoreKeyDir(planID string) (string, error) {
+	d, err := e.Store.PlanDir(planID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(e.Store.Dir), "backup-restore", filepath.Base(d)), nil
+}
+
+// EnsureRestoreKey — пара ключей получателя (backup.restore с ssh_keypair): открытый ключ — читателю цели
+// SERVER или клиенту для своего SFTP.
+func (e *Env) EnsureRestoreKey(planID string) (string, error) {
+	d, err := e.RestoreKeyDir(planID)
+	if err != nil {
+		return "", err
+	}
+	return ensureKeyPair(d)
+}
+
+// RemoteRestic — restic получателя для репозитория из операции: пароль — во временном файле каталога ключей
+// (удаляется cleanup), ключ хоста цели закреплён там же; только чтение (--no-lock). cleanup(true) удаляет и
+// пару ключей (после успешного восстановления).
+func (e *Env) RemoteRestic(planID string, repo *Repo, hostKey string) (*Restic, func(dropKeys bool), error) {
+	d, err := e.RestoreKeyDir(planID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := os.MkdirAll(d, 0o700); err != nil {
+		return nil, nil, err
+	}
+	pw, rmPw, err := TempPasswordFile(d, repo.Password)
+	if err != nil {
+		return nil, nil, err
+	}
+	known := filepath.Join(d, knownHostsFile)
+	cleanup := func(dropKeys bool) {
+		rmPw()
+		_ = os.Remove(known)
+		_ = os.RemoveAll(filepath.Join(e.CacheDir, "restore-"+filepath.Base(d)))
+		if dropKeys {
+			_ = os.RemoveAll(d)
+		}
+	}
+	if hostKey != "" {
+		if err := pinHostKey(d, repo.URL, hostKey); err != nil {
+			cleanup(false)
+			return nil, nil, err
+		}
+	} else {
+		_ = os.Remove(known)
+	}
+	bin := ResticPath(e.BinDir, repo.ResticVersion)
+	if st, err := os.Stat(bin); err != nil || !st.Mode().IsRegular() {
+		cleanup(false)
+		return nil, nil, fmt.Errorf("restic %s не установлен", repo.ResticVersion)
+	}
+	cache := filepath.Join(e.CacheDir, "restore-"+filepath.Base(d))
+	if err := os.MkdirAll(cache, 0o700); err != nil {
+		cleanup(false)
+		return nil, nil, err
+	}
+	r := &Restic{Bin: bin, CacheDir: cache, TmpDir: os.TempDir(), Repo: repo, PasswordFile: pw,
+		SSHKey: filepath.Join(d, SSHKeyFile), KnownHosts: known, Nice: 10, NoLock: true}
+	return r, cleanup, nil
 }
 
 // PruneTarget — backup.prune на сервере-цели: полный доступ к репозиторию — только здесь, у root цели

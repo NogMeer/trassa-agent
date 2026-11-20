@@ -22,6 +22,7 @@ const (
 	TypeBackupTargetEnsure = "backup.target.ensure"
 	TypeBackupTargetRemove = "backup.target.remove"
 	TypeBackupUnconfigure  = "backup.unconfigure"
+	TypeBackupRevokeReader = "backup.target.revoke_reader"
 )
 
 // pathCoded — запрещённый путь отклоняется своим кодом, а не общим PARAMS_INVALID.
@@ -97,7 +98,11 @@ func backupSpecs() []Spec {
 			Type: TypeBackupTargetEnsure, Class: Destructive, Rollback: config,
 			match: func(p *agentv1.OperationParams) bool { return p.GetBackupTargetEnsure() != nil },
 			Validate: func(b *agentv1.OperationBody) error {
-				return pathCoded(backup.ValidateTargetEnsure(b.GetParams().GetBackupTargetEnsure()))
+				p := b.GetParams().GetBackupTargetEnsure()
+				if err := backup.ValidateTargetEnsure(p); err != nil {
+					return pathCoded(err)
+				}
+				return backup.ReaderExpiry(p, b.GetIssuedAtMs())
 			},
 		},
 		{
@@ -105,6 +110,13 @@ func backupSpecs() []Spec {
 			match: func(p *agentv1.OperationParams) bool { return p.GetBackupTargetRemove() != nil },
 			Validate: func(b *agentv1.OperationBody) error {
 				return pathCoded(backup.ValidateTargetRemove(b.GetParams().GetBackupTargetRemove()))
+			},
+		},
+		{
+			Type: TypeBackupRevokeReader, Class: Change, Rollback: config,
+			match: func(p *agentv1.OperationParams) bool { return p.GetBackupTargetRevokeReader() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				return backup.ValidateTargetRevokeReader(b.GetParams().GetBackupTargetRevokeReader())
 			},
 		},
 		{

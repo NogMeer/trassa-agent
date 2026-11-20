@@ -51,6 +51,9 @@ type Restic struct {
 	Nice int
 	// Credential — запуск от пользователя цели (чистка локального репозитория цели: файлы остаются его).
 	Credential *syscall.Credential
+	// NoLock — без блокировок (--no-lock): восстановление на другом сервере читает репозиторий ключом без права
+	// записи.
+	NoLock bool
 }
 
 // Exit — итог команды: код и сообщение exit_error (без секретов).
@@ -156,6 +159,9 @@ func (r *Restic) Run(ctx context.Context, c Command) error {
 	var args []string
 	if !c.Raw {
 		args = append(args, "--json")
+	}
+	if r.NoLock {
+		args = append(args, "--no-lock")
 	}
 	sa, err := r.sshArgs()
 	if err != nil {

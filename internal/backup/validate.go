@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
@@ -355,6 +356,29 @@ func ValidateRestore(p *agentv1.BackupRestoreParams) error {
 	if other != (p.GetDestPath() != "") {
 		return errors.New("dest_path только для OTHER_SERVER")
 	}
+	// Получатель без плана: репозиторий и restic — в операции, только для OTHER_SERVER.
+	if r := p.GetRepo(); r != nil {
+		if !other {
+			return errors.New("repo — только для OTHER_SERVER")
+		}
+		if err := checkRepo(r, "repo"); err != nil {
+			return err
+		}
+		if err := checkTool(p.GetRestic(), "restic"); err != nil {
+			return err
+		}
+		if err := CheckTool("restic", p.GetRestic().GetVersion(), p.GetRestic().GetSha256()); err != nil {
+			return err
+		}
+	} else if p.GetRestic() != nil {
+		return errors.New("restic — только вместе с repo")
+	}
+	if p.GetSshKeypair() && !other {
+		return errors.New("ssh_keypair — только для OTHER_SERVER")
+	}
+	if k := p.GetSshHostKey(); k != "" && !hostKeyRe.MatchString(k) {
+		return errors.New("ssh_host_key")
+	}
 	if other {
 		if err := checkPath(p.GetDestPath()); err != nil {
 			return err
@@ -456,6 +480,45 @@ func ValidateTargetEnsure(p *agentv1.BackupTargetEnsureParams) error {
 	}
 	if _, err := netip.ParseAddr(p.GetSourceAddress()); err != nil || strings.Contains(p.GetSourceAddress(), "%") {
 		return errors.New("source_address")
+	}
+	// Читатель: всё или ничего.
+	if p.GetReaderPublicKey() == "" {
+		if p.GetReaderAddress() != "" || p.GetReaderExpiresAtMs() != 0 {
+			return errors.New("reader_*: без reader_public_key")
+		}
+		return nil
+	}
+	if !pubKeyRe.MatchString(p.GetReaderPublicKey()) || p.GetReaderPublicKey() == p.GetSourcePublicKey() {
+		return errors.New("reader_public_key")
+	}
+	if _, err := netip.ParseAddr(p.GetReaderAddress()); err != nil || strings.Contains(p.GetReaderAddress(), "%") {
+		return errors.New("reader_address")
+	}
+	if p.GetReaderExpiresAtMs() <= 0 {
+		return errors.New("reader_expires_at_ms")
+	}
+	return nil
+}
+
+// MaxReaderTTL — предел доступа читателя от issued_at_ms операции.
+const MaxReaderTTL = 24 * time.Hour
+
+// ReaderExpiry — срок читателя в пределах MaxReaderTTL от выдачи операции и не в прошлом.
+func ReaderExpiry(p *agentv1.BackupTargetEnsureParams, issuedAtMs int64) error {
+	if p.GetReaderPublicKey() == "" {
+		return nil
+	}
+	exp := p.GetReaderExpiresAtMs()
+	if issuedAtMs <= 0 || exp <= issuedAtMs || exp-issuedAtMs > MaxReaderTTL.Milliseconds() {
+		return fmt.Errorf("reader_expires_at_ms: от выдачи операции до %s", MaxReaderTTL)
+	}
+	return nil
+}
+
+// ValidateTargetRevokeReader — backup.target.revoke_reader.
+func ValidateTargetRevokeReader(p *agentv1.BackupTargetRevokeReaderParams) error {
+	if !unixUserRe.MatchString(p.GetUnixUser()) {
+		return errors.New("unix_user")
 	}
 	return nil
 }

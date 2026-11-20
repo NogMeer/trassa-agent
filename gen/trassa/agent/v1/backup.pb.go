@@ -1217,8 +1217,19 @@ type BackupRestoreParams struct {
 	Mode       RestoreMode            `protobuf:"varint,3,opt,name=mode,proto3,enum=trassa.agent.v1.RestoreMode" json:"mode,omitempty"`
 	Selection  *RestoreSelection      `protobuf:"bytes,4,opt,name=selection,proto3" json:"selection,omitempty"`
 	// TEMP_DIR — пусто (каталог выбирает помощник); OTHER_SERVER — путь на этом сервере.
-	DestPath      string `protobuf:"bytes,5,opt,name=dest_path,json=destPath,proto3" json:"dest_path,omitempty"`
-	DeadlineMs    int64  `protobuf:"varint,6,opt,name=deadline_ms,json=deadlineMs,proto3" json:"deadline_ms,omitempty"`
+	DestPath   string `protobuf:"bytes,5,opt,name=dest_path,json=destPath,proto3" json:"dest_path,omitempty"`
+	DeadlineMs int64  `protobuf:"varint,6,opt,name=deadline_ms,json=deadlineMs,proto3" json:"deadline_ms,omitempty"`
+	// OTHER_SERVER на сервере-получателе без плана: репозиторий прямо в операции. Секреты зашифрованы на ключ
+	// получателя (поля password и env:<ИМЯ>, тип в info — backup.restore); помощник держит их только на время
+	// операции. Репозиторий открывается только для чтения (restic --no-lock).
+	Repo *BackupRepo `protobuf:"bytes,7,opt,name=repo,proto3" json:"repo,omitempty"`
+	// restic для получателя (скачивает агент, сумма — из таблицы помощника).
+	Restic *BackupTool `protobuf:"bytes,8,opt,name=restic,proto3" json:"restic,omitempty"`
+	// Только подготовить пару ключей SSH получателя и вернуть открытый ключ (ничего не восстанавливается):
+	// цель SERVER — ключ читателя для backup.target.ensure; свой SFTP — ключ добавляет клиент.
+	SshKeypair bool `protobuf:"varint,9,opt,name=ssh_keypair,json=sshKeypair,proto3" json:"ssh_keypair,omitempty"`
+	// Открытый ключ хоста цели ("ssh-ed25519 AAAA…") — known_hosts закрепляется им.
+	SshHostKey    string `protobuf:"bytes,10,opt,name=ssh_host_key,json=sshHostKey,proto3" json:"ssh_host_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1295,11 +1306,41 @@ func (x *BackupRestoreParams) GetDeadlineMs() int64 {
 	return 0
 }
 
+func (x *BackupRestoreParams) GetRepo() *BackupRepo {
+	if x != nil {
+		return x.Repo
+	}
+	return nil
+}
+
+func (x *BackupRestoreParams) GetRestic() *BackupTool {
+	if x != nil {
+		return x.Restic
+	}
+	return nil
+}
+
+func (x *BackupRestoreParams) GetSshKeypair() bool {
+	if x != nil {
+		return x.SshKeypair
+	}
+	return false
+}
+
+func (x *BackupRestoreParams) GetSshHostKey() string {
+	if x != nil {
+		return x.SshHostKey
+	}
+	return ""
+}
+
 type BackupRestoreResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RestoredFiles uint64                 `protobuf:"varint,1,opt,name=restored_files,json=restoredFiles,proto3" json:"restored_files,omitempty"`
 	RestoredBytes uint64                 `protobuf:"varint,2,opt,name=restored_bytes,json=restoredBytes,proto3" json:"restored_bytes,omitempty"`
 	Path          string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	// При ssh_keypair: открытый ключ получателя (закрытый остаётся на сервере до конца восстановления).
+	SshPublicKey  string `protobuf:"bytes,4,opt,name=ssh_public_key,json=sshPublicKey,proto3" json:"ssh_public_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1351,6 +1392,13 @@ func (x *BackupRestoreResult) GetRestoredBytes() uint64 {
 func (x *BackupRestoreResult) GetPath() string {
 	if x != nil {
 		return x.Path
+	}
+	return ""
+}
+
+func (x *BackupRestoreResult) GetSshPublicKey() string {
+	if x != nil {
+		return x.SshPublicKey
 	}
 	return ""
 }
@@ -2122,10 +2170,17 @@ type BackupTargetEnsureParams struct {
 	SourcePublicKey string                 `protobuf:"bytes,3,opt,name=source_public_key,json=sourcePublicKey,proto3" json:"source_public_key,omitempty"`
 	SourceAddress   string                 `protobuf:"bytes,4,opt,name=source_address,json=sourceAddress,proto3" json:"source_address,omitempty"`
 	// rclone (zip выпуска) — принудительная команда ключа источника; restic (bz2) — для backup.prune на цели.
-	Rclone        *BackupTool `protobuf:"bytes,5,opt,name=rclone,proto3" json:"rclone,omitempty"`
-	Restic        *BackupTool `protobuf:"bytes,6,opt,name=restic,proto3" json:"restic,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Rclone *BackupTool `protobuf:"bytes,5,opt,name=rclone,proto3" json:"rclone,omitempty"`
+	Restic *BackupTool `protobuf:"bytes,6,opt,name=restic,proto3" json:"restic,omitempty"`
+	// Временный читатель для восстановления на другой сервер: отдельный пользователь trassa-bkr-<id> в группе
+	// владельца репозитория — читать может, писать нет (права файлов, не настройка rclone). Ключ — с
+	// restrict,from=,expiry-time=. Пустой reader_public_key — читателя нет (прежний снимается).
+	ReaderPublicKey string `protobuf:"bytes,7,opt,name=reader_public_key,json=readerPublicKey,proto3" json:"reader_public_key,omitempty"`
+	ReaderAddress   string `protobuf:"bytes,8,opt,name=reader_address,json=readerAddress,proto3" json:"reader_address,omitempty"`
+	// Конец доступа читателя: не позже 24 часов от issued_at_ms операции.
+	ReaderExpiresAtMs int64 `protobuf:"varint,9,opt,name=reader_expires_at_ms,json=readerExpiresAtMs,proto3" json:"reader_expires_at_ms,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *BackupTargetEnsureParams) Reset() {
@@ -2200,6 +2255,72 @@ func (x *BackupTargetEnsureParams) GetRestic() *BackupTool {
 	return nil
 }
 
+func (x *BackupTargetEnsureParams) GetReaderPublicKey() string {
+	if x != nil {
+		return x.ReaderPublicKey
+	}
+	return ""
+}
+
+func (x *BackupTargetEnsureParams) GetReaderAddress() string {
+	if x != nil {
+		return x.ReaderAddress
+	}
+	return ""
+}
+
+func (x *BackupTargetEnsureParams) GetReaderExpiresAtMs() int64 {
+	if x != nil {
+		return x.ReaderExpiresAtMs
+	}
+	return 0
+}
+
+// backup.target.revoke_reader (CHANGE, на сервере-цели): снять читателя до срока.
+type BackupTargetRevokeReaderParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UnixUser      string                 `protobuf:"bytes,1,opt,name=unix_user,json=unixUser,proto3" json:"unix_user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BackupTargetRevokeReaderParams) Reset() {
+	*x = BackupTargetRevokeReaderParams{}
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackupTargetRevokeReaderParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackupTargetRevokeReaderParams) ProtoMessage() {}
+
+func (x *BackupTargetRevokeReaderParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackupTargetRevokeReaderParams.ProtoReflect.Descriptor instead.
+func (*BackupTargetRevokeReaderParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *BackupTargetRevokeReaderParams) GetUnixUser() string {
+	if x != nil {
+		return x.UnixUser
+	}
+	return ""
+}
+
 type BackupTargetEnsureResult struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Access BackupAccess           `protobuf:"varint,1,opt,name=access,proto3,enum=trassa.agent.v1.BackupAccess" json:"access,omitempty"`
@@ -2208,13 +2329,15 @@ type BackupTargetEnsureResult struct {
 	FreeBytes uint64 `protobuf:"varint,3,opt,name=free_bytes,json=freeBytes,proto3" json:"free_bytes,omitempty"`
 	// Открытый ключ хоста цели (ssh-ed25519) — для BackupInitParams.ssh_host_key источника.
 	HostPublicKey string `protobuf:"bytes,4,opt,name=host_public_key,json=hostPublicKey,proto3" json:"host_public_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Пользователь-читатель (только чтение), если он задан.
+	ReaderUnixUser string `protobuf:"bytes,5,opt,name=reader_unix_user,json=readerUnixUser,proto3" json:"reader_unix_user,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *BackupTargetEnsureResult) Reset() {
 	*x = BackupTargetEnsureResult{}
-	mi := &file_trassa_agent_v1_backup_proto_msgTypes[31]
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2226,7 +2349,7 @@ func (x *BackupTargetEnsureResult) String() string {
 func (*BackupTargetEnsureResult) ProtoMessage() {}
 
 func (x *BackupTargetEnsureResult) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_backup_proto_msgTypes[31]
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2239,7 +2362,7 @@ func (x *BackupTargetEnsureResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupTargetEnsureResult.ProtoReflect.Descriptor instead.
 func (*BackupTargetEnsureResult) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{31}
+	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *BackupTargetEnsureResult) GetAccess() BackupAccess {
@@ -2270,6 +2393,13 @@ func (x *BackupTargetEnsureResult) GetHostPublicKey() string {
 	return ""
 }
 
+func (x *BackupTargetEnsureResult) GetReaderUnixUser() string {
+	if x != nil {
+		return x.ReaderUnixUser
+	}
+	return ""
+}
+
 // backup.target.remove (DESTRUCTIVE).
 type BackupTargetRemoveParams struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2282,7 +2412,7 @@ type BackupTargetRemoveParams struct {
 
 func (x *BackupTargetRemoveParams) Reset() {
 	*x = BackupTargetRemoveParams{}
-	mi := &file_trassa_agent_v1_backup_proto_msgTypes[32]
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2294,7 +2424,7 @@ func (x *BackupTargetRemoveParams) String() string {
 func (*BackupTargetRemoveParams) ProtoMessage() {}
 
 func (x *BackupTargetRemoveParams) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_backup_proto_msgTypes[32]
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2307,7 +2437,7 @@ func (x *BackupTargetRemoveParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupTargetRemoveParams.ProtoReflect.Descriptor instead.
 func (*BackupTargetRemoveParams) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{32}
+	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *BackupTargetRemoveParams) GetUnixUser() string {
@@ -2341,7 +2471,7 @@ type BackupUnconfigureParams struct {
 
 func (x *BackupUnconfigureParams) Reset() {
 	*x = BackupUnconfigureParams{}
-	mi := &file_trassa_agent_v1_backup_proto_msgTypes[33]
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2353,7 +2483,7 @@ func (x *BackupUnconfigureParams) String() string {
 func (*BackupUnconfigureParams) ProtoMessage() {}
 
 func (x *BackupUnconfigureParams) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_backup_proto_msgTypes[33]
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2366,7 +2496,7 @@ func (x *BackupUnconfigureParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupUnconfigureParams.ProtoReflect.Descriptor instead.
 func (*BackupUnconfigureParams) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{33}
+	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *BackupUnconfigureParams) GetPlanId() string {
@@ -2389,7 +2519,7 @@ type BackupProgress struct {
 
 func (x *BackupProgress) Reset() {
 	*x = BackupProgress{}
-	mi := &file_trassa_agent_v1_backup_proto_msgTypes[34]
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2401,7 +2531,7 @@ func (x *BackupProgress) String() string {
 func (*BackupProgress) ProtoMessage() {}
 
 func (x *BackupProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_backup_proto_msgTypes[34]
+	mi := &file_trassa_agent_v1_backup_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2414,7 +2544,7 @@ func (x *BackupProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupProgress.ProtoReflect.Descriptor instead.
 func (*BackupProgress) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{34}
+	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *BackupProgress) GetBytesDone() uint64 {
@@ -2536,7 +2666,7 @@ const file_trassa_agent_v1_backup_proto_rawDesc = "" +
 	"\bdumps_ok\x18\x03 \x01(\bR\adumpsOk\x12#\n" +
 	"\rchecked_files\x18\x04 \x01(\x04R\fcheckedFiles\x12#\n" +
 	"\rchecked_bytes\x18\x05 \x01(\x04R\fcheckedBytes\x120\n" +
-	"\x05dumps\x18\x06 \x03(\v2\x1a.trassa.agent.v1.DumpCheckR\x05dumps\"\x80\x02\n" +
+	"\x05dumps\x18\x06 \x03(\v2\x1a.trassa.agent.v1.DumpCheckR\x05dumps\"\xa9\x03\n" +
 	"\x13BackupRestoreParams\x12\x17\n" +
 	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x1f\n" +
 	"\vsnapshot_id\x18\x02 \x01(\tR\n" +
@@ -2545,11 +2675,19 @@ const file_trassa_agent_v1_backup_proto_rawDesc = "" +
 	"\tselection\x18\x04 \x01(\v2!.trassa.agent.v1.RestoreSelectionR\tselection\x12\x1b\n" +
 	"\tdest_path\x18\x05 \x01(\tR\bdestPath\x12\x1f\n" +
 	"\vdeadline_ms\x18\x06 \x01(\x03R\n" +
-	"deadlineMs\"w\n" +
+	"deadlineMs\x12/\n" +
+	"\x04repo\x18\a \x01(\v2\x1b.trassa.agent.v1.BackupRepoR\x04repo\x123\n" +
+	"\x06restic\x18\b \x01(\v2\x1b.trassa.agent.v1.BackupToolR\x06restic\x12\x1f\n" +
+	"\vssh_keypair\x18\t \x01(\bR\n" +
+	"sshKeypair\x12 \n" +
+	"\fssh_host_key\x18\n" +
+	" \x01(\tR\n" +
+	"sshHostKey\"\x9d\x01\n" +
 	"\x13BackupRestoreResult\x12%\n" +
 	"\x0erestored_files\x18\x01 \x01(\x04R\rrestoredFiles\x12%\n" +
 	"\x0erestored_bytes\x18\x02 \x01(\x04R\rrestoredBytes\x12\x12\n" +
-	"\x04path\x18\x03 \x01(\tR\x04path\"\x16\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x12$\n" +
+	"\x0essh_public_key\x18\x04 \x01(\tR\fsshPublicKey\"\x16\n" +
 	"\x14BackupDiscoverParams\"e\n" +
 	"\x10DiscoveredVolume\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
@@ -2604,20 +2742,26 @@ const file_trassa_agent_v1_backup_proto_rawDesc = "" +
 	"BackupTool\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
 	"\x06sha256\x18\x02 \x01(\tR\x06sha256\x12\x10\n" +
-	"\x03url\x18\x03 \x01(\tR\x03url\"\x88\x02\n" +
+	"\x03url\x18\x03 \x01(\tR\x03url\"\x8c\x03\n" +
 	"\x18BackupTargetEnsureParams\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1b\n" +
 	"\tunix_user\x18\x02 \x01(\tR\bunixUser\x12*\n" +
 	"\x11source_public_key\x18\x03 \x01(\tR\x0fsourcePublicKey\x12%\n" +
 	"\x0esource_address\x18\x04 \x01(\tR\rsourceAddress\x123\n" +
 	"\x06rclone\x18\x05 \x01(\v2\x1b.trassa.agent.v1.BackupToolR\x06rclone\x123\n" +
-	"\x06restic\x18\x06 \x01(\v2\x1b.trassa.agent.v1.BackupToolR\x06restic\"\xb5\x01\n" +
+	"\x06restic\x18\x06 \x01(\v2\x1b.trassa.agent.v1.BackupToolR\x06restic\x12*\n" +
+	"\x11reader_public_key\x18\a \x01(\tR\x0freaderPublicKey\x12%\n" +
+	"\x0ereader_address\x18\b \x01(\tR\rreaderAddress\x12/\n" +
+	"\x14reader_expires_at_ms\x18\t \x01(\x03R\x11readerExpiresAtMs\"=\n" +
+	"\x1eBackupTargetRevokeReaderParams\x12\x1b\n" +
+	"\tunix_user\x18\x01 \x01(\tR\bunixUser\"\xdf\x01\n" +
 	"\x18BackupTargetEnsureResult\x125\n" +
 	"\x06access\x18\x01 \x01(\x0e2\x1d.trassa.agent.v1.BackupAccessR\x06access\x12\x1b\n" +
 	"\trepo_path\x18\x02 \x01(\tR\brepoPath\x12\x1d\n" +
 	"\n" +
 	"free_bytes\x18\x03 \x01(\x04R\tfreeBytes\x12&\n" +
-	"\x0fhost_public_key\x18\x04 \x01(\tR\rhostPublicKey\"l\n" +
+	"\x0fhost_public_key\x18\x04 \x01(\tR\rhostPublicKey\x12(\n" +
+	"\x10reader_unix_user\x18\x05 \x01(\tR\x0ereaderUnixUser\"l\n" +
 	"\x18BackupTargetRemoveParams\x12\x1b\n" +
 	"\tunix_user\x18\x01 \x01(\tR\bunixUser\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1f\n" +
@@ -2656,50 +2800,51 @@ func file_trassa_agent_v1_backup_proto_rawDescGZIP() []byte {
 }
 
 var file_trassa_agent_v1_backup_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_trassa_agent_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_trassa_agent_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_trassa_agent_v1_backup_proto_goTypes = []any{
-	(RestoreMode)(0),                 // 0: trassa.agent.v1.RestoreMode
-	(BackupAccess)(0),                // 1: trassa.agent.v1.BackupAccess
-	(*SealedSecret)(nil),             // 2: trassa.agent.v1.SealedSecret
-	(*BackupRepo)(nil),               // 3: trassa.agent.v1.BackupRepo
-	(*PathSource)(nil),               // 4: trassa.agent.v1.PathSource
-	(*DatabaseSource)(nil),           // 5: trassa.agent.v1.DatabaseSource
-	(*BackupSource)(nil),             // 6: trassa.agent.v1.BackupSource
-	(*Retention)(nil),                // 7: trassa.agent.v1.Retention
-	(*RestoreSelection)(nil),         // 8: trassa.agent.v1.RestoreSelection
-	(*BackupInitParams)(nil),         // 9: trassa.agent.v1.BackupInitParams
-	(*BackupInitResult)(nil),         // 10: trassa.agent.v1.BackupInitResult
-	(*BackupRunParams)(nil),          // 11: trassa.agent.v1.BackupRunParams
-	(*SourceResult)(nil),             // 12: trassa.agent.v1.SourceResult
-	(*BackupRunResult)(nil),          // 13: trassa.agent.v1.BackupRunResult
-	(*BackupVerifyParams)(nil),       // 14: trassa.agent.v1.BackupVerifyParams
-	(*DumpCheck)(nil),                // 15: trassa.agent.v1.DumpCheck
-	(*BackupVerifyResult)(nil),       // 16: trassa.agent.v1.BackupVerifyResult
-	(*BackupRestoreParams)(nil),      // 17: trassa.agent.v1.BackupRestoreParams
-	(*BackupRestoreResult)(nil),      // 18: trassa.agent.v1.BackupRestoreResult
-	(*BackupDiscoverParams)(nil),     // 19: trassa.agent.v1.BackupDiscoverParams
-	(*DiscoveredVolume)(nil),         // 20: trassa.agent.v1.DiscoveredVolume
-	(*DiscoveredDatabase)(nil),       // 21: trassa.agent.v1.DiscoveredDatabase
-	(*BackupDiscoverResult)(nil),     // 22: trassa.agent.v1.BackupDiscoverResult
-	(*BackupSnapshotsParams)(nil),    // 23: trassa.agent.v1.BackupSnapshotsParams
-	(*BackupSnapshot)(nil),           // 24: trassa.agent.v1.BackupSnapshot
-	(*BackupSnapshotsResult)(nil),    // 25: trassa.agent.v1.BackupSnapshotsResult
-	(*BackupBrowseParams)(nil),       // 26: trassa.agent.v1.BackupBrowseParams
-	(*BrowseEntry)(nil),              // 27: trassa.agent.v1.BrowseEntry
-	(*BackupBrowseResult)(nil),       // 28: trassa.agent.v1.BackupBrowseResult
-	(*BackupPruneParams)(nil),        // 29: trassa.agent.v1.BackupPruneParams
-	(*BackupPruneResult)(nil),        // 30: trassa.agent.v1.BackupPruneResult
-	(*BackupTool)(nil),               // 31: trassa.agent.v1.BackupTool
-	(*BackupTargetEnsureParams)(nil), // 32: trassa.agent.v1.BackupTargetEnsureParams
-	(*BackupTargetEnsureResult)(nil), // 33: trassa.agent.v1.BackupTargetEnsureResult
-	(*BackupTargetRemoveParams)(nil), // 34: trassa.agent.v1.BackupTargetRemoveParams
-	(*BackupUnconfigureParams)(nil),  // 35: trassa.agent.v1.BackupUnconfigureParams
-	(*BackupProgress)(nil),           // 36: trassa.agent.v1.BackupProgress
-	nil,                              // 37: trassa.agent.v1.BackupRepo.EnvEntry
+	(RestoreMode)(0),                       // 0: trassa.agent.v1.RestoreMode
+	(BackupAccess)(0),                      // 1: trassa.agent.v1.BackupAccess
+	(*SealedSecret)(nil),                   // 2: trassa.agent.v1.SealedSecret
+	(*BackupRepo)(nil),                     // 3: trassa.agent.v1.BackupRepo
+	(*PathSource)(nil),                     // 4: trassa.agent.v1.PathSource
+	(*DatabaseSource)(nil),                 // 5: trassa.agent.v1.DatabaseSource
+	(*BackupSource)(nil),                   // 6: trassa.agent.v1.BackupSource
+	(*Retention)(nil),                      // 7: trassa.agent.v1.Retention
+	(*RestoreSelection)(nil),               // 8: trassa.agent.v1.RestoreSelection
+	(*BackupInitParams)(nil),               // 9: trassa.agent.v1.BackupInitParams
+	(*BackupInitResult)(nil),               // 10: trassa.agent.v1.BackupInitResult
+	(*BackupRunParams)(nil),                // 11: trassa.agent.v1.BackupRunParams
+	(*SourceResult)(nil),                   // 12: trassa.agent.v1.SourceResult
+	(*BackupRunResult)(nil),                // 13: trassa.agent.v1.BackupRunResult
+	(*BackupVerifyParams)(nil),             // 14: trassa.agent.v1.BackupVerifyParams
+	(*DumpCheck)(nil),                      // 15: trassa.agent.v1.DumpCheck
+	(*BackupVerifyResult)(nil),             // 16: trassa.agent.v1.BackupVerifyResult
+	(*BackupRestoreParams)(nil),            // 17: trassa.agent.v1.BackupRestoreParams
+	(*BackupRestoreResult)(nil),            // 18: trassa.agent.v1.BackupRestoreResult
+	(*BackupDiscoverParams)(nil),           // 19: trassa.agent.v1.BackupDiscoverParams
+	(*DiscoveredVolume)(nil),               // 20: trassa.agent.v1.DiscoveredVolume
+	(*DiscoveredDatabase)(nil),             // 21: trassa.agent.v1.DiscoveredDatabase
+	(*BackupDiscoverResult)(nil),           // 22: trassa.agent.v1.BackupDiscoverResult
+	(*BackupSnapshotsParams)(nil),          // 23: trassa.agent.v1.BackupSnapshotsParams
+	(*BackupSnapshot)(nil),                 // 24: trassa.agent.v1.BackupSnapshot
+	(*BackupSnapshotsResult)(nil),          // 25: trassa.agent.v1.BackupSnapshotsResult
+	(*BackupBrowseParams)(nil),             // 26: trassa.agent.v1.BackupBrowseParams
+	(*BrowseEntry)(nil),                    // 27: trassa.agent.v1.BrowseEntry
+	(*BackupBrowseResult)(nil),             // 28: trassa.agent.v1.BackupBrowseResult
+	(*BackupPruneParams)(nil),              // 29: trassa.agent.v1.BackupPruneParams
+	(*BackupPruneResult)(nil),              // 30: trassa.agent.v1.BackupPruneResult
+	(*BackupTool)(nil),                     // 31: trassa.agent.v1.BackupTool
+	(*BackupTargetEnsureParams)(nil),       // 32: trassa.agent.v1.BackupTargetEnsureParams
+	(*BackupTargetRevokeReaderParams)(nil), // 33: trassa.agent.v1.BackupTargetRevokeReaderParams
+	(*BackupTargetEnsureResult)(nil),       // 34: trassa.agent.v1.BackupTargetEnsureResult
+	(*BackupTargetRemoveParams)(nil),       // 35: trassa.agent.v1.BackupTargetRemoveParams
+	(*BackupUnconfigureParams)(nil),        // 36: trassa.agent.v1.BackupUnconfigureParams
+	(*BackupProgress)(nil),                 // 37: trassa.agent.v1.BackupProgress
+	nil,                                    // 38: trassa.agent.v1.BackupRepo.EnvEntry
 }
 var file_trassa_agent_v1_backup_proto_depIdxs = []int32{
 	2,  // 0: trassa.agent.v1.BackupRepo.password:type_name -> trassa.agent.v1.SealedSecret
-	37, // 1: trassa.agent.v1.BackupRepo.env:type_name -> trassa.agent.v1.BackupRepo.EnvEntry
+	38, // 1: trassa.agent.v1.BackupRepo.env:type_name -> trassa.agent.v1.BackupRepo.EnvEntry
 	4,  // 2: trassa.agent.v1.BackupSource.path:type_name -> trassa.agent.v1.PathSource
 	5,  // 3: trassa.agent.v1.BackupSource.postgres:type_name -> trassa.agent.v1.DatabaseSource
 	5,  // 4: trassa.agent.v1.BackupSource.mysql:type_name -> trassa.agent.v1.DatabaseSource
@@ -2709,21 +2854,23 @@ var file_trassa_agent_v1_backup_proto_depIdxs = []int32{
 	15, // 8: trassa.agent.v1.BackupVerifyResult.dumps:type_name -> trassa.agent.v1.DumpCheck
 	0,  // 9: trassa.agent.v1.BackupRestoreParams.mode:type_name -> trassa.agent.v1.RestoreMode
 	8,  // 10: trassa.agent.v1.BackupRestoreParams.selection:type_name -> trassa.agent.v1.RestoreSelection
-	20, // 11: trassa.agent.v1.BackupDiscoverResult.volumes:type_name -> trassa.agent.v1.DiscoveredVolume
-	21, // 12: trassa.agent.v1.BackupDiscoverResult.databases:type_name -> trassa.agent.v1.DiscoveredDatabase
-	24, // 13: trassa.agent.v1.BackupSnapshotsResult.snapshots:type_name -> trassa.agent.v1.BackupSnapshot
-	27, // 14: trassa.agent.v1.BackupBrowseResult.entries:type_name -> trassa.agent.v1.BrowseEntry
-	7,  // 15: trassa.agent.v1.BackupPruneParams.retention:type_name -> trassa.agent.v1.Retention
-	3,  // 16: trassa.agent.v1.BackupPruneParams.maintenance_repo:type_name -> trassa.agent.v1.BackupRepo
-	31, // 17: trassa.agent.v1.BackupTargetEnsureParams.rclone:type_name -> trassa.agent.v1.BackupTool
-	31, // 18: trassa.agent.v1.BackupTargetEnsureParams.restic:type_name -> trassa.agent.v1.BackupTool
-	1,  // 19: trassa.agent.v1.BackupTargetEnsureResult.access:type_name -> trassa.agent.v1.BackupAccess
-	2,  // 20: trassa.agent.v1.BackupRepo.EnvEntry.value:type_name -> trassa.agent.v1.SealedSecret
-	21, // [21:21] is the sub-list for method output_type
-	21, // [21:21] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	3,  // 11: trassa.agent.v1.BackupRestoreParams.repo:type_name -> trassa.agent.v1.BackupRepo
+	31, // 12: trassa.agent.v1.BackupRestoreParams.restic:type_name -> trassa.agent.v1.BackupTool
+	20, // 13: trassa.agent.v1.BackupDiscoverResult.volumes:type_name -> trassa.agent.v1.DiscoveredVolume
+	21, // 14: trassa.agent.v1.BackupDiscoverResult.databases:type_name -> trassa.agent.v1.DiscoveredDatabase
+	24, // 15: trassa.agent.v1.BackupSnapshotsResult.snapshots:type_name -> trassa.agent.v1.BackupSnapshot
+	27, // 16: trassa.agent.v1.BackupBrowseResult.entries:type_name -> trassa.agent.v1.BrowseEntry
+	7,  // 17: trassa.agent.v1.BackupPruneParams.retention:type_name -> trassa.agent.v1.Retention
+	3,  // 18: trassa.agent.v1.BackupPruneParams.maintenance_repo:type_name -> trassa.agent.v1.BackupRepo
+	31, // 19: trassa.agent.v1.BackupTargetEnsureParams.rclone:type_name -> trassa.agent.v1.BackupTool
+	31, // 20: trassa.agent.v1.BackupTargetEnsureParams.restic:type_name -> trassa.agent.v1.BackupTool
+	1,  // 21: trassa.agent.v1.BackupTargetEnsureResult.access:type_name -> trassa.agent.v1.BackupAccess
+	2,  // 22: trassa.agent.v1.BackupRepo.EnvEntry.value:type_name -> trassa.agent.v1.SealedSecret
+	23, // [23:23] is the sub-list for method output_type
+	23, // [23:23] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_backup_proto_init() }
@@ -2743,7 +2890,7 @@ func file_trassa_agent_v1_backup_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_trassa_agent_v1_backup_proto_rawDesc), len(file_trassa_agent_v1_backup_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   36,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

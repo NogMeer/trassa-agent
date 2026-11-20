@@ -164,6 +164,10 @@ func TestPackagesBusy(t *testing.T) {
 			return nil, nil
 		}}
 	pid := holdLock(t, lock)
+	// Предусловие: блокировка видна напрямую (если тест упадёт, видно, на каком шаге).
+	if h, err := security.PackageManagerBusy(f.e.Security); err != nil || h == nil || h.PID != pid {
+		t.Fatalf("держатель не виден напрямую: %+v %v (pid %d)", h, err, pid)
+	}
 	list := f.body(ops.TypePackagesListUpdates, &agentv1.OperationParams{Params: &agentv1.OperationParams_PackagesListUpdates{PackagesListUpdates: &agentv1.PackagesListUpdatesParams{}}})
 	upg := f.body(ops.TypePackagesUpgrade, &agentv1.OperationParams{Params: &agentv1.OperationParams_PackagesUpgrade{PackagesUpgrade: &agentv1.PackagesUpgradeParams{Scope: agentv1.UpgradeScope_UPGRADE_SCOPE_SECURITY}}})
 	for _, b := range []*agentv1.OperationBody{list, upg} {

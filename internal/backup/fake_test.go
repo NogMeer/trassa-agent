@@ -31,7 +31,7 @@ skip=0
 for a in "$@"; do
 	if [ $skip = 1 ]; then skip=0; continue; fi
 	case "$a" in
-		--json) ;;
+		--json|--no-lock) ;;
 		-o|--limit-upload) skip=1 ;;
 		*) sub="$a"; break ;;
 	esac

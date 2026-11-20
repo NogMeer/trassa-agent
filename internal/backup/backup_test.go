@@ -505,7 +505,7 @@ func TestTargetAppendOnly(t *testing.T) {
 	tg := &Target{Root: root, BinDir: "/usr/local/lib/trassa", Run: func(context.Context, string, ...string) ([]byte, error) { return nil, nil }}
 	cmd := RcloneCommand(RclonePath(tg.BinDir, "1.75.2"), "/srv/bk")
 	txt := dropInText("trassa-bk-a1", keyFile("trassa-bk-a1"), cmd)
-	for _, want := range []string{"Match User trassa-bk-a1", "ForceCommand /usr/local/lib/trassa/rclone-1.75.2 serve restic --stdio --append-only /srv/bk",
+	for _, want := range []string{"Match User trassa-bk-a1", "ForceCommand umask 0027 && exec /usr/local/lib/trassa/rclone-1.75.2 serve restic --stdio --append-only /srv/bk",
 		"AuthorizedKeysFile /etc/ssh/trassa-bk/trassa-bk-a1.keys", "PermitTTY no", "AllowTcpForwarding no", "PasswordAuthentication no", "PermitUserRC no"} {
 		if !strings.Contains(txt, want+"\n") {
 			t.Errorf("нет %q", want)
@@ -535,7 +535,7 @@ func TestTargetAppendOnly(t *testing.T) {
 	if err := tg.repoDir("/srv/fresh", os.Getuid(), os.Getgid()); err != nil {
 		t.Fatal(err)
 	}
-	if st, _ := os.Stat(filepath.Join(root, "srv/fresh")); st.Mode().Perm() != 0o700 {
+	if st, _ := os.Stat(filepath.Join(root, "srv/fresh")); st.Mode().Perm() != 0o750 {
 		t.Fatalf("права каталога %v", st.Mode())
 	}
 	// Ссылка вместо каталога — отказ.
@@ -739,4 +739,145 @@ func withTool(t *testing.T, tool, version, sha string) {
 			delete(KnownTools[tool], version)
 		}
 	})
+}
+
+// Восстановление на другой сервер: репозиторий в операции — только OTHER_SERVER, с restic из таблицы.
+func TestValidateRemoteRestore(t *testing.T) {
+	repo := &agentv1.BackupRepo{Url: "rclone:trassa-bkr-a1@10.0.0.2:repo", Password: sealedOK()}
+	ok := &agentv1.BackupRestoreParams{PlanId: planID, SnapshotId: "abcdef12", Mode: agentv1.RestoreMode_RESTORE_MODE_OTHER_SERVER,
+		Selection: &agentv1.RestoreSelection{All: true}, DestPath: "/srv/restored", Repo: repo, Restic: knownTool("restic", "0.20.0"),
+		SshHostKey: "ssh-ed25519 " + strings.Repeat("A", 68)}
+	if err := ValidateRestore(ok); err != nil {
+		t.Fatal(err)
+	}
+	for name, mod := range map[string]func(p *agentv1.BackupRestoreParams){
+		"repo на место": func(p *agentv1.BackupRestoreParams) {
+			p.Mode, p.DestPath = agentv1.RestoreMode_RESTORE_MODE_IN_PLACE, ""
+		},
+		"без restic":      func(p *agentv1.BackupRestoreParams) { p.Restic = nil },
+		"чужой restic":    func(p *agentv1.BackupRestoreParams) { p.Restic.Sha256 = strings.Repeat("e", 64) },
+		"restic без repo": func(p *agentv1.BackupRestoreParams) { p.Repo = nil },
+		"ключ хоста":      func(p *agentv1.BackupRestoreParams) { p.SshHostKey = "ssh-rsa AAAA" },
+		"ключи на месте": func(p *agentv1.BackupRestoreParams) {
+			p.Mode, p.DestPath, p.Repo, p.Restic, p.SshKeypair = agentv1.RestoreMode_RESTORE_MODE_TEMP_DIR, "", nil, nil, true
+		},
+	} {
+		p := proto.Clone(ok).(*agentv1.BackupRestoreParams)
+		mod(p)
+		if ValidateRestore(p) == nil {
+			t.Errorf("%s принят", name)
+		}
+	}
+}
+
+// Читатель цели: всё или ничего, срок — не дальше 24 часов от выдачи, ключ — с from= и expiry-time=.
+func TestTargetReader(t *testing.T) {
+	key := "ssh-ed25519 " + strings.Repeat("A", 68)
+	rkey := "ssh-ed25519 " + strings.Repeat("B", 68)
+	p := &agentv1.BackupTargetEnsureParams{Path: "/srv/bk", UnixUser: "trassa-bk-a1", SourcePublicKey: key, SourceAddress: "10.0.0.5",
+		Rclone: knownTool("rclone", "1.75.2"), Restic: knownTool("restic", "0.20.0"),
+		ReaderPublicKey: rkey, ReaderAddress: "10.0.0.9", ReaderExpiresAtMs: 1_800_003_600_000}
+	if err := ValidateTargetEnsure(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReaderExpiry(p, 1_800_000_000_000); err != nil {
+		t.Fatal(err)
+	}
+	if ReaderExpiry(p, 1_800_003_600_000) == nil || ReaderExpiry(p, 1_800_003_600_000-25*3600*1000) == nil || ReaderExpiry(p, 0) == nil {
+		t.Fatal("срок читателя вне 24 часов принят")
+	}
+	for name, mod := range map[string]func(p *agentv1.BackupTargetEnsureParams){
+		"без адреса":     func(p *agentv1.BackupTargetEnsureParams) { p.ReaderAddress = "" },
+		"без срока":      func(p *agentv1.BackupTargetEnsureParams) { p.ReaderExpiresAtMs = 0 },
+		"ключ источника": func(p *agentv1.BackupTargetEnsureParams) { p.ReaderPublicKey = key },
+		"адрес без ключа": func(p *agentv1.BackupTargetEnsureParams) {
+			p.ReaderPublicKey, p.ReaderExpiresAtMs = "", 0
+		},
+	} {
+		c := proto.Clone(p).(*agentv1.BackupTargetEnsureParams)
+		mod(c)
+		if ValidateTargetEnsure(c) == nil {
+			t.Errorf("%s принят", name)
+		}
+	}
+	if ReaderUser("trassa-bk-a1") != "trassa-bkr-a1" {
+		t.Fatal(ReaderUser("trassa-bk-a1"))
+	}
+	line := readerKeyLine(p)
+	if line != `restrict,from="10.0.0.9",expiry-time="202701150900Z" `+rkey+"\n" {
+		t.Fatalf("%q", line)
+	}
+	if !strings.HasPrefix(RcloneCommand("/usr/local/lib/trassa/rclone-1.75.2", "/srv/bk"), "umask 0027 && exec ") {
+		t.Fatal("запись без umask 0027: читатель не прочтёт новые файлы")
+	}
+}
+
+// Права для читателя: группе — чтение, записи нет; ссылки не проходятся.
+func TestGroupReadable(t *testing.T) {
+	root := tmp(t)
+	repo := filepath.Join(root, "srv", "bk")
+	_ = os.MkdirAll(filepath.Join(repo, "data", "ab"), 0o700)
+	_ = os.WriteFile(filepath.Join(repo, "data", "ab", "pack"), []byte("x"), 0o600)
+	victim := filepath.Join(root, "victim")
+	_ = os.WriteFile(victim, []byte("v"), 0o600)
+	_ = os.Symlink(victim, filepath.Join(repo, "link"))
+	tg := &Target{Root: root}
+	if err := tg.groupReadable("/srv/bk"); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]os.FileMode{repo: 0o750, filepath.Join(repo, "data", "ab"): 0o750, filepath.Join(repo, "data", "ab", "pack"): 0o640} {
+		if st, _ := os.Stat(p); st.Mode().Perm() != want {
+			t.Errorf("%s: %v, ждали %v", p, st.Mode().Perm(), want)
+		}
+	}
+	if st, _ := os.Stat(victim); st.Mode().Perm() != 0o600 {
+		t.Fatal("права цели ссылки изменены")
+	}
+}
+
+// Получатель: пароль — во временном файле только на время операции, ключ хоста закреплён, --no-lock;
+// после успешного восстановления пара ключей удаляется.
+func TestRemoteRestic(t *testing.T) {
+	f := newFake(t)
+	root := tmp(t)
+	e := &Env{Store: Store{Dir: filepath.Join(root, "etc", "backup")}, BinDir: filepath.Dir(f.bin), CacheDir: filepath.Join(root, "cache")}
+	if err := os.Rename(f.bin, ResticPath(e.BinDir, "0.20.0")); err != nil {
+		t.Fatal(err)
+	}
+	pub, err := e.EnsureRestoreKey(planID)
+	if err != nil || !strings.HasPrefix(pub, "ssh-ed25519 ") {
+		t.Fatalf("%s %v", pub, err)
+	}
+	kd, _ := e.RestoreKeyDir(planID)
+	if again, _ := e.EnsureRestoreKey(planID); again != pub {
+		t.Fatal("повторная подготовка сменила ключ")
+	}
+	repo := &Repo{URL: "rclone:trassa-bkr-a1@10.0.0.2:repo", Password: []byte("repo-pass"), Env: map[string]string{}, ResticVersion: "0.20.0"}
+	r, cleanup, err := e.RemoteRestic(planID, repo, "ssh-ed25519 "+strings.Repeat("A", 68))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.on("snapshots", "[]", 0)
+	if _, err := Snapshots(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	c := f.calls()[0]
+	if !strings.Contains(c, "--no-lock") || !strings.Contains(c, "StrictHostKeyChecking=yes") || !strings.Contains(c, "-i "+filepath.Join(kd, SSHKeyFile)) {
+		t.Fatalf("%s", c)
+	}
+	if raw, _ := os.ReadFile(r.PasswordFile); string(raw) != "repo-pass" {
+		t.Fatal("файл пароля")
+	}
+	cleanup(false)
+	if _, err := os.Stat(r.PasswordFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("пароль остался после операции")
+	}
+	if _, err := os.Stat(filepath.Join(kd, SSHKeyFile)); err != nil {
+		t.Fatal("ключ удалён после неудачи: повтор невозможен")
+	}
+	_, cleanup, _ = e.RemoteRestic(planID, repo, "")
+	cleanup(true)
+	if _, err := os.Stat(kd); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("пара ключей осталась после успешного восстановления")
+	}
 }

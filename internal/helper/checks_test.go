@@ -267,7 +267,7 @@ func TestCatalogNotConfigurable(t *testing.T) {
 	}
 	want := []string{"agent.uninstall", "agent.update",
 		"backup.init", "backup.prune", "backup.restore", "backup.run", "backup.snapshot.browse", "backup.snapshots.list",
-		"backup.sources.discover", "backup.target.ensure", "backup.target.remove", "backup.unconfigure", "backup.verify",
+		"backup.sources.discover", "backup.target.ensure", "backup.target.remove", "backup.target.revoke_reader", "backup.unconfigure", "backup.verify",
 		"firewall.apply", "firewall.plan", "logs.read", "logs.subscribe", "packages.list_updates", "packages.upgrade", "rollback.restore",
 		"security.baseline.accept", "security.fix.BRUTEFORCE_NO_PROTECTION", "security.fix.KERNEL_ASLR_OFF", "security.fix.PERM_CRON", "security.fix.PERM_SYSTEM_FILES",
 		"security.fix.PERM_USER_SSH_DIR", "security.fix.PERM_WORLD_WRITABLE", "security.fix.SSH_CONFIG_PERMS", "security.fix.SYSCTL_NETWORK",

@@ -187,6 +187,8 @@ message OperationParams {
     BackupTargetEnsureParams backup_target_ensure = 31;
     BackupTargetRemoveParams backup_target_remove = 32;
     BackupUnconfigureParams backup_unconfigure = 33;
+    // 34–49 — E16, 50–69 — E17 (decisions E16, E17).
+    BackupTargetRevokeReaderParams backup_target_revoke_reader = 70;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }

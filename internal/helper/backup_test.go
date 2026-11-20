@@ -144,3 +144,87 @@ func TestBackupInitAndRun(t *testing.T) {
 		t.Fatalf("план остался в метрике: %+v", st)
 	}
 }
+
+// fakeReader — restic получателя: снимок с одним файлом, восстановление пишет его в --target.
+const fakeReader = `#!/bin/sh
+D="$(dirname "$0")"
+printf '%s\n' "$*" >> "$D/calls"
+case "$*" in
+	version) echo 'restic 0.20.0 compiled with go1.26.10 on linux/amd64' ;;
+	*" snapshots "*) echo '[{"id":"dddddddd44","time":"2026-11-20T10:00:00Z","paths":["/srv/app"],"tags":["trassa","source=app","kind=path"]}]' ;;
+	*" ls "*) echo '{"message_type":"node","name":"app","type":"dir","path":"/srv/app","size":0}'
+		echo '{"message_type":"node","name":"config","type":"file","path":"/srv/app/config","size":8}' ;;
+	*" restore "*) t=""; prev=""; for a in "$@"; do [ "$prev" = "--target" ] && t="$a"; prev="$a"; done
+		mkdir -p "$t/srv/app"; printf restored > "$t/srv/app/config"
+		echo '{"message_type":"summary","total_files":1,"files_restored":1,"total_bytes":8,"bytes_restored":8}' ;;
+esac
+`
+
+// Восстановление на сервер-получатель: сначала ключ получателя, затем восстановление репозитория из операции;
+// секреты и ключи после успеха не остаются, restic читает без блокировок.
+func TestRemoteRestoreOnReceiver(t *testing.T) {
+	bz, err := exec.LookPath("bzip2")
+	if err != nil {
+		t.Skip("нет bzip2")
+	}
+	f := newFixture(t)
+	k := f.enableBackup(t)
+	restore := func(mod func(p *agentv1.BackupRestoreParams)) *agentv1.OperationBody {
+		p := &agentv1.BackupRestoreParams{PlanId: testPlan, SnapshotId: "dddddddd", Mode: agentv1.RestoreMode_RESTORE_MODE_OTHER_SERVER,
+			Selection: &agentv1.RestoreSelection{All: true}, DestPath: filepath.Join(f.root, "dest")}
+		mod(p)
+		b := f.body(ops.TypeBackupRestore, &agentv1.OperationParams{Params: &agentv1.OperationParams_BackupRestore{BackupRestore: p}})
+		b.Rollback = agentv1.RollbackKind_ROLLBACK_KIND_LOCAL_COPY
+		return b
+	}
+	kp := f.exec(sealed(restore(func(p *agentv1.BackupRestoreParams) { p.SshKeypair = true })))
+	pub := kp.result.GetBackupRestore().GetSshPublicKey()
+	if kp.result.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED || !strings.HasPrefix(pub, "ssh-ed25519 ") {
+		t.Fatalf("ключ получателя: %+v", kp.result)
+	}
+	b := restore(func(*agentv1.BackupRestoreParams) {})
+	stage := StageDir(f.paths, b.GetOperationId())
+	_ = os.MkdirAll(stage, 0o700)
+	raw := filepath.Join(stage, "restic")
+	_ = os.WriteFile(raw, []byte(fakeReader), 0o755)
+	if out, err := exec.Command(bz, raw).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	_ = os.Rename(raw+".bz2", filepath.Join(stage, backup.ResticStaged))
+	arch, _ := os.ReadFile(filepath.Join(stage, backup.ResticStaged))
+	sum := sha256.Sum256(arch)
+	prev := backup.KnownTools["restic"]["0.20.0"]
+	backup.KnownTools["restic"]["0.20.0"] = map[string]string{runtime.GOARCH: hex.EncodeToString(sum[:])}
+	t.Cleanup(func() { backup.KnownTools["restic"]["0.20.0"] = prev })
+	pw, err := secretkey.Seal(k.Public(), secretkey.Info(b.GetServerId(), k.ID, b.GetOperationId(), b.GetType(), testPlan, "password"), []byte("reader-pass-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := b.GetParams().GetBackupRestore()
+	p.Repo = &agentv1.BackupRepo{Url: "rclone:trassa-bkr-a1@10.0.0.2:repo", Password: pw}
+	p.Restic = &agentv1.BackupTool{Version: "0.20.0", Sha256: hex.EncodeToString(sum[:]), Url: "https://x.example/restic.bz2"}
+	p.SshHostKey = "ssh-ed25519 " + strings.Repeat("A", 68)
+	o := f.exec(sealed(b))
+	if o.result.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED {
+		t.Fatalf("восстановление: %+v", o.result)
+	}
+	if got, _ := os.ReadFile(filepath.Join(f.root, "dest", "srv", "app", "config")); string(got) != "restored" {
+		t.Fatalf("файл: %q", got)
+	}
+	kd, _ := f.e.Backup.RestoreKeyDir(testPlan)
+	if _, err := os.Stat(kd); !os.IsNotExist(err) {
+		t.Fatal("ключи и пароль получателя остались после восстановления")
+	}
+	calls, _ := os.ReadFile(filepath.Join(f.paths.HelperBin, "calls"))
+	if !strings.Contains(string(calls), "--no-lock") || strings.Contains(string(calls), "reader-pass-1") || strings.Contains(o.result.String(), "reader-pass-1") {
+		t.Fatalf("restic: %s", calls)
+	}
+	// Секрет, зашифрованный для другого типа операции (backup.init), не открывается.
+	bad := restore(func(*agentv1.BackupRestoreParams) {})
+	wrong, _ := secretkey.Seal(k.Public(), secretkey.Info(bad.GetServerId(), k.ID, bad.GetOperationId(), "backup.init", testPlan, "password"), []byte("x"))
+	bp := bad.GetParams().GetBackupRestore()
+	bp.Repo, bp.Restic = &agentv1.BackupRepo{Url: "rclone:trassa-bkr-a1@10.0.0.2:repo", Password: wrong}, p.Restic
+	if o := f.exec(sealed(bad)); o.result.GetErrorCode() != "SECRET_INVALID" {
+		t.Fatalf("чужой секрет: %+v", o.result)
+	}
+}

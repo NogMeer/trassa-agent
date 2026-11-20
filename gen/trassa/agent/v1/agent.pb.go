@@ -1603,6 +1603,7 @@ type OperationParams struct {
 	//	*OperationParams_BackupTargetEnsure
 	//	*OperationParams_BackupTargetRemove
 	//	*OperationParams_BackupUnconfigure
+	//	*OperationParams_BackupTargetRevokeReader
 	//	*OperationParams_TestConfigWrite
 	Params        isOperationParams_Params `protobuf_oneof:"params"`
 	unknownFields protoimpl.UnknownFields
@@ -1943,6 +1944,15 @@ func (x *OperationParams) GetBackupUnconfigure() *BackupUnconfigureParams {
 	return nil
 }
 
+func (x *OperationParams) GetBackupTargetRevokeReader() *BackupTargetRevokeReaderParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_BackupTargetRevokeReader); ok {
+			return x.BackupTargetRevokeReader
+		}
+	}
+	return nil
+}
+
 func (x *OperationParams) GetTestConfigWrite() *TestConfigWriteParams {
 	if x != nil {
 		if x, ok := x.Params.(*OperationParams_TestConfigWrite); ok {
@@ -2088,6 +2098,11 @@ type OperationParams_BackupUnconfigure struct {
 	BackupUnconfigure *BackupUnconfigureParams `protobuf:"bytes,33,opt,name=backup_unconfigure,json=backupUnconfigure,proto3,oneof"`
 }
 
+type OperationParams_BackupTargetRevokeReader struct {
+	// 34–49 — E16, 50–69 — E17 (decisions E16, E17).
+	BackupTargetRevokeReader *BackupTargetRevokeReaderParams `protobuf:"bytes,70,opt,name=backup_target_revoke_reader,json=backupTargetRevokeReader,proto3,oneof"`
+}
+
 type OperationParams_TestConfigWrite struct {
 	// Только в сборке с тегом testops.
 	TestConfigWrite *TestConfigWriteParams `protobuf:"bytes,100,opt,name=test_config_write,json=testConfigWrite,proto3,oneof"`
@@ -2158,6 +2173,8 @@ func (*OperationParams_BackupTargetEnsure) isOperationParams_Params() {}
 func (*OperationParams_BackupTargetRemove) isOperationParams_Params() {}
 
 func (*OperationParams_BackupUnconfigure) isOperationParams_Params() {}
+
+func (*OperationParams_BackupTargetRevokeReader) isOperationParams_Params() {}
 
 func (*OperationParams_TestConfigWrite) isOperationParams_Params() {}
 
@@ -4875,7 +4892,7 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\adry_run\x18\t \x01(\bR\x06dryRun\x12 \n" +
 	"\fissued_at_ms\x18\n" +
 	" \x01(\x03R\n" +
-	"issuedAtMs\"\xcb\x15\n" +
+	"issuedAtMs\"\xbd\x16\n" +
 	"\x0fOperationParams\x12D\n" +
 	"\vsystem_info\x18\x01 \x01(\v2!.trassa.agent.v1.SystemInfoParamsH\x00R\n" +
 	"systemInfo\x12S\n" +
@@ -4914,7 +4931,8 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\fbackup_prune\x18\x1e \x01(\v2\".trassa.agent.v1.BackupPruneParamsH\x00R\vbackupPrune\x12]\n" +
 	"\x14backup_target_ensure\x18\x1f \x01(\v2).trassa.agent.v1.BackupTargetEnsureParamsH\x00R\x12backupTargetEnsure\x12]\n" +
 	"\x14backup_target_remove\x18  \x01(\v2).trassa.agent.v1.BackupTargetRemoveParamsH\x00R\x12backupTargetRemove\x12Y\n" +
-	"\x12backup_unconfigure\x18! \x01(\v2(.trassa.agent.v1.BackupUnconfigureParamsH\x00R\x11backupUnconfigure\x12T\n" +
+	"\x12backup_unconfigure\x18! \x01(\v2(.trassa.agent.v1.BackupUnconfigureParamsH\x00R\x11backupUnconfigure\x12p\n" +
+	"\x1bbackup_target_revoke_reader\x18F \x01(\v2/.trassa.agent.v1.BackupTargetRevokeReaderParamsH\x00R\x18backupTargetRevokeReader\x12T\n" +
 	"\x11test_config_write\x18d \x01(\v2&.trassa.agent.v1.TestConfigWriteParamsH\x00R\x0ftestConfigWriteB\b\n" +
 	"\x06params\"\x12\n" +
 	"\x10SystemInfoParams\"Q\n" +
@@ -5209,108 +5227,109 @@ func file_trassa_agent_v1_agent_proto_rawDescGZIP() []byte {
 var file_trassa_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
 var file_trassa_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_trassa_agent_v1_agent_proto_goTypes = []any{
-	(ProtocolVersion)(0),                 // 0: trassa.agent.v1.ProtocolVersion
-	(CloseReason)(0),                     // 1: trassa.agent.v1.CloseReason
-	(RollbackKind)(0),                    // 2: trassa.agent.v1.RollbackKind
-	(InventoryKind)(0),                   // 3: trassa.agent.v1.InventoryKind
-	(OperationPhase)(0),                  // 4: trassa.agent.v1.OperationPhase
-	(LogStream)(0),                       // 5: trassa.agent.v1.LogStream
-	(OperationOutcome)(0),                // 6: trassa.agent.v1.OperationOutcome
-	(FileChangeKind)(0),                  // 7: trassa.agent.v1.FileChangeKind
-	(EventSeverity)(0),                   // 8: trassa.agent.v1.EventSeverity
-	(LogLevel)(0),                        // 9: trassa.agent.v1.LogLevel
-	(LogSourceKind)(0),                   // 10: trassa.agent.v1.LogSourceKind
-	(*AgentMessage)(nil),                 // 11: trassa.agent.v1.AgentMessage
-	(*GatewayMessage)(nil),               // 12: trassa.agent.v1.GatewayMessage
-	(*Challenge)(nil),                    // 13: trassa.agent.v1.Challenge
-	(*Hello)(nil),                        // 14: trassa.agent.v1.Hello
-	(*Welcome)(nil),                      // 15: trassa.agent.v1.Welcome
-	(*Heartbeat)(nil),                    // 16: trassa.agent.v1.Heartbeat
-	(*Close)(nil),                        // 17: trassa.agent.v1.Close
-	(*SignedOperation)(nil),              // 18: trassa.agent.v1.SignedOperation
-	(*OperationBody)(nil),                // 19: trassa.agent.v1.OperationBody
-	(*OperationParams)(nil),              // 20: trassa.agent.v1.OperationParams
-	(*SystemInfoParams)(nil),             // 21: trassa.agent.v1.SystemInfoParams
-	(*SystemInventoryParams)(nil),        // 22: trassa.agent.v1.SystemInventoryParams
-	(*AgentUpdateParams)(nil),            // 23: trassa.agent.v1.AgentUpdateParams
-	(*ReleaseArtifact)(nil),              // 24: trassa.agent.v1.ReleaseArtifact
-	(*AgentUninstallParams)(nil),         // 25: trassa.agent.v1.AgentUninstallParams
-	(*RollbackRestoreParams)(nil),        // 26: trassa.agent.v1.RollbackRestoreParams
-	(*LogsSubscribeParams)(nil),          // 27: trassa.agent.v1.LogsSubscribeParams
-	(*LogsReadParams)(nil),               // 28: trassa.agent.v1.LogsReadParams
-	(*TestConfigWriteParams)(nil),        // 29: trassa.agent.v1.TestConfigWriteParams
-	(*SignedConfirm)(nil),                // 30: trassa.agent.v1.SignedConfirm
-	(*ConfirmBody)(nil),                  // 31: trassa.agent.v1.ConfirmBody
-	(*OperationAck)(nil),                 // 32: trassa.agent.v1.OperationAck
-	(*OperationProgress)(nil),            // 33: trassa.agent.v1.OperationProgress
-	(*OperationResult)(nil),              // 34: trassa.agent.v1.OperationResult
-	(*InboundAck)(nil),                   // 35: trassa.agent.v1.InboundAck
-	(*Preview)(nil),                      // 36: trassa.agent.v1.Preview
-	(*FileChange)(nil),                   // 37: trassa.agent.v1.FileChange
-	(*RollbackPoint)(nil),                // 38: trassa.agent.v1.RollbackPoint
-	(*SystemInfoResult)(nil),             // 39: trassa.agent.v1.SystemInfoResult
-	(*SystemInventoryResult)(nil),        // 40: trassa.agent.v1.SystemInventoryResult
-	(*ServiceEntry)(nil),                 // 41: trassa.agent.v1.ServiceEntry
-	(*ContainerEntry)(nil),               // 42: trassa.agent.v1.ContainerEntry
-	(*PortEntry)(nil),                    // 43: trassa.agent.v1.PortEntry
-	(*MetricsBatch)(nil),                 // 44: trassa.agent.v1.MetricsBatch
-	(*Metric)(nil),                       // 45: trassa.agent.v1.Metric
-	(*Event)(nil),                        // 46: trassa.agent.v1.Event
-	(*LogChunk)(nil),                     // 47: trassa.agent.v1.LogChunk
-	(*LogSource)(nil),                    // 48: trassa.agent.v1.LogSource
-	(*LogRecord)(nil),                    // 49: trassa.agent.v1.LogRecord
-	(*LogSourceStatus)(nil),              // 50: trassa.agent.v1.LogSourceStatus
-	(*LogsSubscribeResult)(nil),          // 51: trassa.agent.v1.LogsSubscribeResult
-	(*LogsReadResult)(nil),               // 52: trassa.agent.v1.LogsReadResult
-	(*Subscribe)(nil),                    // 53: trassa.agent.v1.Subscribe
-	(*Unsubscribe)(nil),                  // 54: trassa.agent.v1.Unsubscribe
-	(*NetCheckParams)(nil),               // 55: trassa.agent.v1.NetCheckParams
-	(*NetCheckResult)(nil),               // 56: trassa.agent.v1.NetCheckResult
-	nil,                                  // 57: trassa.agent.v1.Metric.LabelsEntry
-	nil,                                  // 58: trassa.agent.v1.Event.AttributesEntry
-	nil,                                  // 59: trassa.agent.v1.LogRecord.FieldsEntry
-	nil,                                  // 60: trassa.agent.v1.Subscribe.OptionsEntry
-	(*SecurityScanParams)(nil),           // 61: trassa.agent.v1.SecurityScanParams
-	(*PackagesListUpdatesParams)(nil),    // 62: trassa.agent.v1.PackagesListUpdatesParams
-	(*SecurityFixParams)(nil),            // 63: trassa.agent.v1.SecurityFixParams
-	(*SshHardenParams)(nil),              // 64: trassa.agent.v1.SshHardenParams
-	(*FirewallPlanParams)(nil),           // 65: trassa.agent.v1.FirewallPlanParams
-	(*FirewallApplyParams)(nil),          // 66: trassa.agent.v1.FirewallApplyParams
-	(*PackagesUpgradeParams)(nil),        // 67: trassa.agent.v1.PackagesUpgradeParams
-	(*SystemRebootParams)(nil),           // 68: trassa.agent.v1.SystemRebootParams
-	(*ServiceRestartParams)(nil),         // 69: trassa.agent.v1.ServiceRestartParams
-	(*SecurityBaselineAcceptParams)(nil), // 70: trassa.agent.v1.SecurityBaselineAcceptParams
-	(*WireguardInspectParams)(nil),       // 71: trassa.agent.v1.WireguardInspectParams
-	(*WireguardKeygenParams)(nil),        // 72: trassa.agent.v1.WireguardKeygenParams
-	(*WireguardApplyParams)(nil),         // 73: trassa.agent.v1.WireguardApplyParams
-	(*WireguardRemoveParams)(nil),        // 74: trassa.agent.v1.WireguardRemoveParams
-	(*BackupInitParams)(nil),             // 75: trassa.agent.v1.BackupInitParams
-	(*BackupRunParams)(nil),              // 76: trassa.agent.v1.BackupRunParams
-	(*BackupVerifyParams)(nil),           // 77: trassa.agent.v1.BackupVerifyParams
-	(*BackupRestoreParams)(nil),          // 78: trassa.agent.v1.BackupRestoreParams
-	(*BackupDiscoverParams)(nil),         // 79: trassa.agent.v1.BackupDiscoverParams
-	(*BackupSnapshotsParams)(nil),        // 80: trassa.agent.v1.BackupSnapshotsParams
-	(*BackupBrowseParams)(nil),           // 81: trassa.agent.v1.BackupBrowseParams
-	(*BackupPruneParams)(nil),            // 82: trassa.agent.v1.BackupPruneParams
-	(*BackupTargetEnsureParams)(nil),     // 83: trassa.agent.v1.BackupTargetEnsureParams
-	(*BackupTargetRemoveParams)(nil),     // 84: trassa.agent.v1.BackupTargetRemoveParams
-	(*BackupUnconfigureParams)(nil),      // 85: trassa.agent.v1.BackupUnconfigureParams
-	(*BackupProgress)(nil),               // 86: trassa.agent.v1.BackupProgress
-	(*SecurityScanResult)(nil),           // 87: trassa.agent.v1.SecurityScanResult
-	(*PackagesListUpdatesResult)(nil),    // 88: trassa.agent.v1.PackagesListUpdatesResult
-	(*FirewallPlanResult)(nil),           // 89: trassa.agent.v1.FirewallPlanResult
-	(*WireguardInspectResult)(nil),       // 90: trassa.agent.v1.WireguardInspectResult
-	(*WireguardKeygenResult)(nil),        // 91: trassa.agent.v1.WireguardKeygenResult
-	(*WireguardApplyResult)(nil),         // 92: trassa.agent.v1.WireguardApplyResult
-	(*BackupInitResult)(nil),             // 93: trassa.agent.v1.BackupInitResult
-	(*BackupRunResult)(nil),              // 94: trassa.agent.v1.BackupRunResult
-	(*BackupVerifyResult)(nil),           // 95: trassa.agent.v1.BackupVerifyResult
-	(*BackupRestoreResult)(nil),          // 96: trassa.agent.v1.BackupRestoreResult
-	(*BackupDiscoverResult)(nil),         // 97: trassa.agent.v1.BackupDiscoverResult
-	(*BackupSnapshotsResult)(nil),        // 98: trassa.agent.v1.BackupSnapshotsResult
-	(*BackupBrowseResult)(nil),           // 99: trassa.agent.v1.BackupBrowseResult
-	(*BackupPruneResult)(nil),            // 100: trassa.agent.v1.BackupPruneResult
-	(*BackupTargetEnsureResult)(nil),     // 101: trassa.agent.v1.BackupTargetEnsureResult
+	(ProtocolVersion)(0),                   // 0: trassa.agent.v1.ProtocolVersion
+	(CloseReason)(0),                       // 1: trassa.agent.v1.CloseReason
+	(RollbackKind)(0),                      // 2: trassa.agent.v1.RollbackKind
+	(InventoryKind)(0),                     // 3: trassa.agent.v1.InventoryKind
+	(OperationPhase)(0),                    // 4: trassa.agent.v1.OperationPhase
+	(LogStream)(0),                         // 5: trassa.agent.v1.LogStream
+	(OperationOutcome)(0),                  // 6: trassa.agent.v1.OperationOutcome
+	(FileChangeKind)(0),                    // 7: trassa.agent.v1.FileChangeKind
+	(EventSeverity)(0),                     // 8: trassa.agent.v1.EventSeverity
+	(LogLevel)(0),                          // 9: trassa.agent.v1.LogLevel
+	(LogSourceKind)(0),                     // 10: trassa.agent.v1.LogSourceKind
+	(*AgentMessage)(nil),                   // 11: trassa.agent.v1.AgentMessage
+	(*GatewayMessage)(nil),                 // 12: trassa.agent.v1.GatewayMessage
+	(*Challenge)(nil),                      // 13: trassa.agent.v1.Challenge
+	(*Hello)(nil),                          // 14: trassa.agent.v1.Hello
+	(*Welcome)(nil),                        // 15: trassa.agent.v1.Welcome
+	(*Heartbeat)(nil),                      // 16: trassa.agent.v1.Heartbeat
+	(*Close)(nil),                          // 17: trassa.agent.v1.Close
+	(*SignedOperation)(nil),                // 18: trassa.agent.v1.SignedOperation
+	(*OperationBody)(nil),                  // 19: trassa.agent.v1.OperationBody
+	(*OperationParams)(nil),                // 20: trassa.agent.v1.OperationParams
+	(*SystemInfoParams)(nil),               // 21: trassa.agent.v1.SystemInfoParams
+	(*SystemInventoryParams)(nil),          // 22: trassa.agent.v1.SystemInventoryParams
+	(*AgentUpdateParams)(nil),              // 23: trassa.agent.v1.AgentUpdateParams
+	(*ReleaseArtifact)(nil),                // 24: trassa.agent.v1.ReleaseArtifact
+	(*AgentUninstallParams)(nil),           // 25: trassa.agent.v1.AgentUninstallParams
+	(*RollbackRestoreParams)(nil),          // 26: trassa.agent.v1.RollbackRestoreParams
+	(*LogsSubscribeParams)(nil),            // 27: trassa.agent.v1.LogsSubscribeParams
+	(*LogsReadParams)(nil),                 // 28: trassa.agent.v1.LogsReadParams
+	(*TestConfigWriteParams)(nil),          // 29: trassa.agent.v1.TestConfigWriteParams
+	(*SignedConfirm)(nil),                  // 30: trassa.agent.v1.SignedConfirm
+	(*ConfirmBody)(nil),                    // 31: trassa.agent.v1.ConfirmBody
+	(*OperationAck)(nil),                   // 32: trassa.agent.v1.OperationAck
+	(*OperationProgress)(nil),              // 33: trassa.agent.v1.OperationProgress
+	(*OperationResult)(nil),                // 34: trassa.agent.v1.OperationResult
+	(*InboundAck)(nil),                     // 35: trassa.agent.v1.InboundAck
+	(*Preview)(nil),                        // 36: trassa.agent.v1.Preview
+	(*FileChange)(nil),                     // 37: trassa.agent.v1.FileChange
+	(*RollbackPoint)(nil),                  // 38: trassa.agent.v1.RollbackPoint
+	(*SystemInfoResult)(nil),               // 39: trassa.agent.v1.SystemInfoResult
+	(*SystemInventoryResult)(nil),          // 40: trassa.agent.v1.SystemInventoryResult
+	(*ServiceEntry)(nil),                   // 41: trassa.agent.v1.ServiceEntry
+	(*ContainerEntry)(nil),                 // 42: trassa.agent.v1.ContainerEntry
+	(*PortEntry)(nil),                      // 43: trassa.agent.v1.PortEntry
+	(*MetricsBatch)(nil),                   // 44: trassa.agent.v1.MetricsBatch
+	(*Metric)(nil),                         // 45: trassa.agent.v1.Metric
+	(*Event)(nil),                          // 46: trassa.agent.v1.Event
+	(*LogChunk)(nil),                       // 47: trassa.agent.v1.LogChunk
+	(*LogSource)(nil),                      // 48: trassa.agent.v1.LogSource
+	(*LogRecord)(nil),                      // 49: trassa.agent.v1.LogRecord
+	(*LogSourceStatus)(nil),                // 50: trassa.agent.v1.LogSourceStatus
+	(*LogsSubscribeResult)(nil),            // 51: trassa.agent.v1.LogsSubscribeResult
+	(*LogsReadResult)(nil),                 // 52: trassa.agent.v1.LogsReadResult
+	(*Subscribe)(nil),                      // 53: trassa.agent.v1.Subscribe
+	(*Unsubscribe)(nil),                    // 54: trassa.agent.v1.Unsubscribe
+	(*NetCheckParams)(nil),                 // 55: trassa.agent.v1.NetCheckParams
+	(*NetCheckResult)(nil),                 // 56: trassa.agent.v1.NetCheckResult
+	nil,                                    // 57: trassa.agent.v1.Metric.LabelsEntry
+	nil,                                    // 58: trassa.agent.v1.Event.AttributesEntry
+	nil,                                    // 59: trassa.agent.v1.LogRecord.FieldsEntry
+	nil,                                    // 60: trassa.agent.v1.Subscribe.OptionsEntry
+	(*SecurityScanParams)(nil),             // 61: trassa.agent.v1.SecurityScanParams
+	(*PackagesListUpdatesParams)(nil),      // 62: trassa.agent.v1.PackagesListUpdatesParams
+	(*SecurityFixParams)(nil),              // 63: trassa.agent.v1.SecurityFixParams
+	(*SshHardenParams)(nil),                // 64: trassa.agent.v1.SshHardenParams
+	(*FirewallPlanParams)(nil),             // 65: trassa.agent.v1.FirewallPlanParams
+	(*FirewallApplyParams)(nil),            // 66: trassa.agent.v1.FirewallApplyParams
+	(*PackagesUpgradeParams)(nil),          // 67: trassa.agent.v1.PackagesUpgradeParams
+	(*SystemRebootParams)(nil),             // 68: trassa.agent.v1.SystemRebootParams
+	(*ServiceRestartParams)(nil),           // 69: trassa.agent.v1.ServiceRestartParams
+	(*SecurityBaselineAcceptParams)(nil),   // 70: trassa.agent.v1.SecurityBaselineAcceptParams
+	(*WireguardInspectParams)(nil),         // 71: trassa.agent.v1.WireguardInspectParams
+	(*WireguardKeygenParams)(nil),          // 72: trassa.agent.v1.WireguardKeygenParams
+	(*WireguardApplyParams)(nil),           // 73: trassa.agent.v1.WireguardApplyParams
+	(*WireguardRemoveParams)(nil),          // 74: trassa.agent.v1.WireguardRemoveParams
+	(*BackupInitParams)(nil),               // 75: trassa.agent.v1.BackupInitParams
+	(*BackupRunParams)(nil),                // 76: trassa.agent.v1.BackupRunParams
+	(*BackupVerifyParams)(nil),             // 77: trassa.agent.v1.BackupVerifyParams
+	(*BackupRestoreParams)(nil),            // 78: trassa.agent.v1.BackupRestoreParams
+	(*BackupDiscoverParams)(nil),           // 79: trassa.agent.v1.BackupDiscoverParams
+	(*BackupSnapshotsParams)(nil),          // 80: trassa.agent.v1.BackupSnapshotsParams
+	(*BackupBrowseParams)(nil),             // 81: trassa.agent.v1.BackupBrowseParams
+	(*BackupPruneParams)(nil),              // 82: trassa.agent.v1.BackupPruneParams
+	(*BackupTargetEnsureParams)(nil),       // 83: trassa.agent.v1.BackupTargetEnsureParams
+	(*BackupTargetRemoveParams)(nil),       // 84: trassa.agent.v1.BackupTargetRemoveParams
+	(*BackupUnconfigureParams)(nil),        // 85: trassa.agent.v1.BackupUnconfigureParams
+	(*BackupTargetRevokeReaderParams)(nil), // 86: trassa.agent.v1.BackupTargetRevokeReaderParams
+	(*BackupProgress)(nil),                 // 87: trassa.agent.v1.BackupProgress
+	(*SecurityScanResult)(nil),             // 88: trassa.agent.v1.SecurityScanResult
+	(*PackagesListUpdatesResult)(nil),      // 89: trassa.agent.v1.PackagesListUpdatesResult
+	(*FirewallPlanResult)(nil),             // 90: trassa.agent.v1.FirewallPlanResult
+	(*WireguardInspectResult)(nil),         // 91: trassa.agent.v1.WireguardInspectResult
+	(*WireguardKeygenResult)(nil),          // 92: trassa.agent.v1.WireguardKeygenResult
+	(*WireguardApplyResult)(nil),           // 93: trassa.agent.v1.WireguardApplyResult
+	(*BackupInitResult)(nil),               // 94: trassa.agent.v1.BackupInitResult
+	(*BackupRunResult)(nil),                // 95: trassa.agent.v1.BackupRunResult
+	(*BackupVerifyResult)(nil),             // 96: trassa.agent.v1.BackupVerifyResult
+	(*BackupRestoreResult)(nil),            // 97: trassa.agent.v1.BackupRestoreResult
+	(*BackupDiscoverResult)(nil),           // 98: trassa.agent.v1.BackupDiscoverResult
+	(*BackupSnapshotsResult)(nil),          // 99: trassa.agent.v1.BackupSnapshotsResult
+	(*BackupBrowseResult)(nil),             // 100: trassa.agent.v1.BackupBrowseResult
+	(*BackupPruneResult)(nil),              // 101: trassa.agent.v1.BackupPruneResult
+	(*BackupTargetEnsureResult)(nil),       // 102: trassa.agent.v1.BackupTargetEnsureResult
 }
 var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	14,  // 0: trassa.agent.v1.AgentMessage.hello:type_name -> trassa.agent.v1.Hello
@@ -5368,62 +5387,63 @@ var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	83,  // 52: trassa.agent.v1.OperationParams.backup_target_ensure:type_name -> trassa.agent.v1.BackupTargetEnsureParams
 	84,  // 53: trassa.agent.v1.OperationParams.backup_target_remove:type_name -> trassa.agent.v1.BackupTargetRemoveParams
 	85,  // 54: trassa.agent.v1.OperationParams.backup_unconfigure:type_name -> trassa.agent.v1.BackupUnconfigureParams
-	29,  // 55: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
-	3,   // 56: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
-	24,  // 57: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
-	48,  // 58: trassa.agent.v1.LogsSubscribeParams.sources:type_name -> trassa.agent.v1.LogSource
-	9,   // 59: trassa.agent.v1.LogsSubscribeParams.min_level:type_name -> trassa.agent.v1.LogLevel
-	48,  // 60: trassa.agent.v1.LogsReadParams.source:type_name -> trassa.agent.v1.LogSource
-	4,   // 61: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
-	5,   // 62: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
-	86,  // 63: trassa.agent.v1.OperationProgress.backup:type_name -> trassa.agent.v1.BackupProgress
-	6,   // 64: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
-	36,  // 65: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
-	38,  // 66: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
-	39,  // 67: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
-	40,  // 68: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
-	51,  // 69: trassa.agent.v1.OperationResult.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeResult
-	52,  // 70: trassa.agent.v1.OperationResult.logs_read:type_name -> trassa.agent.v1.LogsReadResult
-	87,  // 71: trassa.agent.v1.OperationResult.security_scan:type_name -> trassa.agent.v1.SecurityScanResult
-	88,  // 72: trassa.agent.v1.OperationResult.packages_list_updates:type_name -> trassa.agent.v1.PackagesListUpdatesResult
-	89,  // 73: trassa.agent.v1.OperationResult.firewall_plan:type_name -> trassa.agent.v1.FirewallPlanResult
-	56,  // 74: trassa.agent.v1.OperationResult.net_check:type_name -> trassa.agent.v1.NetCheckResult
-	90,  // 75: trassa.agent.v1.OperationResult.wireguard_inspect:type_name -> trassa.agent.v1.WireguardInspectResult
-	91,  // 76: trassa.agent.v1.OperationResult.wireguard_keygen:type_name -> trassa.agent.v1.WireguardKeygenResult
-	92,  // 77: trassa.agent.v1.OperationResult.wireguard_apply:type_name -> trassa.agent.v1.WireguardApplyResult
-	93,  // 78: trassa.agent.v1.OperationResult.backup_init:type_name -> trassa.agent.v1.BackupInitResult
-	94,  // 79: trassa.agent.v1.OperationResult.backup_run:type_name -> trassa.agent.v1.BackupRunResult
-	95,  // 80: trassa.agent.v1.OperationResult.backup_verify:type_name -> trassa.agent.v1.BackupVerifyResult
-	96,  // 81: trassa.agent.v1.OperationResult.backup_restore:type_name -> trassa.agent.v1.BackupRestoreResult
-	97,  // 82: trassa.agent.v1.OperationResult.backup_discover:type_name -> trassa.agent.v1.BackupDiscoverResult
-	98,  // 83: trassa.agent.v1.OperationResult.backup_snapshots:type_name -> trassa.agent.v1.BackupSnapshotsResult
-	99,  // 84: trassa.agent.v1.OperationResult.backup_browse:type_name -> trassa.agent.v1.BackupBrowseResult
-	100, // 85: trassa.agent.v1.OperationResult.backup_prune:type_name -> trassa.agent.v1.BackupPruneResult
-	101, // 86: trassa.agent.v1.OperationResult.backup_target_ensure:type_name -> trassa.agent.v1.BackupTargetEnsureResult
-	37,  // 87: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
-	7,   // 88: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
-	2,   // 89: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
-	41,  // 90: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
-	42,  // 91: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
-	43,  // 92: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
-	45,  // 93: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
-	57,  // 94: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
-	8,   // 95: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
-	58,  // 96: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
-	49,  // 97: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
-	10,  // 98: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
-	9,   // 99: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
-	48,  // 100: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
-	59,  // 101: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
-	48,  // 102: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
-	50,  // 103: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
-	49,  // 104: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
-	60,  // 105: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
-	106, // [106:106] is the sub-list for method output_type
-	106, // [106:106] is the sub-list for method input_type
-	106, // [106:106] is the sub-list for extension type_name
-	106, // [106:106] is the sub-list for extension extendee
-	0,   // [0:106] is the sub-list for field type_name
+	86,  // 55: trassa.agent.v1.OperationParams.backup_target_revoke_reader:type_name -> trassa.agent.v1.BackupTargetRevokeReaderParams
+	29,  // 56: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
+	3,   // 57: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
+	24,  // 58: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
+	48,  // 59: trassa.agent.v1.LogsSubscribeParams.sources:type_name -> trassa.agent.v1.LogSource
+	9,   // 60: trassa.agent.v1.LogsSubscribeParams.min_level:type_name -> trassa.agent.v1.LogLevel
+	48,  // 61: trassa.agent.v1.LogsReadParams.source:type_name -> trassa.agent.v1.LogSource
+	4,   // 62: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
+	5,   // 63: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
+	87,  // 64: trassa.agent.v1.OperationProgress.backup:type_name -> trassa.agent.v1.BackupProgress
+	6,   // 65: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
+	36,  // 66: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
+	38,  // 67: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
+	39,  // 68: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
+	40,  // 69: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
+	51,  // 70: trassa.agent.v1.OperationResult.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeResult
+	52,  // 71: trassa.agent.v1.OperationResult.logs_read:type_name -> trassa.agent.v1.LogsReadResult
+	88,  // 72: trassa.agent.v1.OperationResult.security_scan:type_name -> trassa.agent.v1.SecurityScanResult
+	89,  // 73: trassa.agent.v1.OperationResult.packages_list_updates:type_name -> trassa.agent.v1.PackagesListUpdatesResult
+	90,  // 74: trassa.agent.v1.OperationResult.firewall_plan:type_name -> trassa.agent.v1.FirewallPlanResult
+	56,  // 75: trassa.agent.v1.OperationResult.net_check:type_name -> trassa.agent.v1.NetCheckResult
+	91,  // 76: trassa.agent.v1.OperationResult.wireguard_inspect:type_name -> trassa.agent.v1.WireguardInspectResult
+	92,  // 77: trassa.agent.v1.OperationResult.wireguard_keygen:type_name -> trassa.agent.v1.WireguardKeygenResult
+	93,  // 78: trassa.agent.v1.OperationResult.wireguard_apply:type_name -> trassa.agent.v1.WireguardApplyResult
+	94,  // 79: trassa.agent.v1.OperationResult.backup_init:type_name -> trassa.agent.v1.BackupInitResult
+	95,  // 80: trassa.agent.v1.OperationResult.backup_run:type_name -> trassa.agent.v1.BackupRunResult
+	96,  // 81: trassa.agent.v1.OperationResult.backup_verify:type_name -> trassa.agent.v1.BackupVerifyResult
+	97,  // 82: trassa.agent.v1.OperationResult.backup_restore:type_name -> trassa.agent.v1.BackupRestoreResult
+	98,  // 83: trassa.agent.v1.OperationResult.backup_discover:type_name -> trassa.agent.v1.BackupDiscoverResult
+	99,  // 84: trassa.agent.v1.OperationResult.backup_snapshots:type_name -> trassa.agent.v1.BackupSnapshotsResult
+	100, // 85: trassa.agent.v1.OperationResult.backup_browse:type_name -> trassa.agent.v1.BackupBrowseResult
+	101, // 86: trassa.agent.v1.OperationResult.backup_prune:type_name -> trassa.agent.v1.BackupPruneResult
+	102, // 87: trassa.agent.v1.OperationResult.backup_target_ensure:type_name -> trassa.agent.v1.BackupTargetEnsureResult
+	37,  // 88: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
+	7,   // 89: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
+	2,   // 90: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
+	41,  // 91: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
+	42,  // 92: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
+	43,  // 93: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
+	45,  // 94: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
+	57,  // 95: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
+	8,   // 96: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
+	58,  // 97: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
+	49,  // 98: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
+	10,  // 99: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
+	9,   // 100: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
+	48,  // 101: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
+	59,  // 102: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
+	48,  // 103: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
+	50,  // 104: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
+	49,  // 105: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
+	60,  // 106: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
+	107, // [107:107] is the sub-list for method output_type
+	107, // [107:107] is the sub-list for method input_type
+	107, // [107:107] is the sub-list for extension type_name
+	107, // [107:107] is the sub-list for extension extendee
+	0,   // [0:107] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_agent_proto_init() }
@@ -5488,6 +5508,7 @@ func file_trassa_agent_v1_agent_proto_init() {
 		(*OperationParams_BackupTargetEnsure)(nil),
 		(*OperationParams_BackupTargetRemove)(nil),
 		(*OperationParams_BackupUnconfigure)(nil),
+		(*OperationParams_BackupTargetRevokeReader)(nil),
 		(*OperationParams_TestConfigWrite)(nil),
 	}
 	file_trassa_agent_v1_agent_proto_msgTypes[23].OneofWrappers = []any{

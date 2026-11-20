@@ -152,12 +152,25 @@ message BackupRestoreParams {
   // TEMP_DIR — пусто (каталог выбирает помощник); OTHER_SERVER — путь на этом сервере.
   string dest_path = 5;
   int64 deadline_ms = 6;
+  // OTHER_SERVER на сервере-получателе без плана: репозиторий прямо в операции. Секреты зашифрованы на ключ
+  // получателя (поля password и env:<ИМЯ>, тип в info — backup.restore); помощник держит их только на время
+  // операции. Репозиторий открывается только для чтения (restic --no-lock).
+  BackupRepo repo = 7;
+  // restic для получателя (скачивает агент, сумма — из таблицы помощника).
+  BackupTool restic = 8;
+  // Только подготовить пару ключей SSH получателя и вернуть открытый ключ (ничего не восстанавливается):
+  // цель SERVER — ключ читателя для backup.target.ensure; свой SFTP — ключ добавляет клиент.
+  bool ssh_keypair = 9;
+  // Открытый ключ хоста цели ("ssh-ed25519 AAAA…") — known_hosts закрепляется им.
+  string ssh_host_key = 10;
 }
 
 message BackupRestoreResult {
   uint64 restored_files = 1;
   uint64 restored_bytes = 2;
   string path = 3;
+  // При ssh_keypair: открытый ключ получателя (закрытый остаётся на сервере до конца восстановления).
+  string ssh_public_key = 4;
 }
 
 // backup.sources.discover (READ).
@@ -261,6 +274,18 @@ message BackupTargetEnsureParams {
   // rclone (zip выпуска) — принудительная команда ключа источника; restic (bz2) — для backup.prune на цели.
   BackupTool rclone = 5;
   BackupTool restic = 6;
+  // Временный читатель для восстановления на другой сервер: отдельный пользователь trassa-bkr-<id> в группе
+  // владельца репозитория — читать может, писать нет (права файлов, не настройка rclone). Ключ — с
+  // restrict,from=,expiry-time=. Пустой reader_public_key — читателя нет (прежний снимается).
+  string reader_public_key = 7;
+  string reader_address = 8;
+  // Конец доступа читателя: не позже 24 часов от issued_at_ms операции.
+  int64 reader_expires_at_ms = 9;
+}
+
+// backup.target.revoke_reader (CHANGE, на сервере-цели): снять читателя до срока.
+message BackupTargetRevokeReaderParams {
+  string unix_user = 1;
 }
 
 message BackupTargetEnsureResult {
@@ -270,6 +295,8 @@ message BackupTargetEnsureResult {
   uint64 free_bytes = 3;
   // Открытый ключ хоста цели (ssh-ed25519) — для BackupInitParams.ssh_host_key источника.
   string host_public_key = 4;
+  // Пользователь-читатель (только чтение), если он задан.
+  string reader_unix_user = 5;
 }
 
 // backup.target.remove (DESTRUCTIVE).

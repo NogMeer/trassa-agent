@@ -40,6 +40,7 @@ func (e *Executor) backupHandlers() map[string]handler {
 		ops.TypeBackupTargetEnsure: {preview: e.previewTargetEnsure, apply: e.applyTargetEnsure},
 		ops.TypeBackupTargetRemove: {preview: e.previewTargetRemove, apply: e.applyTargetRemove},
 		ops.TypeBackupUnconfigure:  {preview: e.previewBackupUnconfigure, apply: e.applyBackupUnconfigure},
+		ops.TypeBackupRevokeReader: {apply: e.applyRevokeReader},
 	}
 }
 
@@ -416,7 +417,14 @@ func (e *Executor) pruneOnTarget(ctx context.Context, r *run, env *backup.Env, p
 
 func (e *Executor) previewBackupRestore(_ context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult) {
 	p := r.body.GetParams().GetBackupRestore()
+	if p.GetSshKeypair() {
+		return &agentv1.Preview{Summary: "Подготовить ключ получателя для восстановления на этот сервер",
+			Notes: []string{"Будет создана пара ключей SSH; закрытый ключ не покидает сервер и удаляется после восстановления"}}, nil
+	}
 	pv := &agentv1.Preview{Summary: fmt.Sprintf("Восстановление снимка %s (%s)", p.GetSnapshotId(), p.GetMode())}
+	if p.GetRepo() != nil {
+		pv.Notes = append(pv.Notes, "Репозиторий другого сервера — только чтение; пароль и ключи хранилища используются на время операции и удаляются")
+	}
 	sel := p.GetSelection()
 	if sel.GetAll() {
 		pv.Notes = append(pv.Notes, "Восстанавливается весь снимок")
@@ -438,10 +446,66 @@ func (e *Executor) previewBackupRestore(_ context.Context, r *run) (*agentv1.Pre
 
 func (e *Executor) applyBackupRestore(ctx context.Context, r *run) *agentv1.OperationResult {
 	p := r.body.GetParams().GetBackupRestore()
-	env, rs, fail := e.planRestic(r, p.GetPlanId())
+	env, fail := e.backupEnv(r)
 	if fail != nil {
 		return fail
 	}
+	// Подготовка получателя: только пара ключей, ничего не восстанавливается.
+	if p.GetSshKeypair() {
+		pub, err := env.EnsureRestoreKey(p.GetPlanId())
+		if err != nil {
+			return r.failed(CodeApplyFailed, err.Error())
+		}
+		res := r.succeeded("Ключ получателя готов")
+		res.Data = &agentv1.OperationResult_BackupRestore{BackupRestore: &agentv1.BackupRestoreResult{SshPublicKey: pub}}
+		return res
+	}
+	var rs *backup.Restic
+	remote := p.GetRepo() != nil
+	if remote {
+		var cleanup func(bool)
+		var res *agentv1.OperationResult
+		rs, cleanup, res = e.remoteRestic(ctx, r, env, p)
+		if res != nil {
+			return res
+		}
+		ok := false
+		// Секреты репозитория — только на время операции; пара ключей — до успешного восстановления.
+		defer func() { cleanup(ok) }()
+		out := e.restoreWith(ctx, r, env, rs, p)
+		ok = out.GetOutcome() == agentv1.OperationOutcome_OPERATION_OUTCOME_SUCCEEDED
+		return out
+	}
+	_, rs, fail = e.planRestic(r, p.GetPlanId())
+	if fail != nil {
+		return fail
+	}
+	return e.restoreWith(ctx, r, env, rs, p)
+}
+
+// remoteRestic — получатель без плана: restic из таблицы помощника (архив скачал агент), секреты из операции
+// открываются ключом получателя и живут только в памяти и во временном файле пароля.
+func (e *Executor) remoteRestic(ctx context.Context, r *run, env *backup.Env, p *agentv1.BackupRestoreParams) (*backup.Restic, func(bool), *agentv1.OperationResult) {
+	if e.Secrets == nil {
+		return nil, nil, r.failed(CodeBackupUnavailable, "нет ключа секретов помощника")
+	}
+	repo, err := backup.OpenRepo(e.Secrets, r.body, p.GetPlanId(), p.GetRepo(), "")
+	if err != nil {
+		return nil, nil, r.failed("SECRET_INVALID", err.Error())
+	}
+	tool := p.GetRestic()
+	if _, err := backup.InstallRestic(ctx, StageDir(e.Paths, r.body.GetOperationId()), tool.GetSha256(), tool.GetVersion(), env.BinDir); err != nil {
+		return nil, nil, r.failed(backupCode(err), err.Error())
+	}
+	repo.ResticVersion = tool.GetVersion()
+	rs, cleanup, err := env.RemoteRestic(p.GetPlanId(), repo, p.GetSshHostKey())
+	if err != nil {
+		return nil, nil, r.failed(backupCode(err), err.Error())
+	}
+	return rs, cleanup, nil
+}
+
+func (e *Executor) restoreWith(ctx context.Context, r *run, env *backup.Env, rs *backup.Restic, p *agentv1.BackupRestoreParams) *agentv1.OperationResult {
 	prog := r.backupProgress()
 	out, err := env.Restore(ctx, rs, backup.RestoreJob{
 		OpID: r.body.GetOperationId(), Params: p, Rollback: r.body.GetRollback(), Deadline: env.Deadline(p.GetDeadlineMs()),
@@ -535,6 +599,26 @@ func (e *Executor) applyTargetRemove(ctx context.Context, r *run) *agentv1.Opera
 		verify: func() error {
 			if _, err := user.Lookup(p.GetUnixUser()); err == nil {
 				return fmt.Errorf("пользователь %s остался", p.GetUnixUser())
+			}
+			return nil
+		},
+	})
+}
+
+// applyRevokeReader — backup.target.revoke_reader: читатель цели снимается до срока.
+func (e *Executor) applyRevokeReader(ctx context.Context, r *run) *agentv1.OperationResult {
+	t, fail := e.backupTarget(r)
+	if fail != nil {
+		return fail
+	}
+	u := r.body.GetParams().GetBackupTargetRevokeReader().GetUnixUser()
+	return e.runConfigChange(ctx, r, configChange{
+		paths: t.Paths(u),
+		code:  backupCode,
+		apply: func() error { return t.RevokeReader(ctx, u) },
+		verify: func() error {
+			if _, err := user.Lookup(backup.ReaderUser(u)); err == nil {
+				return fmt.Errorf("читатель %s остался", backup.ReaderUser(u))
 			}
 			return nil
 		},

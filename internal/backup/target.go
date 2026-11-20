@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -52,6 +53,8 @@ type targetState struct {
 	Path   string `json:"path"`
 	Rclone string `json:"rclone"`
 	Restic string `json:"restic"`
+	// Reader — пользователь-читатель (если выдан).
+	Reader string `json:"reader,omitempty"`
 }
 
 func (t *Target) path(p string) string { return filepath.Join(t.Root, p) }
@@ -62,7 +65,8 @@ func stateFile(u string) string { return filepath.Join(TargetStateDir, u+".json"
 
 // Paths — файлы, которые меняет цель: настройки sshd, ключ, состояние, учётные записи (точка отката CONFIG).
 func (t *Target) Paths(u string) []string {
-	out := []string{t.path(dropIn(u)), t.path(keyFile(u)), t.path(stateFile(u))}
+	r := ReaderUser(u)
+	out := []string{t.path(dropIn(u)), t.path(keyFile(u)), t.path(stateFile(u)), t.path(dropIn(r)), t.path(keyFile(r))}
 	for _, f := range []string{"/etc/passwd", "/etc/shadow", "/etc/group", "/etc/gshadow"} {
 		if _, err := os.Stat(t.path(f)); err == nil {
 			out = append(out, t.path(f))
@@ -72,12 +76,18 @@ func (t *Target) Paths(u string) []string {
 }
 
 // RcloneCommand — принудительная команда ключа источника: только добавление в каталог цели.
+// umask 0027: новые файлы репозитория читаемы группой владельца — пользователь-читатель (в этой группе) может
+// их читать, прочие — нет.
 func RcloneCommand(rclone, repo string) string {
-	return rclone + " serve restic --stdio --append-only " + repo
+	return "umask 0027 && exec " + rclone + " serve restic --stdio --append-only " + repo
 }
 
+// ReaderUser — пользователь-читатель цели: trassa-bk-<id> → trassa-bkr-<id>.
+func ReaderUser(u string) string { return "trassa-bkr-" + strings.TrimPrefix(u, "trassa-bk-") }
+
 func dropInText(u, keys, command string) string {
-	return fmt.Sprintf(`# Trassa: цель бэкапов %[1]s — ключ источника только добавляет копии (rclone serve restic --append-only).
+	return fmt.Sprintf(`# Trassa: цель бэкапов %[1]s — ключ только добавляет копии (rclone serve restic --append-only); читатель
+# (trassa-bkr-*) к тому же не может писать: права файлов.
 # Файл пишет Trassa.
 Match User %[1]s
 	AuthorizedKeysFile %[2]s
@@ -126,7 +136,7 @@ func lookupUser(u string) (int, int, error) {
 	return uid, gid, nil
 }
 
-// repoDir — каталог репозитория: создаётся владельцем-пользователем 0700; существующий — только пустой
+// repoDir — каталог репозитория: владелец — пользователь цели, 0750 (группа — для читателя); существующий — только пустой
 // каталог root или уже его каталог (повтор операции). Ссылки на пути не проходятся.
 func (t *Target) repoDir(p string, uid, gid int) error {
 	full := t.path(p)
@@ -161,7 +171,7 @@ func (t *Target) repoDir(p string, uid, gid int) error {
 	if err != nil {
 		return err
 	}
-	return fsutil.ChmodChownNoFollow(full, id, 0o700, uid, gid)
+	return fsutil.ChmodChownNoFollow(full, id, 0o750, uid, gid)
 }
 
 // Ensure — программы цели (rclone и restic, sha256 из подписанной операции), пользователь без пароля,
@@ -230,10 +240,19 @@ func (t *Target) Ensure(ctx context.Context, op string, p *agentv1.BackupTargetE
 	if err := fsutil.WriteFileAtomic(t.path(dropIn(u)), []byte(dropInText(u, keyFile(u), cmd)), 0o644, fsutil.Keep); err != nil {
 		return nil, err
 	}
+	reader := ""
+	if p.GetReaderPublicKey() != "" {
+		reader = ReaderUser(u)
+		if err := t.ensureReader(ctx, u, reader, p, rclone, gid); err != nil {
+			return nil, err
+		}
+	} else if err := t.removeReader(ctx, u); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(t.path(TargetStateDir), 0o700); err != nil {
 		return nil, err
 	}
-	st, _ := json.Marshal(targetState{Path: p.GetPath(), Rclone: p.GetRclone().GetVersion(), Restic: p.GetRestic().GetVersion()})
+	st, _ := json.Marshal(targetState{Path: p.GetPath(), Rclone: p.GetRclone().GetVersion(), Restic: p.GetRestic().GetVersion(), Reader: reader})
 	if err := fsutil.WriteFileAtomic(t.path(stateFile(u)), st, 0o600, fsutil.Keep); err != nil {
 		return nil, err
 	}
@@ -242,7 +261,7 @@ func (t *Target) Ensure(ctx context.Context, op string, p *agentv1.BackupTargetE
 	}
 	res := &agentv1.BackupTargetEnsureResult{
 		Access: agentv1.BackupAccess_BACKUP_ACCESS_APPEND_ONLY, RepoPath: p.GetPath(),
-		HostPublicKey: hostKeyLine(hostKey),
+		HostPublicKey: hostKeyLine(hostKey), ReaderUnixUser: reader,
 	}
 	if free, err := FreeBytes(t.path(p.GetPath())); err == nil {
 		res.FreeBytes = free
@@ -270,6 +289,20 @@ func (t *Target) Check(ctx context.Context, p *agentv1.BackupTargetEnsureParams)
 	for _, want := range []string{"forcecommand " + cmd, "permittty no", "allowtcpforwarding no", "passwordauthentication no"} {
 		if !strings.Contains(s, want+"\n") {
 			return fmt.Errorf("sshd не применяет %q к %s", want, p.GetUnixUser())
+		}
+	}
+	if p.GetReaderPublicKey() == "" {
+		return nil
+	}
+	reader := ReaderUser(p.GetUnixUser())
+	out, err = t.Run(ctx, "sshd", "-T", "-C", fmt.Sprintf("user=%s,host=trassa,addr=%s", reader, p.GetReaderAddress()))
+	if err != nil {
+		return fmt.Errorf("sshd -T: %v", err)
+	}
+	s = strings.ToLower(string(out))
+	for _, want := range []string{"forcecommand " + cmd, "permittty no", "allowtcpforwarding no", "passwordauthentication no"} {
+		if !strings.Contains(s, want+"\n") {
+			return fmt.Errorf("sshd не применяет %q к %s", want, reader)
 		}
 	}
 	return nil
@@ -302,6 +335,9 @@ func (t *Target) Remove(ctx context.Context, p *agentv1.BackupTargetRemoveParams
 	}
 	if st.Path != p.GetPath() {
 		return fmt.Errorf("%w: путь %s не совпадает с каталогом цели %s", ErrTargetPrecondition, p.GetPath(), u)
+	}
+	if err := t.removeReader(ctx, u); err != nil {
+		return err
 	}
 	for _, f := range []string{dropIn(u), keyFile(u), stateFile(u)} {
 		if err := fsutil.RemoveSync(t.path(f)); err != nil {
@@ -355,4 +391,123 @@ func (t *Target) PruneRestic(u string, password []byte) (*Restic, func(), error)
 		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
 	}
 	return r, cleanup, nil
+}
+
+// ensureReader — пользователь-читатель: без пароля («*»), в группе владельца репозитория, ключ с
+// restrict,from=,expiry-time=, та же принудительная команда. Писать он не может правами файлов: каталоги и
+// файлы репозитория принадлежат владельцу, группе — только чтение. Уже записанные файлы получают g+r(x) — обход
+// по дескрипторам без ссылок.
+func (t *Target) ensureReader(ctx context.Context, owner, reader string, p *agentv1.BackupTargetEnsureParams, rclone string, ownerGID int) error {
+	group := strconv.Itoa(ownerGID)
+	if _, err := user.Lookup(reader); err != nil {
+		var unknown user.UnknownUserError
+		if !errors.As(err, &unknown) {
+			return err
+		}
+		if out, err := t.Run(ctx, "useradd", "--system", "--no-user-group", "--gid", group, "--no-create-home", "--home-dir", "/nonexistent", "--shell", targetShell, reader); err != nil {
+			return fmt.Errorf("useradd: %v %s", err, firstLine(out))
+		}
+	}
+	if out, err := t.Run(ctx, "usermod", "--shell", targetShell, "--password", "*", "--gid", group, reader); err != nil {
+		return fmt.Errorf("usermod: %v %s", err, firstLine(out))
+	}
+	if _, _, err := lookupUser(reader); err != nil {
+		return err
+	}
+	if err := t.groupReadable(p.GetPath()); err != nil {
+		return fmt.Errorf("права репозитория для читателя: %w", err)
+	}
+	if err := fsutil.WriteFileAtomic(t.path(keyFile(reader)), []byte(readerKeyLine(p)), 0o644, fsutil.Keep); err != nil {
+		return err
+	}
+	return fsutil.WriteFileAtomic(t.path(dropIn(reader)), []byte(dropInText(reader, keyFile(reader), RcloneCommand(rclone, p.GetPath()))), 0o644, fsutil.Keep)
+}
+
+// removeReader — снять читателя цели owner (нет — не ошибка).
+func (t *Target) removeReader(ctx context.Context, owner string) error {
+	reader := ReaderUser(owner)
+	for _, f := range []string{dropIn(reader), keyFile(reader)} {
+		if err := fsutil.RemoveSync(t.path(f)); err != nil {
+			return err
+		}
+	}
+	if _, err := user.Lookup(reader); err == nil {
+		// Его сеансы (rclone) завершаются вместе с пользователем.
+		_, _ = t.Run(ctx, "pkill", "-KILL", "-u", reader)
+		if out, err := t.Run(ctx, "userdel", reader); err != nil {
+			return fmt.Errorf("userdel %s: %v %s", reader, err, firstLine(out))
+		}
+	}
+	return nil
+}
+
+// RevokeReader — backup.target.revoke_reader: читатель снимается до срока.
+func (t *Target) RevokeReader(ctx context.Context, owner string) error {
+	st, err := t.loadState(owner)
+	if err != nil {
+		return err
+	}
+	if err := t.removeReader(ctx, owner); err != nil {
+		return err
+	}
+	if err := t.reloadSSHD(ctx); err != nil {
+		return err
+	}
+	st.Reader = ""
+	raw, _ := json.Marshal(st)
+	return fsutil.WriteFileAtomic(t.path(stateFile(owner)), raw, 0o600, fsutil.Keep)
+}
+
+// groupReadable — каталоги репозитория g+rx, файлы g+r; обход по дескрипторам без ссылок, ссылки и прочее не
+// трогаются. Запись группе не даётся.
+func (t *Target) groupReadable(p string) error {
+	dp, err := fsutil.OpenDirNoFollow(t.path(filepath.Dir(p)))
+	if err != nil {
+		return err
+	}
+	defer unix.Close(dp)
+	return groupReadableAt(dp, filepath.Base(p))
+}
+
+func groupReadableAt(dir int, name string) error {
+	var st unix.Stat_t
+	if err := unix.Fstatat(dir, name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	switch uint32(st.Mode) & unix.S_IFMT {
+	case unix.S_IFDIR:
+		fd, err := unix.Openat(dir, name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		f := os.NewFile(uintptr(fd), name)
+		defer f.Close()
+		if err := unix.Fchmod(fd, (uint32(st.Mode)&0o7777|0o050)&^0o022); err != nil {
+			return err
+		}
+		names, err := f.Readdirnames(-1)
+		if err != nil {
+			return err
+		}
+		for _, n := range names {
+			if err := groupReadableAt(fd, n); err != nil {
+				return err
+			}
+		}
+	case unix.S_IFREG:
+		fd, err := unix.Openat(dir, name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer unix.Close(fd)
+		return unix.Fchmod(fd, (uint32(st.Mode)&0o7777|0o040)&^0o022)
+	}
+	return nil
+}
+
+// readerKeyLine — ключ читателя: без переадресаций и PTY, только с адреса получателя и до срока (sshd сам
+// перестаёт принимать ключ после expiry-time).
+func readerKeyLine(p *agentv1.BackupTargetEnsureParams) string {
+	exp := time.UnixMilli(p.GetReaderExpiresAtMs()).UTC().Format("200601021504Z")
+	return fmt.Sprintf("restrict,from=%q,expiry-time=%q %s\n", p.GetReaderAddress(), exp, p.GetReaderPublicKey())
 }

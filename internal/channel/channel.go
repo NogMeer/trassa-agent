@@ -460,7 +460,9 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 			defer os.RemoveAll(dir)
 		}
 	}
-	if (body.GetType() == ops.TypeBackupInit || body.GetType() == ops.TypeBackupTargetEnsure) && !body.GetDryRun() {
+	stageTools := body.GetType() == ops.TypeBackupInit || body.GetType() == ops.TypeBackupTargetEnsure ||
+		(body.GetType() == ops.TypeBackupRestore && body.GetParams().GetBackupRestore().GetRestic() != nil)
+	if stageTools && !body.GetDryRun() {
 		if dir := a.stageBackupTools(context.WithoutCancel(sctx), &body); dir != "" {
 			defer os.RemoveAll(dir)
 		}
@@ -517,6 +519,9 @@ func (a *Agent) stageBackupTools(ctx context.Context, b *agentv1.OperationBody) 
 	files := map[string]download{}
 	if p := b.GetParams().GetBackupInit(); p != nil {
 		files[backup.ResticStaged] = download{p.GetResticUrl(), backup.MaxResticArchive}
+	}
+	if p := b.GetParams().GetBackupRestore(); p != nil && p.GetRestic() != nil {
+		files[backup.ResticStaged] = download{p.GetRestic().GetUrl(), backup.MaxResticArchive}
 	}
 	if p := b.GetParams().GetBackupTargetEnsure(); p != nil {
 		files[backup.ResticStaged] = download{p.GetRestic().GetUrl(), backup.MaxResticArchive}
