@@ -260,7 +260,9 @@ func TestNoisyNetwork(t *testing.T) {
 	a := newAgent(t, id, g, h)
 	done := make(chan error)
 	go func() { done <- a.Run(ctx) }()
-	time.Sleep(3 * time.Second)
+	// Шумим, пока не наберётся 30 сессий: счёт по событиям, а не по секундам — под нагрузкой CI сессий в секунду
+	// меньше, и порог по времени давал ложные провалы.
+	waitFor(t, 60*time.Second, func() bool { return a.Sessions() >= 30 }, "30 сессий в шумной сети")
 	calm.Store(true)
 	waitFor(t, 10*time.Second, func() bool {
 		h.mu.Lock()
@@ -269,9 +271,6 @@ func TestNoisyNetwork(t *testing.T) {
 	}, "доставка всех итогов после успокоения сети")
 	cancel()
 	<-done
-	if a.Sessions() < 30 {
-		t.Fatalf("сессий всего %d", a.Sessions())
-	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for op, n := range h.executed {
