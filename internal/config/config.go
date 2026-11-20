@@ -51,6 +51,10 @@ type Paths struct {
 	Socket          string // /run/trassa/helper.sock
 	BinDir          string // /usr/local/bin
 	UnitDir         string // /etc/systemd/system
+	BackupDir       string // /etc/trassa/backup/<plan_id>: настройки и секреты планов (root, 0700)
+	HelperBin       string // /var/lib/trassa/helper/bin: restic-<версия>
+	BackupWorkDir   string // /var/lib/trassa/backup: restore-test, restore, localcopy
+	CacheDir        string // /var/cache/trassa: кэш restic
 }
 
 // Default — пути на сервере.
@@ -79,6 +83,10 @@ func Under(root string) Paths {
 		Socket:          j("run/trassa/helper.sock"),
 		BinDir:          j("usr/local/bin"),
 		UnitDir:         j("etc/systemd/system"),
+		BackupDir:       j("etc/trassa/backup"),
+		HelperBin:       j("var/lib/trassa/helper/bin"),
+		BackupWorkDir:   j("var/lib/trassa/backup"),
+		CacheDir:        j("var/cache/trassa"),
 	}
 }
 

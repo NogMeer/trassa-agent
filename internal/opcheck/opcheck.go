@@ -6,6 +6,7 @@
 package opcheck
 
 import (
+	"errors"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -96,6 +97,10 @@ func (c *Checker) Operation(raw []byte) (*Checked, *Rejection) {
 		return nil, reject(ops.CodeParamsInvalid, "operation_id")
 	}
 	if err := ops.CheckParams(spec, &b); err != nil {
+		var ce *ops.CodeError
+		if errors.As(err, &ce) {
+			return nil, reject(ce.Code, err.Error())
+		}
 		return nil, reject(ops.CodeParamsInvalid, err.Error())
 	}
 	return &Checked{Body: &b, Spec: spec}, nil

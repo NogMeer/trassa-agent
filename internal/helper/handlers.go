@@ -62,6 +62,9 @@ func (e *Executor) builtinHandlers() map[string]handler {
 	for _, code := range security.FixCodes() {
 		h[ops.FixPrefix+code] = handler{preview: e.previewFix, apply: e.applyFix}
 	}
+	for t, x := range e.backupHandlers() {
+		h[t] = x
+	}
 	for t, x := range e.extraHandlers() {
 		h[t] = x
 	}
@@ -94,6 +97,8 @@ type configChange struct {
 	state  rollback.State
 	apply  func() error
 	verify func() error
+	// code — код итога по ошибке применения (бэкапы: BACKUP_REPO_EXISTS…); nil — APPLY_FAILED.
+	code func(error) string
 }
 
 func (e *Executor) runConfigChange(ctx context.Context, r *run, c configChange) *agentv1.OperationResult {
@@ -142,7 +147,11 @@ func (e *Executor) runConfigChange(ctx context.Context, r *run, c configChange) 
 	}
 	r.phase = agentv1.OperationPhase_OPERATION_PHASE_APPLY
 	if err := c.apply(); err != nil {
-		return undo(CodeApplyFailed, "Не удалось применить: "+err.Error())
+		code := CodeApplyFailed
+		if c.code != nil {
+			code = c.code(err)
+		}
+		return undo(code, "Не удалось применить: "+err.Error())
 	}
 	if len(c.services) > 0 {
 		if err := e.Services.Restart(ctx, c.services...); err != nil {

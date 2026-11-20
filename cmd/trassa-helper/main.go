@@ -29,6 +29,7 @@ import (
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
+	"github.com/NogMeer/trassa-agent/internal/backup"
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/dockerapi"
 	"github.com/NogMeer/trassa-agent/internal/helper"
@@ -178,6 +179,11 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		Security:  sec,
 		WireGuard: wgEnv(p),
 		Secrets:   secrets,
+		Backup: &backup.Env{
+			Store: backup.Store{Dir: p.BackupDir}, BinDir: p.HelperBin, CacheDir: filepath.Join(p.CacheDir, "restic"),
+			WorkDir: p.BackupWorkDir, Docker: &dockerapi.Client{}, Run: backup.RunCommand, Look: backup.LookPath,
+		},
+		BackupTarget: &backup.Target{Root: "/", Run: backup.RunCommand},
 	}
 	if err := ex.CheckHandlers(); err != nil {
 		n.Close()
@@ -227,6 +233,18 @@ func serve(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	go func() {
+		t := time.NewTicker(time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				ex.PruneBackupWork()
+			}
+		}
+	}()
 	// Приватная сеть после перезагрузки и перерисовки /etc/hosts cloud-init — по файлам состояния (E14).
 	if ex.WireGuard != nil {
 		if err := ex.WireGuard.SyncAll(ctx); err != nil {

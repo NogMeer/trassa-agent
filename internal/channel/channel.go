@@ -24,7 +24,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/backup"
 	"github.com/NogMeer/trassa-agent/internal/config"
+	"github.com/NogMeer/trassa-agent/internal/fsutil"
 	"github.com/NogMeer/trassa-agent/internal/identity"
 	"github.com/NogMeer/trassa-agent/internal/logs"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
@@ -458,6 +460,11 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 			defer os.RemoveAll(dir)
 		}
 	}
+	if body.GetType() == ops.TypeBackupInit && !body.GetDryRun() {
+		if dir := a.stageRestic(context.WithoutCancel(sctx), &body); dir != "" {
+			defer os.RemoveAll(dir)
+		}
+	}
 	res, err := a.cfg.Helper.Execute(context.WithoutCancel(sctx), raw, ack, func(p []byte) {
 		var pr agentv1.OperationProgress
 		if proto.Unmarshal(p, &pr) == nil {
@@ -492,6 +499,34 @@ func (a *Agent) stageUpdate(ctx context.Context, b *agentv1.OperationBody) strin
 	dir := filepath.Join(a.cfg.UpdateDir, strings.ToLower(b.GetOperationId()))
 	if err := update.Stage(dctx, a.cfg.HTTPClient, p.GetSignatureUrl(), bins, dir); err != nil {
 		a.cfg.Log.Warn("выпуск не скачан", "op", b.GetOperationId(), "err", err)
+	}
+	return dir
+}
+
+// stageRestic скачивает архив restic для backup.init в каталог операции: помощник сверяет его sha256 с подписанной
+// и ставит сам. Сбой загрузки не останавливает передачу операции — помощник вернёт понятную ошибку.
+func (a *Agent) stageRestic(ctx context.Context, b *agentv1.OperationBody) string {
+	if a.cfg.UpdateDir == "" || !config.IsUUID(b.GetOperationId()) {
+		return ""
+	}
+	dir := filepath.Join(a.cfg.UpdateDir, strings.ToLower(b.GetOperationId()))
+	dctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	err := func() error {
+		if err := os.RemoveAll(dir); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+		raw, err := update.Fetch(dctx, a.cfg.HTTPClient, b.GetParams().GetBackupInit().GetResticUrl(), backup.MaxResticArchive)
+		if err != nil {
+			return err
+		}
+		return fsutil.WriteFileAtomic(filepath.Join(dir, backup.ResticStaged), raw, 0o600, fsutil.Keep)
+	}()
+	if err != nil {
+		a.cfg.Log.Warn("restic не скачан", "op", b.GetOperationId(), "err", err)
 	}
 	return dir
 }

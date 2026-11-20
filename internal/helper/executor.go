@@ -17,6 +17,7 @@ import (
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/autorollback"
+	"github.com/NogMeer/trassa-agent/internal/backup"
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/logsrc"
@@ -91,10 +92,14 @@ type Executor struct {
 	WireGuard *wireguard.Env
 	// Secrets — ключ X25519 помощника для секретов операций (E13, HPKE); nil — секретов не принимает.
 	Secrets *secretkey.Key
+	// Backup — бэкапы restic (E13); BackupTarget — цель SERVER; nil — BACKUP_UNAVAILABLE.
+	Backup       *backup.Env
+	BackupTarget *backup.Target
 
 	once     sync.Once
 	handlers map[string]handler
 	mutating chan struct{}
+	long     chan struct{}
 	reads    chan struct{}
 	mu       sync.Mutex
 	running  map[string]chan struct{}
@@ -121,6 +126,7 @@ func (e *Executor) init() {
 	e.once.Do(func() {
 		e.handlers = e.builtinHandlers()
 		e.mutating = make(chan struct{}, 1)
+		e.long = make(chan struct{}, 1)
 		e.reads = make(chan struct{}, MaxParallelReads)
 		e.running = map[string]chan struct{}{}
 	})
@@ -269,7 +275,12 @@ func (e *Executor) Execute(ctx context.Context, raw []byte, send func(helperrpc.
 	}
 
 	mutating := checked.Spec.Class.Mutating() && !b.GetDryRun()
-	release, err := e.acquire(ctx, mutating)
+	var release func()
+	if mutating && checked.Spec.Long {
+		release, err = e.acquireLong(ctx)
+	} else {
+		release, err = e.acquire(ctx, mutating)
+	}
 	if err != nil {
 		_ = send(helperrpc.Response{Kind: helperrpc.KindError, Code: CodeInternal})
 		return
@@ -321,6 +332,17 @@ func (e *Executor) acquire(ctx context.Context, mutating bool) (func(), error) {
 		return nil, err
 	}
 	return func() { unlock(); <-e.mutating }, nil
+}
+
+// acquireLong — очередь долгих операций (бэкапы, Spec.Long): по одной, без общей блокировки изменений системы —
+// автооткат SSH или firewall не ждёт конца многочасового бэкапа.
+func (e *Executor) acquireLong(ctx context.Context) (func(), error) {
+	select {
+	case e.long <- struct{}{}:
+		return func() { <-e.long }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (e *Executor) markRunning(op string) chan struct{} {
@@ -670,6 +692,13 @@ func (e *Executor) Recover(ctx context.Context) error {
 		}
 		res := &agentv1.OperationResult{OperationId: st.OperationID, FinishedAtMs: e.now().UnixMilli(), ErrorCode: CodeInterrupted}
 		res.Outcome, res.Message = agentv1.OperationOutcome_OPERATION_OUTCOME_FAILED, "Помощник перезапустился во время операции"
+		if st.Mutating && st.Type == ops.TypeBackupRestore && e.Backup != nil {
+			if had, rerr := e.Backup.RecoverLocalCopy(ctx, st.OperationID); rerr != nil {
+				res.ErrorCode, res.Message = CodeRollbackFailed, "Локальная копия не вернулась: "+redact.Text(rerr.Error())
+			} else if had {
+				res.Outcome, res.Message = agentv1.OperationOutcome_OPERATION_OUTCOME_ROLLED_BACK, "Помощник перезапустился во время восстановления: локальная копия возвращена"
+			}
+		}
 		if st.Mutating {
 			if _, lerr := e.Rollback.Load(st.OperationID); lerr == nil {
 				if _, rerr := e.Rollback.Restore(st.OperationID); rerr != nil {
@@ -716,7 +745,18 @@ func (e *Executor) Recover(ctx context.Context) error {
 	if err := e.Rollback.Prune(keep); err != nil {
 		e.log().Warn("helper: уборка точек отката", "err", err)
 	}
+	e.PruneBackupWork()
 	return nil
+}
+
+// PruneBackupWork — локальные копии восстановлений старше 72 часов (E13). Помощник зовёт при старте и раз в час.
+func (e *Executor) PruneBackupWork() {
+	if e.Backup == nil {
+		return
+	}
+	if err := e.Backup.PruneLocalCopies(); err != nil {
+		e.log().Warn("helper: уборка локальных копий", "err", err)
+	}
 }
 
 func (e *Executor) bootID() (string, error) {

@@ -62,8 +62,13 @@ type Spec struct {
 	Class Class
 	// Rollback — какую точку отката требует тип; иное значение в теле — PARAMS_INVALID.
 	Rollback agentv1.RollbackKind
+	// RollbackOf — точка отката зависит от параметров (backup.restore): тогда Rollback не сверяется.
+	RollbackOf func(*agentv1.OperationBody) error
 	// AutoRollback — тип может требовать автооткат (confirm_within > 0).
 	AutoRollback bool
+	// Long — долгая операция (бэкап, часы), которая не меняет файлы системы: не берёт общую блокировку
+	// изменений, иначе автооткат SSH или firewall ждал бы её конца. Такие операции идут своей очередью по одной.
+	Long bool
 	// Validate проверяет параметры (oneof уже совпал с типом).
 	Validate func(*agentv1.OperationBody) error
 	// match — вариант oneof, обязательный для типа.
@@ -159,8 +164,17 @@ func builtinSpecs() []Spec {
 				return nil
 			},
 		},
-	}, append(append(append(logsSpecs(), securitySpecs()...), wireguardSpecs()...), extraSpecs()...)...)
+	}, append(append(append(append(logsSpecs(), securitySpecs()...), wireguardSpecs()...), backupSpecs()...), extraSpecs()...)...)
 }
+
+// CodeError — отказ проверки 6 со своим кодом (BACKUP_PATH_FORBIDDEN) вместо PARAMS_INVALID.
+type CodeError struct {
+	Code string
+	Err  error
+}
+
+func (e *CodeError) Error() string { return e.Err.Error() }
+func (e *CodeError) Unwrap() error { return e.Err }
 
 // CheckParams — проверка 6: вариант oneof совпадает с типом, точка отката и автооткат — как у типа, значения
 // проходят схему.
@@ -168,7 +182,11 @@ func CheckParams(spec Spec, b *agentv1.OperationBody) error {
 	if b.GetParams() == nil || !spec.match(b.GetParams()) {
 		return errors.New("params не того типа")
 	}
-	if b.GetRollback() != spec.Rollback {
+	if spec.RollbackOf != nil {
+		if err := spec.RollbackOf(b); err != nil {
+			return err
+		}
+	} else if b.GetRollback() != spec.Rollback {
 		return fmt.Errorf("rollback %v, тип требует %v", b.GetRollback(), spec.Rollback)
 	}
 	if !spec.AutoRollback && b.GetConfirmWithinSec() != 0 {
