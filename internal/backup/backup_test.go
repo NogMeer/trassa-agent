@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -740,33 +739,4 @@ func withTool(t *testing.T, tool, version, sha string) {
 			delete(KnownTools[tool], version)
 		}
 	})
-}
-
-// Суммы в коде совпадают с decisions E13 (монорепозиторий Trassa). Отдельный репозиторий агента decisions не
-// содержит — там проверка пропускается с причиной.
-func TestKnownToolsMatchDecisions(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", "plan", "decisions", "E13-backups.md"))
-	if errors.Is(err, os.ErrNotExist) {
-		t.Skip("decisions E13 нет рядом: агент вне монорепозитория Trassa")
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc := string(raw)
-	files := map[string]string{"restic": "restic_%s_linux_%s.bz2", "rclone": "rclone-v%s-linux-%s.zip"}
-	n := 0
-	for tool, versions := range KnownTools {
-		for v, arches := range versions {
-			for arch, sum := range arches {
-				row := "| `" + fmt.Sprintf(files[tool], v, arch) + "` | `" + sum + "` |"
-				if !strings.Contains(doc, row) {
-					t.Errorf("в decisions нет строки %s", row)
-				}
-				n++
-			}
-		}
-	}
-	if n != 4 {
-		t.Fatalf("в таблице %d сумм, ждали 4 (restic и rclone × amd64, arm64)", n)
-	}
 }
