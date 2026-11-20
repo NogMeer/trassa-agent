@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/events"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/verify"
 )
@@ -422,4 +423,44 @@ func TestMetricsDelivery(t *testing.T) {
 	if threes != 1 {
 		t.Fatalf("новая пачка ушла %d раз", threes)
 	}
+}
+
+// События (E08-T12) идут той же доставкой с квитанцией, время — в часах шлюза.
+func TestEventsDelivery(t *testing.T) {
+	id := newIdentity(t)
+	agentNow := func() time.Time { return time.Now().Add(-time.Hour) }
+	q := events.NewQueue(agentNow)
+	at := agentNow().UnixMilli()
+	q.Add(&agentv1.Event{Kind: events.CodeServiceDown, AtMs: at, Attributes: map[string]string{"subject": "nginx.service", "state": "firing"}})
+	got := make(chan *agentv1.Event, 4)
+	g := newGateway(t, id.PublicKey(), func(ctx context.Context, c *gwConn) {
+		for {
+			m, err := c.read(ctx)
+			if err != nil {
+				return
+			}
+			if e := m.GetEvent(); e != nil {
+				got <- e
+				_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_InboundAck{InboundAck: &agentv1.InboundAck{Seq: m.GetSeq()}}})
+			}
+		}
+	})
+	a := newAgent(t, id, g, newFakeHelper())
+	a.cfg.Events = q
+	a.cfg.Now = agentNow
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = a.Run(ctx) }()
+	select {
+	case e := <-got:
+		if e.GetKind() != events.CodeServiceDown || e.GetAttributes()["subject"] != "nginx.service" {
+			t.Fatalf("%+v", e)
+		}
+		if d := e.GetAtMs() - at; d < (time.Hour-5*time.Second).Milliseconds() || d > (time.Hour+5*time.Second).Milliseconds() {
+			t.Fatalf("поправка часов %d мс", d)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("событие не пришло")
+	}
+	waitFor(t, 5*time.Second, func() bool { return q.Len() == 0 }, "событие подтверждено")
 }

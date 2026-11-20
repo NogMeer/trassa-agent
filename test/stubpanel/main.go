@@ -390,7 +390,9 @@ func (p *panel) connect(w http.ResponseWriter, r *http.Request) {
 			p.result(h, nil, nil, "отказ помощника: "+a.GetRejectCode())
 			return
 		}
-		if r := m.GetOperationResult(); r != nil && r.GetOperationId() == operation {
+		if e := m.GetEvent(); e != nil {
+			p.event(e)
+		} else if r := m.GetOperationResult(); r != nil && r.GetOperationId() == operation {
 			res = r
 		} else if b := m.GetMetrics(); b != nil && names == nil {
 			names = []string{}
@@ -438,4 +440,21 @@ func (p *panel) result(h *agentv1.Hello, res *agentv1.OperationResult, metrics [
 		log.Printf("result.json: %v", err)
 	}
 	log.Printf("итог записан: %s", b)
+}
+
+// event дописывает событие агента строкой JSON в <out>/events.jsonl (E08-T12).
+func (p *panel) event(e *agentv1.Event) {
+	// encoding/json, а не protojson: у protojson пробелы в выводе намеренно случайны, а CI ищет строки grep.
+	b, err := json.Marshal(map[string]any{"kind": e.GetKind(), "severity": e.GetSeverity().String(), "at_ms": e.GetAtMs(), "attributes": e.GetAttributes()})
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(p.out, "events.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		log.Printf("events.jsonl: %v", err)
+		return
+	}
+	defer f.Close()
+	_, _ = f.Write(append(b, '\n'))
+	log.Printf("событие: %s", b)
 }

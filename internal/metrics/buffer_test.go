@@ -62,7 +62,7 @@ func TestRunBuffersOffline(t *testing.T) {
 	rb := NewBuffer(nil)
 	done := make(chan struct{})
 	go func() {
-		Run(ctx, c, rb, time.Hour, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		Run(ctx, c, time.Hour, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), func(b *agentv1.MetricsBatch) { rb.Add(b) })
 		close(done)
 	}()
 	<-rb.Notify()

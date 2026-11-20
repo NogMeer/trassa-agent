@@ -28,6 +28,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/identity"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/ops"
+	"github.com/NogMeer/trassa-agent/internal/queue"
 	"github.com/NogMeer/trassa-agent/internal/update"
 	"github.com/NogMeer/trassa-agent/internal/verify"
 )
@@ -71,6 +72,8 @@ type Config struct {
 	UpdateDir string
 	// Metrics — пачки метрик для отправки (E08); nil — метрики не отправляются.
 	Metrics *metrics.Buffer
+	// Events — события локальных порогов (E08-T12); nil — не отправляются.
+	Events *queue.Queue[*agentv1.Event]
 }
 
 var (
@@ -148,19 +151,25 @@ type conn struct {
 	mu   sync.Mutex
 	seq  uint64
 	sent map[uint64]string // seq кадра итога → operation_id
-	// metricSent — seq кадра метрик → номер пачки в буфере.
-	metricSent map[uint64]uint64
+	// tracked — seq кадра из очереди с квитанциями (метрики, события) → очередь и номер элемента.
+	tracked map[uint64]trackedFrame
 	// skewMs — поправка часов агента к часам шлюза из Welcome: время пачки метрик в часах шлюза (E08).
 	skewMs int64
 }
 
-func (c *conn) send(ctx context.Context, m *agentv1.AgentMessage) (uint64, error) {
-	return c.sendTracked(ctx, m, 0)
+// trackedFrame — кадр, доставку которого отмечает InboundAck: ack вызывается с номером элемента очереди.
+type trackedFrame struct {
+	ack func(id uint64)
+	id  uint64
 }
 
-// sendTracked отправляет кадр; metricID ≠ 0 — кадр несёт пачку метрик с этим номером. Номер кадра запоминается
-// под тем же замком, что и запись: InboundAck на него не обгонит отметку.
-func (c *conn) sendTracked(ctx context.Context, m *agentv1.AgentMessage, metricID uint64) (uint64, error) {
+func (c *conn) send(ctx context.Context, m *agentv1.AgentMessage) (uint64, error) {
+	return c.sendTracked(ctx, m, nil)
+}
+
+// sendTracked отправляет кадр; tf ≠ nil — кадр несёт элемент очереди с квитанцией. Номер кадра запоминается под
+// тем же замком, что и запись: InboundAck на него не обгонит отметку.
+func (c *conn) sendTracked(ctx context.Context, m *agentv1.AgentMessage, tf *trackedFrame) (uint64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.seq++
@@ -180,8 +189,8 @@ func (c *conn) sendTracked(ctx context.Context, m *agentv1.AgentMessage, metricI
 	if r := m.GetOperationResult(); r != nil {
 		c.sent[c.seq] = r.GetOperationId()
 	}
-	if metricID != 0 {
-		c.metricSent[c.seq] = metricID
+	if tf != nil {
+		c.tracked[c.seq] = *tf
 	}
 	return c.seq, nil
 }
@@ -228,7 +237,7 @@ func (a *Agent) session(ctx context.Context) error {
 	}
 	defer ws.CloseNow()
 	ws.SetReadLimit(MaxMessage)
-	c := &conn{a: a, ws: ws, sent: map[uint64]string{}, metricSent: map[uint64]uint64{}}
+	c := &conn{a: a, ws: ws, sent: map[uint64]string{}, tracked: map[uint64]trackedFrame{}}
 	sctx, scancel := context.WithCancel(ctx)
 	defer scancel()
 
@@ -255,11 +264,26 @@ func (a *Agent) session(ctx context.Context) error {
 		}
 	}
 
-	errc := make(chan error, 3)
+	errc := make(chan error, 4)
 	go func() { errc <- a.heartbeat(sctx, c, hb) }()
 	go func() { errc <- a.readLoop(sctx, c) }()
 	if a.cfg.Metrics != nil {
-		go func() { errc <- a.metricsLoop(sctx, c) }()
+		go func() {
+			errc <- sendQueue(sctx, c, a.cfg.Metrics, func(b *agentv1.MetricsBatch) *agentv1.AgentMessage {
+				b = proto.CloneOf(b)
+				b.CollectedAtMs += c.skewMs
+				return &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Metrics{Metrics: b}}
+			})
+		}()
+	}
+	if a.cfg.Events != nil {
+		go func() {
+			errc <- sendQueue(sctx, c, a.cfg.Events, func(e *agentv1.Event) *agentv1.AgentMessage {
+				e = proto.CloneOf(e)
+				e.AtMs += c.skewMs
+				return &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Event{Event: e}}
+			})
+		}()
 	}
 	err = <-errc
 	scancel()
@@ -475,11 +499,11 @@ func (a *Agent) inboundAck(ctx context.Context, c *conn, seq uint64) {
 	c.mu.Lock()
 	op, ok := c.sent[seq]
 	delete(c.sent, seq)
-	mid, isMetric := c.metricSent[seq]
-	delete(c.metricSent, seq)
+	tf, isTracked := c.tracked[seq]
+	delete(c.tracked, seq)
 	c.mu.Unlock()
-	if isMetric {
-		a.cfg.Metrics.Ack(mid)
+	if isTracked {
+		tf.ack(tf.id)
 		return
 	}
 	if !ok {
@@ -496,19 +520,17 @@ func (a *Agent) inboundAck(ctx context.Context, c *conn, seq uint64) {
 	a.ob.remove(op, r.GetOutcome())
 }
 
-// metricsLoop отправляет пачки метрик, которых шлюз ещё не подтвердил: накопленные без связи — сразу после
-// рукопожатия, новые — по мере сбора. Пачка, ушедшая в этом соединении, повторно в нём не шлётся; без квитанции
-// она уйдёт снова в следующем. Время пачки переводится в часы шлюза.
-func (a *Agent) metricsLoop(ctx context.Context, c *conn) error {
+// sendQueue отправляет элементы очереди, которых шлюз ещё не подтвердил: накопленные без связи — сразу после
+// рукопожатия, новые — по мере появления. Элемент, ушедший в этом соединении, повторно в нём не шлётся; без
+// квитанции он уйдёт снова в следующем. frame строит кадр (время переводится в часы шлюза) из копии элемента.
+func sendQueue[T any](ctx context.Context, c *conn, q *queue.Queue[T], frame func(T) *agentv1.AgentMessage) error {
 	sent := map[uint64]bool{}
 	for {
-		for _, it := range a.cfg.Metrics.Pending() {
+		for _, it := range q.Pending() {
 			if sent[it.ID] {
 				continue
 			}
-			b := proto.CloneOf(it.Batch)
-			b.CollectedAtMs += c.skewMs
-			if _, err := c.sendTracked(ctx, &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Metrics{Metrics: b}}, it.ID); err != nil {
+			if _, err := c.sendTracked(ctx, frame(it.Value), &trackedFrame{ack: q.Ack, id: it.ID}); err != nil {
 				return err
 			}
 			sent[it.ID] = true
@@ -516,7 +538,7 @@ func (a *Agent) metricsLoop(ctx context.Context, c *conn) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-a.cfg.Metrics.Notify():
+		case <-q.Notify():
 		}
 	}
 }

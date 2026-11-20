@@ -94,6 +94,18 @@ jq -e --arg os "$want_os" --arg v "$want_ver" '.hello.os == $os and .hello.os_ve
 for m in mem_used_percent mem_used_bytes load1 uptime_seconds procs_total tcp_connections; do
 	jq -e --arg m "$m" '.metrics | index($m) != null' "$ctx/result.json" >/dev/null || fail "в пачке метрик нет $m: $(jq -c .metrics "$ctx/result.json")"
 done
+# События (E08-T12): упавшая служба даёт service.down за 30 с, сброс — resolved.
+x systemd-run --quiet --unit=ci-broken --property=Type=oneshot /bin/false || true
+event_seen() {
+	for _ in $(seq 1 45); do
+		x sh -c "grep -F '\"subject\":\"ci-broken.service\"' $STUB/events.jsonl 2>/dev/null | grep -qF '\"state\":\"$1\"'" && return 0
+		sleep 1
+	done
+	return 1
+}
+event_seen firing || fail "нет события service.down по упавшей службе: $(x cat $STUB/events.jsonl 2>&1)"
+x systemctl reset-failed ci-broken.service
+event_seen resolved || fail "нет снятия service.down: $(x cat $STUB/events.jsonl 2>&1)"
 x systemctl is-active --quiet trassa-helper.service trassa-agent.service || fail "службы не активны"
 x test "$(x stat -c '%a %U %G' /run/trassa/helper.sock)" = "660 root trassa" || fail "права сокета помощника"
 
@@ -114,7 +126,7 @@ arch=$(x uname -m)
 jq -n --arg image "$IMAGE" --arg os "$osid" --arg arch "$arch" --argjson installed "$installed" --argjson online "$online" \
 	--slurpfile run "$ctx/result.json" \
 	'{image: $image, os: $os, arch: $arch, install_seconds: $installed, online_seconds: $online,
-	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "reinstall-idempotent", "uninstall-clean"],
+	  checks: ["bad-signature-rejected", "install", "enroll", "online", "system.info", "metrics", "events", "reinstall-idempotent", "uninstall-clean"],
 	  metrics: $run[0].metrics,
 	  system_info: $run[0].result.system_info}' >"$REPORT/$(echo "$IMAGE" | tr ':' '-')-$arch.json"
 echo "OK $osid $arch: установка ${installed} с, на связи через ${online} с"

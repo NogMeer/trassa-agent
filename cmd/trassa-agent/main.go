@@ -28,14 +28,17 @@ import (
 	"syscall"
 	"time"
 
+	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/channel"
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/enroll"
+	"github.com/NogMeer/trassa-agent/internal/events"
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/identity"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo"
+	"github.com/NogMeer/trassa-agent/internal/sysinfo/sdunits"
 	"github.com/NogMeer/trassa-agent/internal/uninstall"
 )
 
@@ -89,12 +92,28 @@ func run(ctx context.Context, log *slog.Logger) int {
 	osID, osVer, _ := sysinfo.Real().OSRelease()
 	// Метрики снимаются и без связи: пачки ждут в буфере до 10 минут (E08).
 	mbuf := metrics.NewBuffer(nil)
-	go metrics.Run(ctx, metrics.New(), mbuf, metrics.Interval, nil, log)
+	equeue := events.NewQueue(nil)
+	det := events.NewDetector()
+	go metrics.Run(ctx, metrics.New(), metrics.Interval, nil, log,
+		func(b *agentv1.MetricsBatch) { mbuf.Add(b) },
+		func(b *agentv1.MetricsBatch) {
+			// Пороги событий (E08-T12): службы — по D-Bus без прав; нет ответа — службы в этом цикле не сверяются.
+			uctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			units, err := sdunits.List(uctx)
+			cancel()
+			if err != nil {
+				log.Debug("события: список служб не получен", "err", err)
+				units = nil
+			}
+			for _, e := range det.Observe(time.Now(), b, units) {
+				equeue.Add(e)
+			}
+		})
 	a := channel.New(channel.Config{
 		GatewayURL: en.GatewayURL, ServerID: en.ServerID, Identity: id, PanelKeys: keys,
 		Helper:  &helperrpc.Client{Path: p.Socket, Timeout: 30 * time.Second},
 		Version: config.Version, OS: osID, OSVersion: osVer, Arch: runtime.GOARCH,
-		HTTPClient: &http.Client{}, Log: log, UpdateDir: p.UpdateDir, Metrics: mbuf,
+		HTTPClient: &http.Client{}, Log: log, UpdateDir: p.UpdateDir, Metrics: mbuf, Events: equeue,
 	})
 	if err := a.Run(ctx); errors.Is(err, channel.ErrRevoked) {
 		return exitRevoked
