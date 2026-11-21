@@ -13,6 +13,7 @@ import "trassa/agent/v1/access.proto";
 import "trassa/agent/v1/backup.proto";
 import "trassa/agent/v1/deploy.proto";
 import "trassa/agent/v1/security.proto";
+import "trassa/agent/v1/vpn.proto";
 import "trassa/agent/v1/wireguard.proto";
 
 option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
@@ -226,6 +227,9 @@ message OperationParams {
     ServiceRestartParams service_start = 80;
     DiskCleanupParams disk_cleanup = 81;
     CertRenewParams cert_renew = 82;
+    // E25: 110–119.
+    VpnProbeEnsureParams vpn_probe_ensure = 110;
+    VpnProbeRunParams vpn_probe_run = 111;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }
@@ -420,6 +424,9 @@ message OperationResult {
     ServiceRestartResult service_restart = 80;
     DiskCleanupResult disk_cleanup = 81;
     CertRenewResult cert_renew = 82;
+    // E25: 110–119.
+    VpnProbeEnsureResult vpn_probe_ensure = 110;
+    VpnProbeRunResult vpn_probe_run = 111;
   }
 }
 
