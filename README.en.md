@@ -103,12 +103,27 @@ To remove the agent, use the panel or run `trassa-agent uninstall` on the server
 
 Updates are signed and rolled out in waves. If a new version fails to start, the agent goes back to the previous one. You can pin a version.
 
+## Signing in from your computer: `trassa`
+
+`trassa` runs on your computer (macOS, Linux, Windows), not on the server.
+
+```
+trassa login --url https://app.example.com   # approve the code in the panel; the token goes to the system keyring
+trassa servers                               # your servers and logins
+trassa ssh web-1                             # terminal through Trassa: no open SSH port needed
+trassa ssh --direct web-1                    # a 10-minute certificate and the system ssh straight to the server (macOS, Linux)
+trassa logout                                # revoke the sign-in and remove the token
+```
+
+The sign-in token is kept in the Keychain (macOS), Secret Service (Linux) or Credential Manager (Windows). Without a keyring, for example on a server with no D-Bus session, the token is stored in `credentials.json` with mode 0600 next to the settings. In `--direct` mode a fresh Ed25519 key is created for each sign-in and lives only in memory. ssh gets it through a read-only agent run by `trassa`, the host key comes from the panel, and ssh configuration files are not read (`-F none`).
+
 ## Repository layout
 
 | Path | Contents |
 |---|---|
 | [`proto/trassa/agent/v1/`](proto/trassa/agent/v1/) | The agent–panel channel contract (protobuf) |
 | `cmd/trassa-agent`, `cmd/trassa-helper` | The two processes: unprivileged network process and root helper |
+| `cmd/trassa`, `internal/cli` | The `trassa` program for your own computer: device-code sign-in (RFC 8628), token in the system keyring, server list, sign-in through Trassa (terminal WebSocket) and `--direct` (in-memory key, 10-minute certificate, system ssh) |
 | `internal/channel`, `internal/identity`, `internal/enroll` | WSS channel, agent key, enrollment |
 | `internal/helper`, `internal/helperrpc`, `internal/ops`, `internal/nonce` | Helper: socket with caller uid check, built-in operation list, signature, expiry and nonce checks |
 | `internal/rollback`, `internal/autorollback` | Rollback points and timer-based auto-rollback via systemd |
@@ -125,7 +140,7 @@ Updates are signed and rolled out in waves. If a new version fails to start, the
 
 Updates are downloaded by the network process; the helper never goes online, it only verifies the signature and checksums of what was downloaded and installs the binaries.
 
-Build and checks: Go 1.26, `make tools`, then `make check` (protobuf codegen, `go vet`, staticcheck, tests in the regular build and with the internal `testops` tag, release binary check). The test operation `test.config_write` exists only in builds with the `testops` tag; `make release-check` verifies the release binary does not contain it. CI on every commit: the OS matrix (Ubuntu 22.04 and 24.04, Debian 12 and 13 on amd64 and arm64 in containers with systemd: install with the panel command, refusal on a tampered signature, coming online, `system.info`, reinstall, removal; the report is the `matrix-report-*` artifact) and a release build on two runners with a `sha256` comparison.
+Build and checks: Go 1.26, `make tools`, then `make check` (protobuf codegen, `go vet`, staticcheck, tests in the regular build and with the internal `testops` tag, release binary check, building `trassa` for macOS, Linux and Windows). The test operation `test.config_write` exists only in builds with the `testops` tag; `make release-check` verifies the release binary does not contain it. CI on every commit: the OS matrix (Ubuntu 22.04 and 24.04, Debian 12 and 13 on amd64 and arm64 in containers with systemd: install with the panel command, refusal on a tampered signature, coming online, `system.info`, reinstall, removal; the report is the `matrix-report-*` artifact) and a release build on two runners with a `sha256` comparison.
 
 ## Verifying a release
 
