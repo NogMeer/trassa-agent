@@ -1772,7 +1772,9 @@ type ServiceRestartResult struct {
 	// systemd NRestarts или Docker RestartCount; нет свойства — 0.
 	Restarts uint32 `protobuf:"varint,3,opt,name=restarts,proto3" json:"restarts,omitempty"`
 	// ActiveState/SubState или State.Status.
-	State         string `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	State string `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	// При провале — до 20 последних строк журнала службы или контейнера, секреты вычищены.
+	LogTail       []string `protobuf:"bytes,5,rep,name=log_tail,json=logTail,proto3" json:"log_tail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1833,6 +1835,13 @@ func (x *ServiceRestartResult) GetState() string {
 		return x.State
 	}
 	return ""
+}
+
+func (x *ServiceRestartResult) GetLogTail() []string {
+	if x != nil {
+		return x.LogTail
+	}
+	return nil
 }
 
 type DiskCleanupParams struct {
@@ -1973,8 +1982,10 @@ type DiskCleanupResult struct {
 	Freed           []*DiskCleanupFreed    `protobuf:"bytes,1,rep,name=freed,proto3" json:"freed,omitempty"`
 	FreeBeforeBytes uint64                 `protobuf:"varint,2,opt,name=free_before_bytes,json=freeBeforeBytes,proto3" json:"free_before_bytes,omitempty"`
 	FreeAfterBytes  uint64                 `protobuf:"varint,3,opt,name=free_after_bytes,json=freeAfterBytes,proto3" json:"free_after_bytes,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Размер раздела mount.
+	TotalBytes    uint64 `protobuf:"varint,4,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DiskCleanupResult) Reset() {
@@ -2024,6 +2035,13 @@ func (x *DiskCleanupResult) GetFreeBeforeBytes() uint64 {
 func (x *DiskCleanupResult) GetFreeAfterBytes() uint64 {
 	if x != nil {
 		return x.FreeAfterBytes
+	}
+	return 0
+}
+
+func (x *DiskCleanupResult) GetTotalBytes() uint64 {
+	if x != nil {
+		return x.TotalBytes
 	}
 	return 0
 }
@@ -2078,8 +2096,12 @@ type CertRenewResult struct {
 	NotAfterBeforeMs int64                  `protobuf:"varint,1,opt,name=not_after_before_ms,json=notAfterBeforeMs,proto3" json:"not_after_before_ms,omitempty"`
 	NotAfterMs       int64                  `protobuf:"varint,2,opt,name=not_after_ms,json=notAfterMs,proto3" json:"not_after_ms,omitempty"`
 	Issuer           string                 `protobuf:"bytes,3,opt,name=issuer,proto3" json:"issuer,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// "certbot".
+	Manager string `protobuf:"bytes,4,opt,name=manager,proto3" json:"manager,omitempty"`
+	// TLS на 127.0.0.1:443 с SNI = domain отдаёт новый сертификат (сведения; на итог не влияет).
+	ServedNew     bool `protobuf:"varint,5,opt,name=served_new,json=servedNew,proto3" json:"served_new,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CertRenewResult) Reset() {
@@ -2131,6 +2153,20 @@ func (x *CertRenewResult) GetIssuer() string {
 		return x.Issuer
 	}
 	return ""
+}
+
+func (x *CertRenewResult) GetManager() string {
+	if x != nil {
+		return x.Manager
+	}
+	return ""
+}
+
+func (x *CertRenewResult) GetServedNew() bool {
+	if x != nil {
+		return x.ServedNew
+	}
+	return false
 }
 
 // security.baseline.accept (CHANGE, rollback NONE): «Это сделал я» — объекты детектора с этими отпечатками
@@ -2279,12 +2315,13 @@ const file_trassa_agent_v1_security_proto_rawDesc = "" +
 	"\x14ServiceRestartParams\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\x126\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\".trassa.agent.v1.ServiceTargetKindR\x04kind\x12\x1c\n" +
-	"\tcontainer\x18\x03 \x01(\tR\tcontainer\"\x88\x01\n" +
+	"\tcontainer\x18\x03 \x01(\tR\tcontainer\"\xa3\x01\n" +
 	"\x14ServiceRestartResult\x12\x16\n" +
 	"\x06active\x18\x01 \x01(\bR\x06active\x12&\n" +
 	"\x0factive_since_ms\x18\x02 \x01(\x03R\ractiveSinceMs\x12\x1a\n" +
 	"\brestarts\x18\x03 \x01(\rR\brestarts\x12\x14\n" +
-	"\x05state\x18\x04 \x01(\tR\x05state\"\xdf\x01\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\x12\x19\n" +
+	"\blog_tail\x18\x05 \x03(\tR\alogTail\"\xdf\x01\n" +
 	"\x11DiskCleanupParams\x12D\n" +
 	"\n" +
 	"categories\x18\x01 \x03(\x0e2$.trassa.agent.v1.DiskCleanupCategoryR\n" +
@@ -2295,18 +2332,23 @@ const file_trassa_agent_v1_security_proto_rawDesc = "" +
 	"\x10DiskCleanupFreed\x12@\n" +
 	"\bcategory\x18\x01 \x01(\x0e2$.trassa.agent.v1.DiskCleanupCategoryR\bcategory\x12\x14\n" +
 	"\x05bytes\x18\x02 \x01(\x04R\x05bytes\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\xa2\x01\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xc3\x01\n" +
 	"\x11DiskCleanupResult\x127\n" +
 	"\x05freed\x18\x01 \x03(\v2!.trassa.agent.v1.DiskCleanupFreedR\x05freed\x12*\n" +
 	"\x11free_before_bytes\x18\x02 \x01(\x04R\x0ffreeBeforeBytes\x12(\n" +
-	"\x10free_after_bytes\x18\x03 \x01(\x04R\x0efreeAfterBytes\")\n" +
+	"\x10free_after_bytes\x18\x03 \x01(\x04R\x0efreeAfterBytes\x12\x1f\n" +
+	"\vtotal_bytes\x18\x04 \x01(\x04R\n" +
+	"totalBytes\")\n" +
 	"\x0fCertRenewParams\x12\x16\n" +
-	"\x06domain\x18\x01 \x01(\tR\x06domain\"z\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\"\xb3\x01\n" +
 	"\x0fCertRenewResult\x12-\n" +
 	"\x13not_after_before_ms\x18\x01 \x01(\x03R\x10notAfterBeforeMs\x12 \n" +
 	"\fnot_after_ms\x18\x02 \x01(\x03R\n" +
 	"notAfterMs\x12\x16\n" +
-	"\x06issuer\x18\x03 \x01(\tR\x06issuer\"B\n" +
+	"\x06issuer\x18\x03 \x01(\tR\x06issuer\x12\x18\n" +
+	"\amanager\x18\x04 \x01(\tR\amanager\x12\x1d\n" +
+	"\n" +
+	"served_new\x18\x05 \x01(\bR\tservedNew\"B\n" +
 	"\x1cSecurityBaselineAcceptParams\x12\"\n" +
 	"\ffingerprints\x18\x01 \x03(\tR\ffingerprints*\x80\x01\n" +
 	"\n" +
