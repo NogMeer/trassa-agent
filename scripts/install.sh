@@ -243,6 +243,18 @@ main() {
 	install -d -m 0755 -o root -g root "$STATE_DIR"
 	install -d -m 0750 -o root -g trassa "$ETC_DIR"
 	install -d -m 0700 -o trassa -g trassa "$STATE_DIR/agent"
+	# Локальные настройки (E20): exec.run выключена; существующий файл владельца не трогаем.
+	if [ ! -e "$ETC_DIR/agent.toml" ]; then
+		cat >"$ETC_DIR/.agent.toml.new" <<'TOML'
+# Локальные настройки агента Trassa. Панель изменить этот файл не может.
+# allow_exec = true разрешает ИИ-оператору произвольные команды (exec.run): каждый запуск всё равно
+# подтверждается в панели и проходит запреты. После правки: systemctl restart trassa-helper trassa-agent.
+allow_exec = false
+TOML
+		chown root:root "$ETC_DIR/.agent.toml.new"
+		chmod 0644 "$ETC_DIR/.agent.toml.new"
+		mv -f "$ETC_DIR/.agent.toml.new" "$ETC_DIR/agent.toml"
+	fi
 	# Бинарники — через временный файл в том же каталоге и mv: служба не увидит половину файла.
 	for pair in "$AGENT_BIN:trassa-agent" "$HELPER_BIN:trassa-helper"; do
 		src=${pair%%:*}

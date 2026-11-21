@@ -34,7 +34,9 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/deploy"
 	"github.com/NogMeer/trassa-agent/internal/dockerapi"
+	"github.com/NogMeer/trassa-agent/internal/fsinspect"
 	"github.com/NogMeer/trassa-agent/internal/helper"
+	"github.com/NogMeer/trassa-agent/internal/helper/execrun"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/logsrc"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
@@ -199,6 +201,8 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		Deploy:   deployEnv(p),
 		Remedy:   remedyEnv(p, sec),
 		VpnProbe: vpnProbeEnv(p),
+		Inspect:  &fsinspect.Env{Root: "/"},
+		Exec:     execrun.Systemd{SystemdRun: "/usr/bin/systemd-run", Systemctl: "/usr/bin/systemctl"},
 		Terminals: &helper.Terminals{Units: terminal.Systemd{}, OpenPTY: terminal.OpenPTY, Locales: func(ctx context.Context) []string {
 			out, _ := backup.RunCommand(ctx, "locale", "-a")
 			return strings.Fields(string(out))

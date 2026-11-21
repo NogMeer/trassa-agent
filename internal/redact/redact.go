@@ -43,10 +43,14 @@ var rules = []rule{
 	{regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), Mask},
 	// Telegram-бот.
 	{regexp.MustCompile(`\b\d{8,10}:AA[A-Za-z0-9_-]{33}\b`), Mask},
-	// Заголовок Authorization.
-	{regexp.MustCompile(`(?i)(authorization\s*[:=]\s*(?:bearer|basic|token)\s+)[^\s"']+`), "${1}" + Mask},
+	// Заголовок Authorization (и без «:», как в конфигурации nginx: proxy_set_header Authorization "Bearer …").
+	{regexp.MustCompile(`(?i)(authorization["']?\s*[:=]?\s*["']?(?:bearer|basic|token)\s+)[^\s"';]+`), "${1}" + Mask},
+	// Заголовки и параметры в конфигурации веб-сервера с говорящим именем: proxy_set_header X-Api-Key …;
+	{regexp.MustCompile(`(?i)((?:proxy_set_header|grpc_set_header|add_header|more_set_headers|fastcgi_param|uwsgi_param|scgi_param|RequestHeader\s+set|Header\s+set)\s+["']?[A-Za-z0-9_-]*(?:auth|token|key|secret|passw|cookie|session)[A-Za-z0-9_-]*["']?\s+)("[^"]*"|'[^']*'|[^\s;]+)`), "${1}" + Mask},
 	// Учётные данные в адресе: scheme://user:pass@host.
 	{regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://[^\s:/@]+:)[^\s@/]+@`), "${1}" + Mask + "@"},
+	// Хэши паролей crypt(3) (строки /etc/shadow): $1$, $2b$, $5$, $6$, $y$, $gy$, $7$.
+	{regexp.MustCompile(`\$(?:1|2[abxy]?|5|6|y|gy|7|sha1|md5)\$[^\s:$]*\$[^\s:]+`), Mask},
 	// Пары имя=значение, имя: значение, "имя": "значение" с говорящим именем.
 	{regexp.MustCompile(`(?i)((?:"|')?[a-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?)(?:"|')?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;}]+)`), "${1}" + Mask},
 }

@@ -21,6 +21,8 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/backup"
 	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/deploy"
+	"github.com/NogMeer/trassa-agent/internal/fsinspect"
+	"github.com/NogMeer/trassa-agent/internal/helper/execrun"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/logsrc"
 	"github.com/NogMeer/trassa-agent/internal/nonce"
@@ -108,6 +110,12 @@ type Executor struct {
 	Remedy *remedy.Env
 	// VpnProbe — точка замера VPN-пакета (E25); nil — VPN_PROBE_UNAVAILABLE.
 	VpnProbe *vpnprobe.Env
+	// Inspect — disk.usage и config.read (E20); nil — INSPECT_UNAVAILABLE.
+	Inspect *fsinspect.Env
+	// Exec — запуск exec.run (E20); nil — EXEC_UNAVAILABLE. Флаг allow_exec — LocalConfig.
+	Exec execrun.Runner
+	// LocalConfig — чтение /etc/trassa/agent.toml; nil — config.LoadLocal(Paths.LocalConfig).
+	LocalConfig func() (config.Local, error)
 
 	once     sync.Once
 	handlers map[string]handler
@@ -186,7 +194,7 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 	e.init()
 	switch req.Method {
 	case helperrpc.MethodHello:
-		r := helperrpc.Response{Kind: helperrpc.KindHello, HelperVersion: e.Version, Capabilities: append(e.Checker.Catalog.Types(), ExtraCapabilities...)}
+		r := helperrpc.Response{Kind: helperrpc.KindHello, HelperVersion: e.Version, Capabilities: e.capabilities()}
 		if e.Secrets != nil {
 			r.EncryptionPublicKey, r.EncryptionKeyID = e.Secrets.Public(), e.Secrets.ID
 		}

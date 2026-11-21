@@ -530,7 +530,8 @@ type ExecRunResult struct {
 	DurationMs      uint64 `protobuf:"varint,5,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	// Полный путь запущенной программы после ссылок (один элемент).
 	Programs []string `protobuf:"bytes,6,rep,name=programs,proto3" json:"programs,omitempty"`
-	// При EXEC_DENIED — код запрета R28 (EXEC_UNPARSEABLE, EXEC_SECRETS_READ …).
+	// При EXEC_DENIED — код запрета R28 (EXEC_UNPARSEABLE, EXEC_RUNS_COMMANDS, EXEC_SECRETS_READ …) или
+	// EXEC_PROGRAM_INVALID (программы нет или её файл может подменить не root).
 	DeniedCode    string `protobuf:"bytes,7,opt,name=denied_code,json=deniedCode,proto3" json:"denied_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

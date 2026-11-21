@@ -51,6 +51,7 @@ type Paths struct {
 	BinPrevDir      string // /var/lib/trassa/bin.prev
 	EtcDir          string // /etc/trassa
 	Enrollment      string // /etc/trassa/enrollment.json
+	LocalConfig     string // /etc/trassa/agent.toml: allow_exec (E20), пишет только владелец сервера
 	RunDir          string // /run/trassa
 	Socket          string // /run/trassa/helper.sock
 	BinDir          string // /usr/local/bin
@@ -86,6 +87,7 @@ func Under(root string) Paths {
 		BinPrevDir:      j("var/lib/trassa/bin.prev"),
 		EtcDir:          j("etc/trassa"),
 		Enrollment:      j("etc/trassa/enrollment.json"),
+		LocalConfig:     j("etc/trassa/agent.toml"),
 		RunDir:          j("run/trassa"),
 		Socket:          j("run/trassa/helper.sock"),
 		BinDir:          j("usr/local/bin"),

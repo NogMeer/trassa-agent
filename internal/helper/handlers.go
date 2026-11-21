@@ -76,6 +76,9 @@ func (e *Executor) builtinHandlers() map[string]handler {
 	for t, x := range e.vpnHandlers() {
 		h[t] = x
 	}
+	for t, x := range e.operatorHandlers() {
+		h[t] = x
+	}
 	for t, x := range e.extraHandlers() {
 		h[t] = x
 	}
@@ -86,6 +89,9 @@ func (e *Executor) builtinHandlers() map[string]handler {
 
 func (e *Executor) applySystemInfo(ctx context.Context, r *run) *agentv1.OperationResult {
 	info, notes := e.System.Info(ctx)
+	if info != nil {
+		info.AllowExec = e.ExecAllowed()
+	}
 	res := r.succeeded(strings.Join(notes, "; "))
 	res.Data = &agentv1.OperationResult_SystemInfo{SystemInfo: info}
 	return res

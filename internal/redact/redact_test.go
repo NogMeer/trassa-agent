@@ -43,6 +43,39 @@ func TestString(t *testing.T) {
 	}
 }
 
+func TestCryptHashes(t *testing.T) {
+	for _, in := range []string{
+		"/etc/shadow:root:$y$j9T$abcdefghijklmnop$QRSTUVWXYZ0123456789abcdefghijklmnopqrs:19700:0:99999:7:::",
+		"u:$6$saltsalt$0123456789abcdefABCDEF0123456789abcdefABCDEF:19000::::::",
+		"$2b$12$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ01234",
+	} {
+		if out := String(in); strings.Contains(out, "0123456789") || strings.Contains(out, "QRSTUV") || !strings.Contains(out, Mask) {
+			t.Errorf("%q → %q", in, out)
+		}
+	}
+}
+
+// Конфигурация nginx (config.read, E20): заголовки без «:» и «=».
+func TestWebServerHeaders(t *testing.T) {
+	for in, secret := range map[string]string{
+		`proxy_set_header Authorization "Bearer abcdefghijklmnop";`: "abcdefghijklmnop",
+		`proxy_set_header X-Api-Key s3cr3tvalue1234;`:               "s3cr3tvalue1234",
+		`  add_header Set-Cookie "session=qwertyuiop12";`:           "qwertyuiop12",
+		`fastcgi_param DB_PASSWORD hunter2hunter2;`:                 "hunter2hunter2",
+		`RequestHeader set X-Auth-Token "zxcvbnm098765"`:            "zxcvbnm098765",
+	} {
+		if out := String(in); strings.Contains(out, secret) || !strings.Contains(out, Mask) {
+			t.Errorf("%q → %q", in, out)
+		}
+	}
+	for _, keep := range []string{`proxy_set_header Host $host;`, `add_header Strict-Transport-Security "max-age=31536000";`,
+		`fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;`} {
+		if String(keep) != keep {
+			t.Errorf("испорчено: %q → %q", keep, String(keep))
+		}
+	}
+}
+
 func TestKeepsHarmless(t *testing.T) {
 	for _, s := range []string{
 		"nginx.service active running",

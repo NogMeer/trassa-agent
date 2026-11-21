@@ -286,7 +286,6 @@ func (h *Host) Info(version string) (*agentv1.SystemInfoResult, []string) {
 		note("addrs", err)
 		r.PublicIpv4, r.PublicIpv6 = PublicIPs(addrs)
 	}
-	// exec.run и allow_exec — E20; в этой сборке выполнения команд нет.
-	r.AllowExec = false
+	// allow_exec ставит помощник по /etc/trassa/agent.toml (E20).
 	return r, notes
 }
