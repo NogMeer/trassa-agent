@@ -54,7 +54,7 @@ var (
 	// sftp:user@host:/path (порт 22) и sftp://user@host[:port]/path (как в restic; //path — абсолютный путь).
 	// Длина адреса — до 2048 (RepoURL).
 	sftpRe    = regexp.MustCompile(`^sftp:([a-z_][a-z0-9_-]{0,31})@([A-Za-z0-9][A-Za-z0-9.-]{0,252}):/[^\x00]+$`)
-	sftpURLRe = regexp.MustCompile(`^sftp://([a-z_][a-z0-9_-]{0,31})@([A-Za-z0-9][A-Za-z0-9.-]{0,252})(?::([0-9]{1,5}))?/[^\x00]+$`)
+	sftpURLRe = regexp.MustCompile(`^sftp://([a-z_][a-z0-9_-]{0,31})@([A-Za-z0-9][A-Za-z0-9.-]{0,252}|\[[0-9A-Fa-f:.]{2,45}\])(?::([0-9]{1,5}))?/[^\x00]+$`)
 )
 
 func hasControl(s string) bool {
@@ -553,6 +553,14 @@ func SSHTarget(u string) (user, host string, port int, err error) {
 	port = 22
 	if m := sftpURLRe.FindStringSubmatch(u); m != nil {
 		user, host = m[1], m[2]
+		if strings.HasPrefix(host, "[") {
+			// IPv6 только в скобках, как в URL; ssh получает адрес без скобок, known_hosts — [addr]:port.
+			a, perr := netip.ParseAddr(host[1 : len(host)-1])
+			if perr != nil || !a.Is6() || a.Zone() != "" {
+				return "", "", 0, errors.New("адрес IPv6 цели sftp")
+			}
+			host = a.String()
+		}
 		if m[3] != "" {
 			if port, err = strconv.Atoi(m[3]); err != nil || port < 1 || port > 65535 {
 				return "", "", 0, errors.New("порт sftp: 1–65535")

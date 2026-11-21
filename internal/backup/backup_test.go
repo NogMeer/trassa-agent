@@ -304,6 +304,33 @@ func TestResticSFTPCommand(t *testing.T) {
 	if KnownHostsName("h", 22) != "h" || KnownHostsName("h", 2222) != "[h]:2222" {
 		t.Error("KnownHostsName")
 	}
+	// IPv6 в скобках: ssh получает адрес без скобок, known_hosts — [addr]:port.
+	r6 := f.restic("sftp://backup@[2001:DB8::1]:2222//srv/restic", nil)
+	if err := RepoURL(r6.Repo.URL); err != nil {
+		t.Fatal(err)
+	}
+	if err := pinHostKey(f.dir, r6.Repo.URL, key); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = os.ReadFile(r6.KnownHosts)
+	if string(raw) != "[2001:db8::1]:2222 "+key+"\n" {
+		t.Fatalf("known_hosts IPv6: %q", raw)
+	}
+	if _, err := Snapshots(context.Background(), r6); err != nil {
+		t.Fatal(err)
+	}
+	c = f.calls()[len(f.calls())-1]
+	if !strings.Contains(c, "-p 2222") || !strings.Contains(c, "-- backup@2001:db8::1 -s sftp") {
+		t.Errorf("IPv6: %s", c)
+	}
+	if _, h, p, err := SSHTarget("sftp://backup@[2001:db8::1]//r"); err != nil || h != "2001:db8::1" || p != 22 || KnownHostsName(h, p) != "2001:db8::1" {
+		t.Errorf("IPv6 без порта: %s %d %v", h, p, err)
+	}
+	for _, bad := range []string{"sftp://backup@[10.0.0.1]:22//r", "sftp://backup@[fe80::1%eth0]:22//r", "sftp://backup@[zz::1]:22//r", "sftp://backup@2001:db8::1:22//r"} {
+		if RepoURL(bad) == nil {
+			t.Errorf("%s принят", bad)
+		}
+	}
 }
 
 func TestInitRepo(t *testing.T) {
