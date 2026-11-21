@@ -208,6 +208,7 @@ func releaseCode(ctx context.Context, err error) string {
 	for _, known := range []error{
 		deploy.ErrRegistry, deploy.ErrRegistryAuth, deploy.ErrImageGone, deploy.ErrPreDeploy, deploy.ErrHealthcheck,
 		deploy.ErrNoFreePort, deploy.ErrReleaseTimeout, deploy.ErrComposeDenied, deploy.ErrAppMissing,
+		deploy.ErrHostTaken,
 		deploy.ErrBuildOOM, deploy.ErrBuildUnsupported, deploy.ErrGitDenied, deploy.ErrGitCommit, deploy.ErrRepoAddress,
 		deploy.ErrDeadline, deploy.ErrBuildFailed, deploy.ErrChecksum, deploy.ErrToolUnknown,
 	} {

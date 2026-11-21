@@ -26,8 +26,13 @@ const (
 // composeEnv — окружение вызова compose (решение E17 п. 4): удалённые ресурсы выключены, пустой HOME и
 // DOCKER_CONFIG (нет config.json — нет чужих учётных данных и помощников входа), плюс переменные приложения.
 func (e *Env) composeEnv(home string, vars []string) []string {
-	return append([]string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "HOME=" + home, "DOCKER_CONFIG=" + home,
-		"COMPOSE_EXPERIMENTAL_GIT_REMOTE=false", "COMPOSE_EXPERIMENTAL_OCI_REMOTE=false"}, vars...)
+	// Переменные приложения — под префиксом и первыми: свои значения стоят последними и не перекрываются.
+	env := make([]string, 0, len(vars)+8)
+	for _, v := range vars {
+		env = append(env, VarPrefix+v)
+	}
+	return append(env, []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "HOME=" + home, "DOCKER_CONFIG=" + home,
+		"COMPOSE_EXPERIMENTAL_GIT_REMOTE=false", "COMPOSE_EXPERIMENTAL_OCI_REMOTE=false"}...)
 }
 
 func (e *Env) compose(ctx context.Context, s *composeSpec, dir string, env []string, args ...string) ([]byte, error) {
@@ -130,7 +135,7 @@ func (e *Env) releaseCompose(ctx context.Context, j ReleaseJob) (*agentv1.Deploy
 	}
 	step(agentv1.DeployStep_DEPLOY_STEP_PULL, 0)
 	for _, img := range images {
-		if err := e.pull(ctx, img, auth, secrets); err != nil {
+		if err := e.pull(ctx, img, p.GetPullFrom(), auth, secrets); err != nil {
 			res.FailedStep = agentv1.DeployStep_DEPLOY_STEP_PULL
 			return res, false, err
 		}

@@ -529,7 +529,7 @@ func TestReleaseCompose(t *testing.T) {
 	raw, _ := os.ReadFile(filepath.Join(f.e.appDir(app1), "compose", composeFile))
 	s := string(raw)
 	for _, want := range []string{`"host_ip": "127.0.0.1"`, `"no-new-privileges:true"`, `"pull_policy": "never"`, `"name": "trassa-01a1f4b6f2f2-uploads"`,
-		`${DB_PASSWORD}`, `"trassa.app_id": "` + app1 + `"`} {
+		`${TRASSA_V_DB_PASSWORD}`, `"trassa.app_id": "` + app1 + `"`} {
 		if !strings.Contains(s, want) {
 			t.Errorf("нет %s в compose.json", want)
 		}

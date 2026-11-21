@@ -118,7 +118,15 @@ func forbidden(what string, a ...any) error {
 	return fmt.Errorf("%w: %s", ErrComposeDenied, fmt.Sprintf(what, a...))
 }
 
+// VarPrefix — имена переменных приложения в окружении процесса compose. Переменные приложения не попадают в
+// окружение под своими именами: иначе DOCKER_CONFIG, PATH или LD_PRELOAD из env_plain перекрыли бы окружение
+// root-процесса docker compose (подмена плагина CLI — root на сервере). Подстановки ${NAME} документа
+// переписываются в ${TRASSA_V_NAME}.
+const VarPrefix = "TRASSA_V_"
+
 // checkText — строка значения: UTF-8 без NUL, до 8 КиБ, подстановки только ${NAME}/$NAME из Vars и $$.
+// Возвращает строку с подстановками, переписанными на ${TRASSA_V_NAME}; в нормализованном виде (свой документ
+// после compose config) допустимы только уже переписанные ${TRASSA_V_NAME}.
 func (c *composeChecker) checkText(where string, v any) (string, error) {
 	var s string
 	switch x := v.(type) {
@@ -134,16 +142,20 @@ func (c *composeChecker) checkText(where string, v any) (string, error) {
 	if len(s) > 8192 || !utf8.ValidString(s) || strings.ContainsRune(s, 0) {
 		return "", forbidden("%s: значение", where)
 	}
+	var out strings.Builder
 	for i := 0; i < len(s); i++ {
 		if s[i] != '$' {
+			out.WriteByte(s[i])
 			continue
 		}
 		if i+1 >= len(s) {
 			return "", forbidden("%s: одиночный $", where)
 		}
 		var name string
+		braced := false
 		switch n := s[i+1]; {
 		case n == '$':
+			out.WriteString("$$")
 			i++
 			continue
 		case n == '{':
@@ -151,7 +163,7 @@ func (c *composeChecker) checkText(where string, v any) (string, error) {
 			if end < 0 {
 				return "", forbidden("%s: незакрытая подстановка", where)
 			}
-			name = s[i+2 : i+2+end]
+			name, braced = s[i+2:i+2+end], true
 			i += 2 + end
 		case n == '_' || (n|0x20 >= 'a' && n|0x20 <= 'z'):
 			j := i + 1
@@ -162,11 +174,18 @@ func (c *composeChecker) checkText(where string, v any) (string, error) {
 		default:
 			return "", forbidden("%s: подстановка", where)
 		}
+		if c.normalized {
+			if !braced || !strings.HasPrefix(name, VarPrefix) {
+				return "", forbidden("%s: подстановка %q не переписана агентом", where, name)
+			}
+			name = strings.TrimPrefix(name, VarPrefix)
+		}
 		if !envNameRe.MatchString(name) || !c.s.Vars[name] {
 			return "", forbidden("%s: подстановка %q не из переменных приложения", where, name)
 		}
+		out.WriteString("${" + VarPrefix + name + "}")
 	}
-	return s, nil
+	return out.String(), nil
 }
 
 func asMap(v any, where string) (map[string]any, error) {
@@ -229,24 +248,28 @@ func (c *composeChecker) emptyRes(v any, where, wantName string) error {
 	return nil
 }
 
-func (c *composeChecker) textList(v any, where string) ([]any, error) {
+// textList — строка или список строк (command, entrypoint, healthcheck.test) с переписанными подстановками.
+func (c *composeChecker) textList(v any, where string) (any, error) {
 	if v == nil {
 		return nil, nil
 	}
 	if s, ok := v.(string); ok {
-		_, err := c.checkText(where, s)
-		return nil, err
+		return c.checkText(where, s)
 	}
 	a, err := asList(v, where)
 	if err != nil {
 		return nil, err
 	}
+	out := make([]any, len(a))
 	for i, x := range a {
-		if _, err := c.checkText(fmt.Sprintf("%s[%d]", where, i), x); err != nil {
+		if _, ok := x.(string); !ok {
+			return nil, forbidden("%s[%d]: не строка", where, i)
+		}
+		if out[i], err = c.checkText(fmt.Sprintf("%s[%d]", where, i), x); err != nil {
 			return nil, err
 		}
 	}
-	return a, nil
+	return out, nil
 }
 
 func (c *composeChecker) duration(v any, where string) error {
@@ -276,10 +299,11 @@ func (c *composeChecker) stringMap(v any, where string, key *regexp.Regexp, null
 			return forbidden("%s: ключ %q дважды", where, k)
 		}
 		if val == nil {
-			if !nullOK {
+			// «K» без значения compose берёт из окружения процесса: только переменная приложения, явной подстановкой.
+			if !nullOK || !c.s.Vars[k] || c.normalized {
 				return forbidden("%s.%s: без значения", where, k)
 			}
-			out[k] = nil
+			out[k] = "${" + VarPrefix + k + "}"
 			return nil
 		}
 		s, err := c.checkText(where+"."+k, val)
@@ -372,7 +396,7 @@ func (c *composeChecker) serviceVolumes(v any, where string) ([]any, error) {
 		if !c.volumes[src] {
 			return nil, forbidden("%s: том %q не объявлен (bind запрещён)", w, src)
 		}
-		if !strings.HasPrefix(dst, "/") || path.Clean(dst) != dst || dst == "/" || !printable(dst, 512) {
+		if !strings.HasPrefix(dst, "/") || path.Clean(dst) != dst || dst == "/" || !printable(dst, 512) || strings.Contains(dst, "$") {
 			return nil, forbidden("%s: путь в контейнере", w)
 		}
 		out = append(out, map[string]any{"type": "volume", "source": src, "target": dst, "read_only": ro})
@@ -432,8 +456,12 @@ func (c *composeChecker) healthcheck(v any, where string) (any, error) {
 	if err := keysIn(m, where, "test", "interval", "timeout", "retries", "start_period", "start_interval", "disable"); err != nil {
 		return nil, err
 	}
-	if _, err := c.textList(m["test"], where+".test"); err != nil {
+	test, err := c.textList(m["test"], where+".test")
+	if err != nil {
 		return nil, err
+	}
+	if test != nil {
+		m["test"] = test
 	}
 	for _, k := range []string{"interval", "timeout", "start_period", "start_interval"} {
 		if err := c.duration(m[k], where+"."+k); err != nil {
@@ -601,9 +629,6 @@ func (c *composeChecker) service(name string, v any) (map[string]any, error) {
 			res = s
 		case "command", "entrypoint":
 			res, err = c.textList(val, w)
-			if s, ok := val.(string); ok && err == nil {
-				res = s
-			}
 		case "environment":
 			res, err = c.stringMap(val, w, envNameRe, true)
 		case "labels":
@@ -647,7 +672,7 @@ func (c *composeChecker) service(name string, v any) (map[string]any, error) {
 			}
 			res = val
 		case "working_dir":
-			if s, ok := val.(string); !ok || !strings.HasPrefix(s, "/") || path.Clean(s) != s || !printable(s, 512) {
+			if s, ok := val.(string); !ok || !strings.HasPrefix(s, "/") || path.Clean(s) != s || !printable(s, 512) || strings.Contains(s, "$") {
 				return nil, forbidden("%s", w)
 			}
 			res = val

@@ -170,6 +170,23 @@ func checkRoutes(routes []*agentv1.ProxyRoute, app string) error {
 			return errors.New("redirect_to: имя хоста")
 		}
 	}
+	// wildcard одного приложения не накрывает имя другого (*.example.com и a.example.com).
+	owner := map[string]string{}
+	for _, r := range routes {
+		for _, h := range r.GetHosts() {
+			owner[h] = r.GetAppId()
+		}
+	}
+	for h, app := range owner {
+		if strings.HasPrefix(h, "*.") {
+			continue
+		}
+		if _, rest, ok := strings.Cut(h, "."); ok {
+			if w, has := owner["*."+rest]; has && w != app {
+				return fmt.Errorf("имя %s накрыто *.%s другого приложения", h, rest)
+			}
+		}
+	}
 	return nil
 }
 
@@ -255,6 +272,9 @@ func ValidateRelease(p *agentv1.DeployReleaseParams, issuedAtMs int64) error {
 	case agentv1.ReleaseKind_RELEASE_KIND_CONTAINER:
 		if err := PinnedImage(p.GetImageRef()); err != nil {
 			return err
+		}
+		if f := p.GetPullFrom(); f != nil && registryOf(p.GetImageRef()) != canonRegistry(f.GetServer()) {
+			return errors.New("pull_from: реестр не совпадает с реестром образа")
 		}
 		if p.GetCompose() != "" {
 			return errors.New("compose у контейнера")

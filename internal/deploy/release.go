@@ -32,6 +32,7 @@ var (
 	ErrReleaseTimeout = errors.New("DEPLOY_TIMEOUT")
 	ErrImageGone      = errors.New("RELEASE_IMAGE_GONE")
 	ErrAppMissing     = errors.New("DEPLOY_APP_NOT_FOUND")
+	ErrHostTaken      = errors.New("DOMAIN_TAKEN")
 	ErrComposeDenied  = errors.New("DEPLOY_COMPOSE_FORBIDDEN")
 )
 
@@ -63,11 +64,31 @@ func networkName(app string) string { return "trassa-" + shortID(app) }
 
 func volumeName(app, v string) string { return "trassa-" + shortID(app) + "-" + v }
 
+// registryOf — реестр образа по правилам Docker: первый компонент с точкой, двоеточием или localhost — хост
+// реестра, иначе Docker Hub.
+func registryOf(ref string) string {
+	first, _, found := strings.Cut(ref, "/")
+	if !found || (!strings.ContainsAny(first, ".:") && first != "localhost") {
+		return "docker.io"
+	}
+	return canonRegistry(first)
+}
+
+func canonRegistry(h string) string {
+	switch h = strings.ToLower(h); h {
+	case "index.docker.io", "registry-1.docker.io", "registry.hub.docker.com":
+		return "docker.io"
+	}
+	return h
+}
+
 // pull — образ по дайджесту с учётными данными только на скачивание; поток хода Docker разбирается до конца.
-func (e *Env) pull(ctx context.Context, ref, auth string, secrets []string) error {
+// Учётные данные уходят только реестру pull_from: dockerd не сверяет serveraddress с хостом образа, и образ
+// из чужого реестра получил бы логин и пароль реестра пространства.
+func (e *Env) pull(ctx context.Context, ref string, from *agentv1.RegistryAuth, auth string, secrets []string) error {
 	repo, digest, _ := strings.Cut(ref, "@")
 	hdr := map[string]string{}
-	if auth != "" {
+	if auth != "" && from != nil && registryOf(ref) == canonRegistry(from.GetServer()) {
 		hdr["X-Registry-Auth"] = auth
 	}
 	resp, err := e.Docker.Do(ctx, http.MethodPost, "/images/create?fromImage="+url.QueryEscape(repo)+"&tag="+url.QueryEscape(digest), nil, hdr)
@@ -343,6 +364,9 @@ func (e *Env) setAppRoutes(ctx context.Context, app string, recs []RouteRec) ([]
 	if err != nil {
 		return nil, false, "", err
 	}
+	if err := hostsFree(st, app, recs); err != nil {
+		return nil, false, "", err
+	}
 	prev, had := st.Apps[app]
 	if recs == nil {
 		delete(st.Apps, app)
@@ -423,7 +447,7 @@ func (e *Env) Release(ctx context.Context, j ReleaseJob) (*agentv1.DeployRelease
 		_ = e.remove(ctx, c.ID)
 	}
 	step(agentv1.DeployStep_DEPLOY_STEP_PULL, 0)
-	if err := e.pull(ctx, p.GetImageRef(), auth, secrets); err != nil {
+	if err := e.pull(ctx, p.GetImageRef(), p.GetPullFrom(), auth, secrets); err != nil {
 		res.FailedStep = agentv1.DeployStep_DEPLOY_STEP_PULL
 		return res, false, err
 	}
@@ -498,4 +522,40 @@ func (e *Env) Release(ctx context.Context, j ReleaseJob) (*agentv1.DeployRelease
 		j.Log("список образов приложения не обновлён: " + err.Error())
 	}
 	return res, false, nil
+}
+
+// hostsOverlap — Caddy отдаёт запрос обоим: одно имя или wildcard на один уровень (*.example.com и a.example.com).
+func hostsOverlap(a, b string) bool {
+	if a == b {
+		return true
+	}
+	under := func(w, h string) bool {
+		if !strings.HasPrefix(w, "*.") {
+			return false
+		}
+		label, rest, ok := strings.Cut(h, ".")
+		return ok && label != "" && label != "*" && rest == w[2:]
+	}
+	return under(a, b) || under(b, a)
+}
+
+// hostsFree — имена релиза не заняты другим приложением: иначе релиз A перехватил бы трафик и сертификат B.
+func hostsFree(st *ProxyState, app string, recs []RouteRec) error {
+	for other, theirs := range st.Apps {
+		if other == app {
+			continue
+		}
+		for _, r := range recs {
+			for _, h := range r.Hosts {
+				for _, t := range theirs {
+					for _, o := range t.Hosts {
+						if hostsOverlap(h, o) {
+							return fmt.Errorf("%w: %s пересекается с %s другого приложения", ErrHostTaken, h, o)
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }

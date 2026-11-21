@@ -94,8 +94,8 @@ func TestBuild(t *testing.T) {
 	}
 	// buildx — секрет только --secret и в окружении; Dockerfile — копия root, не из дерева кода.
 	args := strings.Join(build.c.Args, " ")
-	if build.c.UID != -1 || strings.Contains(args, "npm-secret-1") || !strings.Contains(args, "--secret id=NPM_TOKEN,env=NPM_TOKEN") ||
-		!strings.Contains(build.env, "NPM_TOKEN=npm-secret-1") || !strings.Contains(args, "--build-arg NODE_ENV=production") ||
+	if build.c.UID != -1 || strings.Contains(args, "npm-secret-1") || !strings.Contains(args, "--secret id=NPM_TOKEN,env=TRASSA_S_NPM_TOKEN") ||
+		!strings.Contains(build.env, "TRASSA_S_NPM_TOKEN=npm-secret-1") || strings.Contains(build.env, "\nNPM_TOKEN=") || !strings.Contains(args, "--build-arg NODE_ENV=production") ||
 		!strings.Contains(args, "-f "+filepath.Join(f.e.BuildDir, rel1, "Dockerfile")) || strings.Contains(build.env, "ghs_gittoken1") {
 		t.Fatalf("buildx: %s\n%s", args, build.env)
 	}

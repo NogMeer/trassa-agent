@@ -41,6 +41,8 @@ const (
 	// RailpackFrontend — фронтенд той же версии, что CLI 0.43.0 (решение E17 3.3).
 	RailpackFrontend = "ghcr.io/railwayapp/railpack-frontend:v0.43.0@sha256:355ef61fae6f2551103cd8b10c710cb07167dd353d561f15c69b8d7ac1c676cc"
 	maxBuildLog      = 4 << 20
+	// SecretPrefix — имена секретов сборки в окружении buildx (в --secret id остаётся исходное имя).
+	SecretPrefix = "TRASSA_S_"
 )
 
 var (
@@ -378,7 +380,9 @@ func (e *Env) Build(ctx context.Context, j BuildJob) (*agentv1.DeployBuildResult
 		if err != nil {
 			return nil, err
 		}
-		secretEnv, secrets = append(secretEnv, k+"="+v), append(secrets, v)
+		// Имя секрета не становится переменной root-процесса buildx под своим именем: DOCKER_CONFIG, PATH или
+		// BUILDX_CONFIG из build_secrets подменили бы плагин CLI или сборщик (root на сервере).
+		secretEnv, secrets = append(secretEnv, SecretPrefix+k+"="+v), append(secrets, v)
 	}
 	auth, pw, err := j.Open.RegistryAuth(p.GetPushTo())
 	if err != nil {
@@ -458,7 +462,7 @@ func (e *Env) Build(ctx context.Context, j BuildJob) (*agentv1.DeployBuildResult
 	local := p.GetImageRepo() + ":" + tag
 	args := []string{"buildx", "build", "--builder", builder, "--load", "--progress=plain", "--provenance=false", "-t", local}
 	for _, k := range names {
-		args = append(args, "--secret", "id="+k+",env="+k)
+		args = append(args, "--secret", "id="+k+",env="+SecretPrefix+k)
 	}
 	argNames := make([]string, 0, len(p.GetBuildArgs()))
 	for k := range p.GetBuildArgs() {
@@ -507,7 +511,7 @@ func (e *Env) Build(ctx context.Context, j BuildJob) (*agentv1.DeployBuildResult
 	args = append(args, ctxDir)
 
 	step(agentv1.DeployStep_DEPLOY_STEP_BUILD, 0)
-	o, err := e.execAs(ctx, Cmd{Name: "docker", Args: args, Env: append(benv, secretEnv...), UID: -1})
+	o, err := e.execAs(ctx, Cmd{Name: "docker", Args: args, Env: append(append([]string{}, secretEnv...), benv...), UID: -1})
 	text := clean(string(o), secrets)
 	for _, l := range tailLines(text, 200) {
 		log(l)
