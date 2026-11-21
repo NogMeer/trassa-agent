@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/config"
 )
 
 // Типы журналов (E08, раздел 6). Оба READ и только по подписанной операции: агент не отправляет журналы, пока
@@ -71,6 +72,11 @@ func ValidLogSource(s *agentv1.LogSource) error {
 		}
 	case agentv1.LogSourceKind_LOG_SOURCE_KIND_FILE:
 		return ValidLogPath(n)
+	case agentv1.LogSourceKind_LOG_SOURCE_KIND_APP:
+		// app_id в нижнем регистре, как его пишет деплой в метку trassa.app_id.
+		if !config.IsUUID(n) || strings.ToLower(n) != n {
+			return fmt.Errorf("app_id %q", n)
+		}
 	default:
 		return fmt.Errorf("вид источника %v", s.GetKind())
 	}

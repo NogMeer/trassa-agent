@@ -103,3 +103,34 @@ func PollWg(ctx context.Context, src WgStatsSource, metrics func(*agentv1.Metric
 		}
 	}
 }
+
+// AppStatsSource — метрики приложений от помощника (helperrpc.Client.AppStats).
+type AppStatsSource interface {
+	AppStats(ctx context.Context) ([]byte, error)
+}
+
+// PollApps — раз в every: память и CPU приложений Trassa (E17-T24-R1) в буфер метрик. Ошибка помощника (нет
+// Docker, старый помощник) пишется в журнал один раз, пока не сменится.
+func PollApps(ctx context.Context, src AppStatsSource, metrics func(*agentv1.MetricsBatch), every time.Duration, now func() time.Time, log *slog.Logger) {
+	failing := ""
+	for {
+		raw, err := src.AppStats(ctx)
+		switch {
+		case err != nil && err.Error() != failing:
+			log.Debug("приложения: app.stats", "err", err)
+			failing = err.Error()
+		case err == nil:
+			failing = ""
+			var b agentv1.MetricsBatch
+			if proto.Unmarshal(raw, &b) == nil && len(b.GetMetrics()) > 0 {
+				b.CollectedAtMs = now().UnixMilli()
+				metrics(&b)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(every):
+		}
+	}
+}

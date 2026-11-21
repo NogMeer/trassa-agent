@@ -110,6 +110,8 @@ type Executor struct {
 	Remedy *remedy.Env
 	// VpnProbe — точка замера VPN-пакета (E25); nil — VPN_PROBE_UNAVAILABLE.
 	VpnProbe *vpnprobe.Env
+	// AppStats — память и CPU приложений (E17-T24-R1, helperrpc app.stats); nil — пустая пачка.
+	AppStats *deploy.AppStats
 	// Inspect — disk.usage и config.read (E20); nil — INSPECT_UNAVAILABLE.
 	Inspect *fsinspect.Env
 	// Exec — запуск exec.run (E20); nil — EXEC_UNAVAILABLE. Флаг allow_exec — LocalConfig.
@@ -235,6 +237,19 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 		}
 		raw, _ := proto.Marshal(b)
 		_ = send(helperrpc.Response{Kind: helperrpc.KindWgStats, Result: raw})
+	case helperrpc.MethodAppStats:
+		b := &agentv1.MetricsBatch{CollectedAtMs: e.now().UnixMilli()}
+		if e.AppStats != nil {
+			sctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+			ms, err := e.AppStats.Collect(sctx)
+			cancel()
+			if err != nil {
+				e.log().Debug("helper: app.stats", "err", err)
+			}
+			b.Metrics = ms
+		}
+		raw, _ := proto.Marshal(b)
+		_ = send(helperrpc.Response{Kind: helperrpc.KindAppStats, Result: raw})
 	case helperrpc.MethodEventsPoll:
 		var raw [][]byte
 		var evs []*agentv1.Event

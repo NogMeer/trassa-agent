@@ -451,6 +451,8 @@ func (r *Reader) Poll(ctx context.Context, sub *Subscription, pos map[string]str
 			recs, np, m, err = r.pollFile(src, p, sub.MinLevel, leftRec, leftBytes)
 		case agentv1.LogSourceKind_LOG_SOURCE_KIND_DOCKER:
 			recs, np, m, err = r.pollDocker(ctx, src, p, sub.CreatedAtMs, sub.MinLevel, leftRec, leftBytes)
+		case agentv1.LogSourceKind_LOG_SOURCE_KIND_APP:
+			recs, np, m, err = r.pollApp(ctx, src, p, sub.CreatedAtMs, sub.MinLevel, leftRec, leftBytes)
 		case agentv1.LogSourceKind_LOG_SOURCE_KIND_SYSTEM, agentv1.LogSourceKind_LOG_SOURCE_KIND_SSH, agentv1.LogSourceKind_LOG_SOURCE_KIND_UNIT:
 			var extra []string
 			if had && p != "" {
@@ -489,6 +491,8 @@ func (r *Reader) Read(ctx context.Context, src *agentv1.LogSource, lines int, gr
 		recs, _, err = r.readFile(src, lines, grep)
 	case agentv1.LogSourceKind_LOG_SOURCE_KIND_DOCKER:
 		recs, err = r.readDocker(ctx, src, lines, grep)
+	case agentv1.LogSourceKind_LOG_SOURCE_KIND_APP:
+		recs, err = r.readApp(ctx, src, lines, grep)
 	case agentv1.LogSourceKind_LOG_SOURCE_KIND_SYSTEM, agentv1.LogSourceKind_LOG_SOURCE_KIND_SSH, agentv1.LogSourceKind_LOG_SOURCE_KIND_UNIT:
 		recs, _, _, err = r.journal(ctx, src, []string{"--lines=" + strconv.Itoa(lines)}, agentv1.LogLevel_LOG_LEVEL_DEBUG, lines, MaxReadBytes*2, grep)
 	default:
@@ -541,6 +545,19 @@ func (r *Reader) Open(sources []*agentv1.LogSource) ([]*agentv1.LogSourceStatus,
 			cancel()
 			if err != nil {
 				res.Reason = reason
+				break
+			}
+			res.Opened = true
+		case s.GetKind() == agentv1.LogSourceKind_LOG_SOURCE_KIND_APP:
+			// Контейнеров может ещё не быть (первый релиз идёт): источник открыт, если отвечает Docker.
+			ictx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			_, err := r.appContainers(ictx, s.GetName())
+			cancel()
+			if err != nil {
+				res.Reason = ReasonUnsupported
+				if !errors.Is(err, dockerapi.ErrNoDocker) && !errors.Is(err, errUnsupported) {
+					res.Reason = ReasonNotFound
+				}
 				break
 			}
 			res.Opened = true
@@ -671,16 +688,23 @@ func (r *Reader) pollDocker(ctx context.Context, src *agentv1.LogSource, pos str
 	if err != nil {
 		return nil, pos, false, err
 	}
+	mk := func(l dockerLine) *agentv1.LogRecord { return r.dockerRecord(src, l, id) }
+	return r.pollContainer(dctx, id, tty, pos, sinceMs, min, maxRec, maxBytes, mk)
+}
+
+// pollContainer — строки контейнера id после позиции «id@время» (чужая позиция — с sinceMs).
+func (r *Reader) pollContainer(ctx context.Context, id string, tty bool, pos string, sinceMs int64, min agentv1.LogLevel, maxRec, maxBytes int, mk func(dockerLine) *agentv1.LogRecord) ([]*agentv1.LogRecord, string, bool, error) {
 	since := time.UnixMilli(sinceMs)
 	var last time.Time
 	if pid, ts, ok := strings.Cut(pos, "@"); ok && pid == id {
-		if t, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+		// Позицию присылает агент: раньше начала подписки она не ведёт.
+		if t, err := time.Parse(time.RFC3339Nano, ts); err == nil && !t.Before(since) {
 			since, last = t, t
 		}
 	}
 	q := url.Values{"stdout": {"1"}, "stderr": {"1"}, "timestamps": {"1"},
 		"since": {strconv.FormatInt(since.Unix(), 10) + "." + fmt.Sprintf("%09d", since.Nanosecond())}}
-	resp, err := r.Docker.Get(dctx, "/containers/"+url.PathEscape(id)+"/logs?"+q.Encode())
+	resp, err := r.Docker.Get(ctx, "/containers/"+url.PathEscape(id)+"/logs?"+q.Encode())
 	if err != nil {
 		return nil, pos, false, err
 	}
@@ -708,7 +732,7 @@ func (r *Reader) pollDocker(ctx context.Context, src *agentv1.LogSource, pos str
 		if !passes(lvl, min) {
 			return true
 		}
-		rec := r.dockerRecord(src, l, id)
+		rec := mk(l)
 		out = append(out, rec)
 		size += recSize(rec)
 		return true
@@ -727,12 +751,17 @@ func (r *Reader) readDocker(ctx context.Context, src *agentv1.LogSource, lines i
 	if err != nil {
 		return nil, err
 	}
+	return r.readContainer(dctx, id, tty, lines, grep, func(l dockerLine) *agentv1.LogRecord { return r.dockerRecord(src, l, id) })
+}
+
+// readContainer — последние lines строк контейнера id с отбором grep (по последним 10 000 строкам).
+func (r *Reader) readContainer(ctx context.Context, id string, tty bool, lines int, grep string, mk func(dockerLine) *agentv1.LogRecord) ([]*agentv1.LogRecord, error) {
 	tail := lines
 	if grep != "" {
-		tail = 10000 // отбор идёт по последним 10 000 строкам
+		tail = 10000
 	}
 	q := url.Values{"stdout": {"1"}, "stderr": {"1"}, "timestamps": {"1"}, "tail": {strconv.Itoa(tail)}}
-	resp, err := r.Docker.Get(dctx, "/containers/"+url.PathEscape(id)+"/logs?"+q.Encode())
+	resp, err := r.Docker.Get(ctx, "/containers/"+url.PathEscape(id)+"/logs?"+q.Encode())
 	if err != nil {
 		return nil, err
 	}
@@ -742,8 +771,9 @@ func (r *Reader) readDocker(ctx context.Context, src *agentv1.LogSource, lines i
 	}
 	var keep []*agentv1.LogRecord
 	err = dockerLines(resp.Body, tty, func(l dockerLine) bool {
-		if grep == "" || strings.Contains(l.text, grep) {
-			keep = append(keep, r.dockerRecord(src, l, id))
+		// Отбор — по тексту после фильтра секретов: grep не должен проверять, есть ли в журнале значение секрета.
+		if grep == "" || strings.Contains(clean(l.text), grep) {
+			keep = append(keep, mk(l))
 			if len(keep) > lines {
 				keep = keep[1:]
 			}

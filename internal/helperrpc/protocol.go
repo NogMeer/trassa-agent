@@ -30,6 +30,7 @@ const (
 	MethodLogsPoll   = "logs.poll"   // новые записи журналов по действующей подписке (E08-T15)
 	MethodEventsPoll = "events.poll" // события детектора (E10-T7)
 	MethodWgStats    = "wg.stats"    // метрики пиров WireGuard (E14-T14)
+	MethodAppStats   = "app.stats"   // память и CPU приложений Trassa (E17-T24-R1)
 	// Терминал (E16): продление по подписанному SignedTerminalRenew и закрытие (сужение — без подписи).
 	MethodTerminalRenew = "terminal.renew"
 	MethodTerminalClose = "terminal.close"
@@ -47,6 +48,7 @@ const (
 	KindLogs     = "logs"
 	KindEvents   = "events"
 	KindWgStats  = "wg.stats"
+	KindAppStats = "app.stats"
 	// KindTerminal — терминал открыт: в кадре сведения, к кадру приложен дескриптор ведущей стороны PTY.
 	KindTerminal = "terminal"
 	KindOK       = "ok"

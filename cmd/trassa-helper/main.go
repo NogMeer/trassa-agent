@@ -174,6 +174,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 	}
 	sec := security.Real()
 	sec.Detector = &security.Detector{Sys: sec, Path: filepath.Join(p.HelperDir, "baseline.json"), Log: log}
+	dep := deployEnv(p)
 	ex := &helper.Executor{
 		Checker:   &helper.Checker{Keys: keys, ServerID: en.ServerID, Catalog: ops.Builtin(), Nonces: n},
 		States:    helper.States{Dir: p.OpsDir},
@@ -198,7 +199,8 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 			Docker: &dockerapi.Client{}, Run: backup.RunCommand, Look: backup.LookPath,
 		},
 		Access:   &access.Env{Root: "/", Run: backup.RunCommand},
-		Deploy:   deployEnv(p),
+		Deploy:   dep,
+		AppStats: &deploy.AppStats{Env: dep},
 		Remedy:   remedyEnv(p, sec),
 		VpnProbe: vpnProbeEnv(p),
 		Inspect:  &fsinspect.Env{Root: "/"},

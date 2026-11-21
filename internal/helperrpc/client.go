@@ -213,6 +213,13 @@ func (c *Client) WgStats(ctx context.Context) ([]byte, error) {
 	return r.Result, err
 }
 
+// AppStats — метрики приложений Trassa (MetricsBatch, protobuf): статистику Docker читает помощник (сокет Docker —
+// только root).
+func (c *Client) AppStats(ctx context.Context) ([]byte, error) {
+	r, err := c.call(ctx, Request{Method: MethodAppStats}, KindAppStats)
+	return r.Result, err
+}
+
 // TerminalRenew — передать подписанное продление терминала.
 func (c *Client) TerminalRenew(ctx context.Context, signed []byte) error {
 	_, err := c.call(ctx, Request{Method: MethodTerminalRenew, Signed: signed}, KindOK)

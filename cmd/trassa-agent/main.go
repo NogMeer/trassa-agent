@@ -124,6 +124,8 @@ func run(ctx context.Context, log *slog.Logger) int {
 	go events.PollHelper(ctx, hc, equeue, 15*time.Second, log)
 	// Метрики пиров приватной сети и события связей (E14-T14): устройство читает помощник.
 	go events.PollWg(ctx, hc, func(b *agentv1.MetricsBatch) { mbuf.Add(b) }, equeue, metrics.Interval, time.Now, log)
+	// Память и CPU приложений Trassa (E17-T24-R1): статистику Docker читает помощник.
+	go events.PollApps(ctx, hc, func(b *agentv1.MetricsBatch) { mbuf.Add(b) }, metrics.Interval, time.Now, log)
 	// Операции агента без прав (net.check): свои проверки 1–6 и своё окно nonce.
 	an, err := nonce.Open(p.AgentNonces, time.Now)
 	if err != nil {
