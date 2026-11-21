@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -92,35 +93,28 @@ func (r *Restic) env() ([]string, error) {
 }
 
 // sshArgs — для sftp: и rclone: своя команда ssh: ключ плана, свой known_hosts, только по ключу, без
-// переадресаций. Ключ хоста закреплён (known_hosts не пуст) — StrictHostKeyChecking=yes, иначе accept-new.
+// переадресаций. Ключ хоста только закреплённый (StrictHostKeyChecking=yes): пустой known_hosts — отказ, а не
+// accept-new. Порт из sftp://host:port идёт в -p: при sftp.command restic адрес не разбирает.
 // rclone: (цель SERVER) — rclone.program = ssh: на цели принудительная команда rclone serve restic
 // --append-only, аргументы с этой стороны не значат ничего.
 func (r *Restic) sshArgs() ([]string, error) {
-	var rest string
-	switch {
-	case strings.HasPrefix(r.Repo.URL, "sftp:"):
-		rest = strings.TrimPrefix(r.Repo.URL, "sftp:")
-	case strings.HasPrefix(r.Repo.URL, "rclone:"):
-		rest = strings.TrimPrefix(r.Repo.URL, "rclone:")
-	default:
+	if !strings.HasPrefix(r.Repo.URL, "sftp:") && !strings.HasPrefix(r.Repo.URL, "rclone:") {
 		return nil, nil
 	}
-	at := strings.IndexByte(rest, ':')
-	if at < 0 {
-		return nil, errors.New("адрес ssh")
+	user, host, port, err := SSHTarget(r.Repo.URL)
+	if err != nil {
+		return nil, fmt.Errorf("адрес ssh: %w", err)
 	}
-	userHost := rest[:at]
 	if r.SSHKey == "" || r.KnownHosts == "" {
 		return nil, errors.New("ssh: нет ключа плана")
 	}
-	strict := "accept-new"
-	if st, err := os.Stat(r.KnownHosts); err == nil && st.Size() > 0 {
-		strict = "yes"
+	if st, err := os.Stat(r.KnownHosts); err != nil || st.Size() == 0 {
+		return nil, fmt.Errorf("%w: ключ хоста цели не закреплён", ErrTargetPrecondition)
 	}
-	cmd := []string{"ssh", "-i", r.SSHKey, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
-		"-o", "UserKnownHostsFile=" + r.KnownHosts, "-o", "StrictHostKeyChecking=" + strict,
+	cmd := []string{"ssh", "-i", r.SSHKey, "-p", strconv.Itoa(port), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+		"-o", "UserKnownHostsFile=" + r.KnownHosts, "-o", "StrictHostKeyChecking=yes", "-o", "UpdateHostKeys=no",
 		"-o", "ServerAliveInterval=60", "-o", "ServerAliveCountMax=240",
-		"-o", "ClearAllForwardings=yes", userHost}
+		"-o", "ClearAllForwardings=yes", "--", user + "@" + host}
 	if strings.HasPrefix(r.Repo.URL, "sftp:") {
 		cmd = append(cmd, "-s", "sftp")
 	}

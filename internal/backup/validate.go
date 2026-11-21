@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -48,9 +49,12 @@ var (
 	sha256Re   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	unixUserRe = regexp.MustCompile(`^trassa-bk-[a-z0-9]{1,20}$`)
 	pubKeyRe   = regexp.MustCompile(`^ssh-ed25519 [A-Za-z0-9+/]{68}(?: [^\n\r\x00]{0,100})?$`)
-	rcloneRe   = regexp.MustCompile(`^rclone:[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9.-]{1,253}:[A-Za-z0-9/_.-]{1,256}$`)
+	rcloneRe   = regexp.MustCompile(`^rclone:([a-z_][a-z0-9_-]{0,31})@([A-Za-z0-9][A-Za-z0-9.-]{0,252}):[A-Za-z0-9/_.-]{1,256}$`)
 	hostKeyRe  = regexp.MustCompile(`^ssh-ed25519 [A-Za-z0-9+/]{68}$`)
-	sftpRe     = regexp.MustCompile(`^sftp:[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9.-]{1,253}:/[^\x00]+$`) // длина адреса — до 2048 (RepoURL)
+	// sftp:user@host:/path (порт 22) и sftp://user@host[:port]/path (как в restic; //path — абсолютный путь).
+	// Длина адреса — до 2048 (RepoURL).
+	sftpRe    = regexp.MustCompile(`^sftp:([a-z_][a-z0-9_-]{0,31})@([A-Za-z0-9][A-Za-z0-9.-]{0,252}):/[^\x00]+$`)
+	sftpURLRe = regexp.MustCompile(`^sftp://([a-z_][a-z0-9_-]{0,31})@([A-Za-z0-9][A-Za-z0-9.-]{0,252})(?::([0-9]{1,5}))?/[^\x00]+$`)
 )
 
 func hasControl(s string) bool {
@@ -144,6 +148,9 @@ func RepoURL(u string) error {
 		return httpURL(u[5:], "https", "http")
 	case sftpRe.MatchString(u), rcloneRe.MatchString(u):
 		return nil
+	case sftpURLRe.MatchString(u):
+		_, _, _, err := SSHTarget(u)
+		return err
 	}
 	return errors.New("адрес репозитория")
 }
@@ -211,6 +218,10 @@ func ValidateInit(p *agentv1.BackupInitParams) error {
 	}
 	if k := p.GetSshHostKey(); k != "" && !hostKeyRe.MatchString(k) {
 		return errors.New("ssh_host_key")
+	}
+	// Ключ хоста только закреплённый: без него ssh-цель не принимается (никакого accept-new).
+	if _, _, _, err := SSHTarget(p.GetRepo().GetUrl()); err == nil && !p.GetSshKeypair() && p.GetSshHostKey() == "" {
+		return errors.New("ssh_host_key: обязателен для sftp и rclone")
 	}
 	return nil
 }
@@ -379,6 +390,9 @@ func ValidateRestore(p *agentv1.BackupRestoreParams) error {
 	if k := p.GetSshHostKey(); k != "" && !hostKeyRe.MatchString(k) {
 		return errors.New("ssh_host_key")
 	}
+	if _, _, _, err := SSHTarget(p.GetRepo().GetUrl()); err == nil && p.GetSshHostKey() == "" {
+		return errors.New("ssh_host_key: обязателен для sftp и rclone")
+	}
 	if other {
 		if err := checkPath(p.GetDestPath()); err != nil {
 			return err
@@ -533,3 +547,31 @@ func ValidateTargetRemove(p *agentv1.BackupTargetRemoveParams) error {
 
 // ValidateUnconfigure — backup.unconfigure.
 func ValidateUnconfigure(p *agentv1.BackupUnconfigureParams) error { return checkPlan(p.GetPlanId()) }
+
+// SSHTarget — пользователь, хост и порт ssh-адреса репозитория (sftp:, sftp://, rclone:); иное — ошибка.
+func SSHTarget(u string) (user, host string, port int, err error) {
+	port = 22
+	if m := sftpURLRe.FindStringSubmatch(u); m != nil {
+		user, host = m[1], m[2]
+		if m[3] != "" {
+			if port, err = strconv.Atoi(m[3]); err != nil || port < 1 || port > 65535 {
+				return "", "", 0, errors.New("порт sftp: 1–65535")
+			}
+		}
+		return user, host, port, nil
+	}
+	for _, re := range []*regexp.Regexp{sftpRe, rcloneRe} {
+		if m := re.FindStringSubmatch(u); m != nil {
+			return m[1], m[2], port, nil
+		}
+	}
+	return "", "", 0, errors.New("не ssh-адрес")
+}
+
+// KnownHostsName — имя хоста в known_hosts: host для 22, [host]:port для прочих портов (sshd(8), ssh_known_hosts).
+func KnownHostsName(host string, port int) string {
+	if port == 22 {
+		return host
+	}
+	return "[" + host + "]:" + strconv.Itoa(port)
+}

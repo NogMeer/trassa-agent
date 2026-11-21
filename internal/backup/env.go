@@ -343,13 +343,14 @@ func (e *Env) PinHostKey(planID, repoURL, key string) error {
 }
 
 func pinHostKey(d, repoURL, key string) error {
-	rest := strings.TrimPrefix(strings.TrimPrefix(repoURL, "sftp:"), "rclone:")
-	at, colon := strings.IndexByte(rest, '@'), strings.IndexByte(rest, ':')
-	if rest == repoURL || at < 0 || colon < at {
+	_, host, port, err := SSHTarget(repoURL)
+	if err != nil {
 		return errors.New("ключ хоста — только для адресов sftp и rclone")
 	}
-	host := rest[at+1 : colon]
-	return fsutil.WriteFileAtomic(filepath.Join(d, knownHostsFile), []byte(host+" "+key+"\n"), 0o600, fsutil.Keep)
+	if !hostKeyRe.MatchString(key) {
+		return errors.New("ключ хоста: ssh-ed25519")
+	}
+	return fsutil.WriteFileAtomic(filepath.Join(d, knownHostsFile), []byte(KnownHostsName(host, port)+" "+key+"\n"), 0o600, fsutil.Keep)
 }
 
 // RestoreKeyDir — ключи получателя для восстановления на другой сервер: <Store.Dir>/../backup-restore/<plan>

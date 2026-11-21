@@ -224,6 +224,7 @@ func TestRemoteRestoreOnReceiver(t *testing.T) {
 	wrong, _ := secretkey.Seal(k.Public(), secretkey.Info(bad.GetServerId(), k.ID, bad.GetOperationId(), "backup.init", testPlan, "password"), []byte("x"))
 	bp := bad.GetParams().GetBackupRestore()
 	bp.Repo, bp.Restic = &agentv1.BackupRepo{Url: "rclone:trassa-bkr-a1@10.0.0.2:repo", Password: wrong}, p.Restic
+	bp.SshHostKey = p.SshHostKey
 	if o := f.exec(sealed(bad)); o.result.GetErrorCode() != "SECRET_INVALID" {
 		t.Fatalf("чужой секрет: %+v", o.result)
 	}

@@ -249,16 +249,60 @@ func TestResticEnvAndArgs(t *testing.T) {
 
 func TestResticSFTPCommand(t *testing.T) {
 	f := newFake(t)
+	key := "ssh-ed25519 " + strings.Repeat("A", 68)
 	r := f.restic("sftp:trassa-bk-a1@10.0.0.2:/repo", nil)
 	f.on("snapshots", "[]", 0)
+	// Ключ хоста не закреплён — отказ, без accept-new.
+	if _, err := Snapshots(context.Background(), r); !errors.Is(err, ErrTargetPrecondition) {
+		t.Fatalf("без ключа хоста: %v", err)
+	}
+	if err := pinHostKey(f.dir, r.Repo.URL, key); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := Snapshots(context.Background(), r); err != nil {
 		t.Fatal(err)
 	}
-	c := f.calls()[0]
-	for _, want := range []string{"sftp.command=ssh -i " + r.SSHKey, "UserKnownHostsFile=" + r.KnownHosts, "BatchMode=yes", "trassa-bk-a1@10.0.0.2 -s sftp"} {
+	c := f.calls()[len(f.calls())-1]
+	for _, want := range []string{"sftp.command=ssh -i " + r.SSHKey + " -p 22", "UserKnownHostsFile=" + r.KnownHosts, "BatchMode=yes",
+		"StrictHostKeyChecking=yes", "-- trassa-bk-a1@10.0.0.2 -s sftp"} {
 		if !strings.Contains(c, want) {
 			t.Errorf("нет %q в %s", want, c)
 		}
+	}
+	if strings.Contains(c, "accept-new") {
+		t.Fatal("accept-new")
+	}
+
+	// Свой SFTP с портом: -p и [host]:port в known_hosts.
+	r2 := f.restic("sftp://backup@sftp.example.com:2222//srv/restic", nil)
+	if err := RepoURL(r2.Repo.URL); err != nil {
+		t.Fatal(err)
+	}
+	if err := pinHostKey(f.dir, r2.Repo.URL, key); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(r2.KnownHosts)
+	if string(raw) != "[sftp.example.com]:2222 "+key+"\n" {
+		t.Fatalf("known_hosts: %q", raw)
+	}
+	if _, err := Snapshots(context.Background(), r2); err != nil {
+		t.Fatal(err)
+	}
+	c = f.calls()[len(f.calls())-1]
+	if !strings.Contains(c, "-p 2222") || !strings.Contains(c, "-- backup@sftp.example.com -s sftp") {
+		t.Errorf("порт: %s", c)
+	}
+	for _, bad := range []string{"sftp://backup@sftp.example.com:0//r", "sftp://backup@sftp.example.com:70000//r",
+		"sftp://backup@-oProxyCommand:22//r", "sftp://Backup@h.example:22//r", "sftp://backup@h.example:22"} {
+		if RepoURL(bad) == nil {
+			t.Errorf("%s принят", bad)
+		}
+	}
+	if u, h, p, err := SSHTarget("sftp://backup@h.example//r"); err != nil || u != "backup" || h != "h.example" || p != 22 {
+		t.Errorf("без порта: %s %s %d %v", u, h, p, err)
+	}
+	if KnownHostsName("h", 22) != "h" || KnownHostsName("h", 2222) != "[h]:2222" {
+		t.Error("KnownHostsName")
 	}
 }
 
@@ -587,6 +631,16 @@ func TestValidateTargetTools(t *testing.T) {
 	if ValidateInit(init) == nil {
 		t.Fatal("ключ хоста не ed25519 принят")
 	}
+	// Своему SFTP ключ хоста обязателен; с ним — принят, в том числе с портом.
+	init.ResticSha256, init.ResticUrl = KnownTools["restic"]["0.20.0"][runtime.GOARCH], "https://github.com/restic/restic/releases/download/v0.20.0/restic_0.20.0_linux_amd64.bz2"
+	init.Repo.Url, init.SshHostKey = "sftp://backup@sftp.example.com:2222//srv/restic", ""
+	if ValidateInit(init) == nil {
+		t.Fatal("sftp без ключа хоста принят")
+	}
+	init.SshHostKey = "ssh-ed25519 " + strings.Repeat("A", 68)
+	if err := ValidateInit(init); err != nil {
+		t.Fatalf("sftp с портом и ключом: %v", err)
+	}
 }
 
 // rclone: — restic ходит к цели через ssh с ключом плана; ключ хоста закреплён — StrictHostKeyChecking=yes.
@@ -594,11 +648,14 @@ func TestResticRcloneTarget(t *testing.T) {
 	f := newFake(t)
 	r := f.restic("rclone:trassa-bk-a1@10.0.0.2:repo", nil)
 	f.on("snapshots", "[]", 0)
+	if err := pinHostKey(f.dir, r.Repo.URL, "ssh-ed25519 "+strings.Repeat("B", 68)); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := Snapshots(context.Background(), r); err != nil {
 		t.Fatal(err)
 	}
 	c := f.calls()[0]
-	for _, want := range []string{"rclone.program=ssh -i " + r.SSHKey, "StrictHostKeyChecking=accept-new", "trassa-bk-a1@10.0.0.2", "rclone.args=serve restic --stdio"} {
+	for _, want := range []string{"rclone.program=ssh -i " + r.SSHKey, "StrictHostKeyChecking=yes", "trassa-bk-a1@10.0.0.2", "rclone.args=serve restic --stdio"} {
 		if !strings.Contains(c, want) {
 			t.Errorf("нет %q в %s", want, c)
 		}
