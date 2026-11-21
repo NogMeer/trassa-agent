@@ -281,17 +281,6 @@ func (e *Executor) applyReboot(ctx context.Context, r *run) *agentv1.OperationRe
 	return r.succeeded(fmt.Sprintf("Перезагрузка через %d с", int(d.Seconds())))
 }
 
-func (e *Executor) applyServiceRestart(ctx context.Context, r *run) *agentv1.OperationResult {
-	if e.Security == nil {
-		return r.failed(CodeSecurityUnavailable, "проверки безопасности на этой сборке не выполняются")
-	}
-	unit := r.body.GetParams().GetServiceRestart().GetUnit()
-	if err := security.RestartService(ctx, e.Security, unit); err != nil {
-		return r.failed(CodeRestartFailed, err.Error())
-	}
-	return r.succeeded(unit + " перезапущена и работает")
-}
-
 // CodeBaselineUnknown — отпечатка нет среди ожидающих объектов детектора.
 const CodeBaselineUnknown = "BASELINE_UNKNOWN"
 

@@ -361,3 +361,40 @@ func (e *Env) Remove(ctx context.Context, p *agentv1.DeployRemoveParams) (*agent
 func (e *Env) Rollback(ctx context.Context, j ReleaseJob) (*agentv1.DeployReleaseResult, bool, error) {
 	return e.Release(ctx, j)
 }
+
+// ProxyHosts — имена маршрутов прокси Trassa (их сертификаты выпускает Caddy; cert.renew E18 их не трогает).
+func (e *Env) ProxyHosts() []string {
+	st, err := e.LoadProxy()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, recs := range st.Apps {
+		for _, r := range recs {
+			out = append(out, r.Hosts...)
+		}
+	}
+	return out
+}
+
+// ReleaseImages — образы релизов всех приложений Trassa (точки отката; disk.cleanup E18 их не удаляет).
+func (e *Env) ReleaseImages() map[string]bool {
+	out := map[string]bool{}
+	ents, err := os.ReadDir(e.AppsDir)
+	if err != nil {
+		return out
+	}
+	for _, d := range ents {
+		if !d.IsDir() {
+			continue
+		}
+		st, err := e.loadApp(d.Name())
+		if err != nil {
+			continue
+		}
+		for _, img := range st.Images {
+			out[img] = true
+		}
+	}
+	return out
+}

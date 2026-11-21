@@ -4,6 +4,7 @@ package ops
 
 import (
 	"errors"
+	"github.com/NogMeer/trassa-agent/internal/remedy"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/security"
@@ -19,6 +20,9 @@ const (
 	TypePackagesUpgrade     = "packages.upgrade"
 	TypeSystemReboot        = "system.reboot"
 	TypeServiceRestart      = "service.restart"
+	TypeServiceStart        = "service.start"
+	TypeDiskCleanup         = "disk.cleanup"
+	TypeCertRenew           = "cert.renew"
 	TypeBaselineAccept      = "security.baseline.accept"
 )
 
@@ -80,6 +84,26 @@ func securitySpecs() []Spec {
 			Validate: func(b *agentv1.OperationBody) error {
 				return security.ValidateServiceRestart(b.GetParams().GetServiceRestart())
 			},
+		},
+		// E18: запуск остановленной службы или контейнера (те же параметры и проверки, что у перезапуска).
+		{
+			Type: TypeServiceStart, Class: Change, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+			match: func(p *agentv1.OperationParams) bool { return p.GetServiceStart() != nil },
+			Validate: func(b *agentv1.OperationBody) error {
+				return security.ValidateServiceRestart(b.GetParams().GetServiceStart())
+			},
+		},
+		// E18: только восстановимое (журнал, кэш apt, неиспользуемые образы и кэш сборки), отката нет.
+		{
+			Type: TypeDiskCleanup, Class: Change, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,
+			match:    func(p *agentv1.OperationParams) bool { return p.GetDiskCleanup() != nil },
+			Validate: func(b *agentv1.OperationBody) error { return remedy.ValidateCleanup(b.GetParams().GetDiskCleanup()) },
+		},
+		// E18: продление сертификата certbot; CONFIG — настройки продления и прежние ссылки live/<имя>.
+		{
+			Type: TypeCertRenew, Class: Change, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_CONFIG,
+			match:    func(p *agentv1.OperationParams) bool { return p.GetCertRenew() != nil },
+			Validate: func(b *agentv1.OperationBody) error { return remedy.ValidateCertRenew(b.GetParams().GetCertRenew()) },
 		},
 		{
 			Type: TypeFirewallPlan, Class: Read, Rollback: agentv1.RollbackKind_ROLLBACK_KIND_NONE,

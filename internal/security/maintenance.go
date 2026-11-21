@@ -20,11 +20,28 @@ import (
 // MaxRebootDelay — предел отложенной перезагрузки.
 const MaxRebootDelay = 3600
 
+// containerNameRe — имя контейнера Docker (как у docker create --name).
+var containerNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+
 var serviceNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@._:-]{0,199}\.service$`)
 
 // ValidateServiceRestart — служба с суффиксом .service; службы самой Trassa перезапускать операцией нельзя
 // (помощник оборвал бы свою же операцию).
 func ValidateServiceRestart(p *agentv1.ServiceRestartParams) error {
+	switch p.GetKind() {
+	case agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_CONTAINER:
+		// E18: контейнер по имени; контейнеры Trassa отклоняет помощник по меткам.
+		if p.GetUnit() != "" || !containerNameRe.MatchString(p.GetContainer()) {
+			return fmt.Errorf("container %q: имя контейнера Docker, без unit", p.GetContainer())
+		}
+		return nil
+	case agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_UNSPECIFIED, agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_SYSTEMD:
+		if p.GetContainer() != "" {
+			return errors.New("container — только для вида CONTAINER")
+		}
+	default:
+		return errors.New("kind")
+	}
 	u := p.GetUnit()
 	if !serviceNameRe.MatchString(u) {
 		return fmt.Errorf("unit %q: имя службы systemd с суффиксом .service", u)
@@ -140,21 +157,3 @@ func VerifyUpgrade(ctx context.Context, sys *System, before []string) error {
 
 // upgradePoll — шаг ожидания служб (переменная: тест сокращает).
 var upgradePoll = time.Second
-
-// RestartService перезапускает службу и ждёт, что она активна (до 10 с).
-func RestartService(ctx context.Context, sys *System, unit string) error {
-	if out, err := sys.run(ctx, "systemctl", "restart", "--", unit); err != nil {
-		return fmt.Errorf("systemctl restart %s: %v %s", unit, err, tail(out))
-	}
-	for i := 0; i < 10; i++ {
-		if unitActive(ctx, sys, unit) {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(upgradePoll):
-		}
-	}
-	return fmt.Errorf("%s не активна после перезапуска", unit)
-}

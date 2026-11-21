@@ -26,6 +26,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/nonce"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/redact"
+	"github.com/NogMeer/trassa-agent/internal/remedy"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
 	secretkey "github.com/NogMeer/trassa-agent/internal/sealed"
 	"github.com/NogMeer/trassa-agent/internal/security"
@@ -102,6 +103,8 @@ type Executor struct {
 	Terminals *Terminals
 	// Deploy — деплой (E17); nil — DEPLOY_UNAVAILABLE.
 	Deploy *deploy.Env
+	// Remedy — исправления E18 (service.restart/start, disk.cleanup, cert.renew).
+	Remedy *remedy.Env
 
 	once     sync.Once
 	handlers map[string]handler
@@ -117,6 +120,8 @@ type Executor struct {
 type handler struct {
 	preview func(ctx context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult)
 	apply   func(ctx context.Context, r *run) *agentv1.OperationResult
+	// dry — предпросмотр с данными итога (оценка disk.cleanup, состояние службы); задан — вместо preview.
+	dry func(ctx context.Context, r *run) *agentv1.OperationResult
 }
 
 // run — одна операция в работе.
@@ -549,6 +554,9 @@ func (r *run) perform(ctx context.Context) *agentv1.OperationResult {
 	}
 	if r.body.GetDryRun() {
 		r.phase = agentv1.OperationPhase_OPERATION_PHASE_PREVIEW
+		if h.dry != nil {
+			return h.dry(ctx, r)
+		}
 		if h.preview == nil {
 			res := r.succeeded("")
 			res.Preview = &agentv1.Preview{Summary: "Только чтение: ничего не изменится"}

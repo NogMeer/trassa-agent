@@ -52,7 +52,6 @@ func (e *Executor) builtinHandlers() map[string]handler {
 	h[ops.TypeFirewallPlan] = handler{apply: e.applyFirewallPlan}
 	h[ops.TypePackagesUpgrade] = handler{preview: e.previewUpgrade, apply: e.applyUpgrade}
 	h[ops.TypeSystemReboot] = handler{preview: e.previewReboot, apply: e.applyReboot}
-	h[ops.TypeServiceRestart] = handler{apply: e.applyServiceRestart}
 	h[ops.TypeBaselineAccept] = handler{apply: e.applyBaselineAccept}
 	h[ops.TypeWireguardInspect] = handler{apply: e.applyWgInspect}
 	h[ops.TypeWireguardKeygen] = handler{apply: e.applyWgKeygen}
@@ -61,6 +60,9 @@ func (e *Executor) builtinHandlers() map[string]handler {
 	h[ops.TypeFirewallApply] = handler{preview: e.previewFirewallApply, apply: e.applyFirewallApply}
 	for _, code := range security.FixCodes() {
 		h[ops.FixPrefix+code] = handler{preview: e.previewFix, apply: e.applyFix}
+	}
+	for t, x := range e.remedyHandlers() {
+		h[t] = x
 	}
 	for t, x := range e.deployHandlers() {
 		h[t] = x

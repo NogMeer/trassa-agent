@@ -63,17 +63,20 @@ func TestServiceRestart(t *testing.T) {
 	if err := ValidateServiceRestart(&agentv1.ServiceRestartParams{Unit: "nginx.service"}); err != nil {
 		t.Fatal(err)
 	}
-	sys := build(t, tree{})
-	rec := &recorder{out: map[string]string{"systemctl restart": "", "systemctl is-active nginx.service": "active\n"}}
-	sys.Run = rec.run
-	if err := RestartService(context.Background(), sys, "nginx.service"); err != nil {
-		t.Fatal(err)
+	// E18: контейнер — только имя контейнера и без unit; unit — без container.
+	for name, p := range map[string]*agentv1.ServiceRestartParams{
+		"контейнер без имени":  {Kind: agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_CONTAINER},
+		"контейнер и unit":     {Kind: agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_CONTAINER, Container: "web", Unit: "nginx.service"},
+		"имя с /":              {Kind: agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_CONTAINER, Container: "../web"},
+		"unit и container":     {Unit: "nginx.service", Container: "web"},
+		"неизвестный вид цели": {Kind: 9, Unit: "nginx.service"},
+	} {
+		if ValidateServiceRestart(p) == nil {
+			t.Errorf("%s: принято", name)
+		}
 	}
-	old := upgradePoll
-	upgradePoll = time.Millisecond
-	t.Cleanup(func() { upgradePoll = old })
-	if err := RestartService(context.Background(), sys, "redis.service"); err == nil {
-		t.Fatal("неактивная служба принята")
+	if err := ValidateServiceRestart(&agentv1.ServiceRestartParams{Kind: agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_CONTAINER, Container: "web_1"}); err != nil {
+		t.Fatal(err)
 	}
 }
 

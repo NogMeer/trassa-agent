@@ -37,8 +37,10 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/helper"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/logsrc"
+	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/nonce"
 	"github.com/NogMeer/trassa-agent/internal/ops"
+	"github.com/NogMeer/trassa-agent/internal/remedy"
 	"github.com/NogMeer/trassa-agent/internal/rollback"
 	"github.com/NogMeer/trassa-agent/internal/sealed"
 	"github.com/NogMeer/trassa-agent/internal/security"
@@ -194,6 +196,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		},
 		Access: &access.Env{Root: "/", Run: backup.RunCommand},
 		Deploy: deployEnv(p),
+		Remedy: remedyEnv(p, sec),
 		Terminals: &helper.Terminals{Units: terminal.Systemd{}, OpenPTY: terminal.OpenPTY, Locales: func(ctx context.Context) []string {
 			out, _ := backup.RunCommand(ctx, "locale", "-a")
 			return strings.Fields(string(out))
@@ -279,6 +282,11 @@ func serve(ctx context.Context, log *slog.Logger) error {
 			log.Warn("приватная сеть: синхронизация при старте", "err", err)
 		}
 	}
+	// Падение контейнеров и срок сертификатов certbot (E18): события — агенту через опрос событий.
+	if ex.Remedy != nil {
+		w := &remedy.Watcher{Env: ex.Remedy}
+		go w.Run(ctx, time.Minute, 6*time.Hour, ex.PushEvent)
+	}
 	// Детектор (E10-T7) наблюдает, пока работает помощник.
 	if ex.Security != nil && ex.Security.Detector != nil {
 		go ex.Security.Detector.Run(ctx)
@@ -353,4 +361,29 @@ func deployEnv(p config.Paths) *deploy.Env {
 	return &deploy.Env{Root: "/", Docker: &dockerapi.Client{}, Run: backup.RunCommand,
 		Stage: func(op string) string { return helper.StageDir(p, op) }, StateDir: filepath.Join(p.StateDir, "deploy"),
 		AppsDir: filepath.Join(p.StateDir, "apps"), BuildDir: filepath.Join(p.StateDir, "build")}
+}
+
+// remedyEnv — исправления E18: прокси и образы релизов Trassa берутся из состояния деплоя.
+func remedyEnv(p config.Paths, sec *security.System) *remedy.Env {
+	d := deployEnv(p)
+	return &remedy.Env{Root: "/", Run: backup.RunCommand, Docker: &dockerapi.Client{},
+		ProxyHosts: d.ProxyHosts, TrassaImages: d.ReleaseImages,
+		Free: func(path string) (uint64, error) {
+			fs, err := metrics.New().Statfs(path)
+			if err != nil {
+				return 0, err
+			}
+			return fs.Bavail * uint64(fs.Bsize), nil
+		},
+		PackagesBusy: func(context.Context) string {
+			h, err := security.PackageManagerBusy(sec)
+			if err != nil {
+				return "блокировка не проверена: " + err.Error()
+			}
+			if h != nil {
+				return h.String()
+			}
+			return ""
+		},
+	}
 }
