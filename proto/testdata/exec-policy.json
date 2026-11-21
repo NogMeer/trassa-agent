@@ -2261,6 +2261,145 @@
     "/var/lib/dpkg/status"
    ],
    "code": "EXEC_PACKAGE_DB"
+  },
+  {
+   "argv": [
+    "cat",
+    "/etc/hos\u202ets"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "cat",
+    "\u202a/etc/hosts"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "cat",
+    "\u202b/etc/hosts"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "cat",
+    "\u202c/etc/hosts"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "cat",
+    "\u202d/etc/hosts"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "\u2066x\u2069"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "\u2067x"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "\u2068x"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\u200bb"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\u200db"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "\ufeffa"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\u00adb"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\u2060b"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\u0085b"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\u009bb"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\u0080b"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\u2028b"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "a\u2029b"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "l\u200bs"
+   ],
+   "code": "EXEC_UNPARSEABLE"
+  },
+  {
+   "argv": [
+    "ls",
+    "\udb40\udc41"
+   ],
+   "code": "EXEC_UNPARSEABLE"
   }
  ],
  "allowed": [
@@ -2845,6 +2984,26 @@
     "dpkg",
     "-L",
     "nginx"
+   ]
+  },
+  {
+   "argv": [
+    "echo",
+    "привет мир"
+   ]
+  },
+  {
+   "argv": [
+    "ls",
+    "/srv/файлы"
+   ]
+  },
+  {
+   "argv": [
+    "grep",
+    "-r",
+    "日本語",
+    "/etc/nginx"
    ]
   }
  ]

@@ -5,7 +5,8 @@
 // Первый слой — сама форма: exec.run получает argv и запускает программу напрямую (execve), без sh -c, поэтому
 // конвейеров, подстановок, перенаправлений и шаблонов нет. Здесь — правила над argv (та же функция живёт в панели,
 // apps/api/src/modules/ai/operator/policy/exec-policy.ts, общий набор — proto/testdata/exec-policy.json):
-//   - форма слов: 1–64, вместе до 2000 знаков UTF-16, без управляющих знаков и «$» (systemd подставляет $VAR
+//   - форма слов: 1–64, вместе до 2000 знаков UTF-16, без знаков Cc и Cf (C1, смена направления, невидимые),
+//     U+2028, U+2029 и «$» (systemd подставляет $VAR
 //     и ${VAR} в ExecStart, до 254 это не выключить); программа — абсолютный путь или имя без «/» и шаблонов;
 //   - программы, которые сами выполняют чужой код или команду (оболочки, интерпретаторы, обёртки вроде sudo, env,
 //     nice, xargs, find -exec, менеджеры пакетов языков, git, make…), — EXEC_RUNS_COMMANDS;
@@ -21,7 +22,9 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // Коды запрета (как ExecDenyCode панели).
@@ -80,9 +83,14 @@ func CheckShape(argv []string) Verdict {
 	total := 0
 	for _, w := range argv {
 		total += utf16Len(w) + 1
+		if !utf8.ValidString(w) {
+			return deny(Unparseable, "argv is not UTF-8")
+		}
 		for _, r := range w {
-			if r < 0x20 || r == 0x7f || r == '$' {
-				return deny(Unparseable, "control character or $ in argv")
+			// Как панель: управляющие (Cc, включая C1), невидимые и меняющие направление текста (Cf) и разделители
+			// строк — человек при подтверждении должен видеть ровно то, что запустится.
+			if r == '$' || unicode.Is(unicode.Cc, r) || unicode.Is(unicode.Cf, r) || r == 0x2028 || r == 0x2029 {
+				return deny(Unparseable, "control, invisible or bidi character or $ in argv")
 			}
 		}
 	}
