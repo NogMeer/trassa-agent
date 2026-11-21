@@ -49,6 +49,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/terminal"
 	"github.com/NogMeer/trassa-agent/internal/uninstall"
 	"github.com/NogMeer/trassa-agent/internal/update"
+	"github.com/NogMeer/trassa-agent/internal/vpnprobe"
 	"github.com/NogMeer/trassa-agent/internal/wireguard"
 )
 
@@ -194,9 +195,10 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 			WorkDir: p.BackupWorkDir, StatusPath: filepath.Join(p.BackupWorkDir, "status.json"),
 			Docker: &dockerapi.Client{}, Run: backup.RunCommand, Look: backup.LookPath,
 		},
-		Access: &access.Env{Root: "/", Run: backup.RunCommand},
-		Deploy: deployEnv(p),
-		Remedy: remedyEnv(p, sec),
+		Access:   &access.Env{Root: "/", Run: backup.RunCommand},
+		Deploy:   deployEnv(p),
+		Remedy:   remedyEnv(p, sec),
+		VpnProbe: vpnProbeEnv(p),
 		Terminals: &helper.Terminals{Units: terminal.Systemd{}, OpenPTY: terminal.OpenPTY, Locales: func(ctx context.Context) []string {
 			out, _ := backup.RunCommand(ctx, "locale", "-a")
 			return strings.Fields(string(out))
@@ -239,6 +241,12 @@ func serve(ctx context.Context, log *slog.Logger) error {
 	}
 	// Терминалы прошлого запуска без таймеров продления жить не должны (decisions E16, 9.3).
 	ex.StopOrphanTerminals(ctx)
+	// Каталоги замеров прошлого запуска (в них тестовый доступ) не остаются на диске.
+	if ex.VpnProbe != nil {
+		if err := ex.VpnProbe.Cleanup(); err != nil {
+			log.Error("trassa-helper: каталоги замеров не удалены", "err", err)
+		}
+	}
 	// Бэкап в режиме STOP прервался (падение помощника) — контейнеры с томом не остаются остановленными.
 	if ex.Backup != nil {
 		if err := ex.Backup.RestartStopped(ctx); err != nil {
@@ -364,6 +372,55 @@ func deployEnv(p config.Paths) *deploy.Env {
 }
 
 // remedyEnv — исправления E18: прокси и образы релизов Trassa берутся из состояния деплоя.
+// vpnProbeEnv — точка замера (E25): движки в /var/lib/trassa/vpn-probe, доступ замера — в /run/trassa-vpnprobe.
+// Движку скрыты каталоги Trassa (ключ агента, сокет помощника, секреты бэкапов) и соседние замеры.
+func vpnProbeEnv(p config.Paths) *vpnprobe.Env {
+	dir := filepath.Join(p.StateDir, "vpn-probe")
+	run := "/run/trassa-vpnprobe"
+	var d net.Dialer
+	return &vpnprobe.Env{
+		Dir: dir, RunDir: run,
+		Sandbox: vpnprobe.Systemd{SystemdRun: "/usr/bin/systemd-run", Systemctl: "/usr/bin/systemctl", User: config.ProbeUserName,
+			Hidden: []string{p.StateDir, p.EtcDir, p.RunDir, p.CacheDir, run}, EngineDir: dir},
+		Owner:      probeUser,
+		EnsureUser: ensureProbeUser,
+		LookupIP: func(ctx context.Context, h string) ([]net.IP, error) {
+			return net.DefaultResolver.LookupIP(ctx, "ip", h)
+		},
+		DialEntry: func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) },
+	}
+}
+
+// probeUser — uid и gid пользователя движка; совпадение с root или trassa — отказ (иначе скрытие не действует).
+func probeUser() (int, int, error) {
+	u, err := user.Lookup(config.ProbeUserName)
+	if err != nil {
+		return -1, -1, fmt.Errorf("пользователь %s: %w", config.ProbeUserName, err)
+	}
+	uid, err1 := strconv.Atoi(u.Uid)
+	gid, err2 := strconv.Atoi(u.Gid)
+	auid, agid, aerr := agentUser()
+	if err1 != nil || err2 != nil || aerr != nil || uid == 0 || gid == 0 || uid == auid || gid == agid {
+		return -1, -1, fmt.Errorf("пользователь %s: uid %s gid %s совпадает с root или %s", config.ProbeUserName, u.Uid, u.Gid, config.UserName)
+	}
+	return uid, gid, nil
+}
+
+// ensureProbeUser — системный пользователь движка без дома и оболочки, как trassa в установщике.
+func ensureProbeUser(ctx context.Context) error {
+	if _, err := user.Lookup(config.ProbeUserName); err == nil {
+		_, _, err := probeUser()
+		return err
+	}
+	out, err := backup.RunCommand(ctx, "/usr/sbin/useradd", "--system", "--user-group", "--no-create-home",
+		"--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", config.ProbeUserName)
+	if err != nil {
+		return fmt.Errorf("useradd: %v %s", err, strings.TrimSpace(string(out)))
+	}
+	_, _, err = probeUser()
+	return err
+}
+
 func remedyEnv(p config.Paths, sec *security.System) *remedy.Env {
 	d := deployEnv(p)
 	return &remedy.Env{Root: "/", Run: backup.RunCommand, Docker: &dockerapi.Client{},

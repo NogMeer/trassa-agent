@@ -58,7 +58,8 @@ func TestRunPurge(t *testing.T) {
 	}
 	// Сначала помощник снимает приватную сеть Trassa (E14), пока его бинарник на месте.
 	want := []string{filepath.Join(p.BinDir, "trassa-helper") + " wireguard-purge",
-		"/usr/bin/systemctl disable --now trassa-agent.service trassa-helper.service", "/usr/bin/systemctl daemon-reload", "/usr/sbin/userdel trassa"}
+		"/usr/bin/systemctl disable --now trassa-agent.service trassa-helper.service", "/usr/bin/systemctl daemon-reload", "/usr/sbin/userdel trassa",
+		"/usr/sbin/userdel trassa-vpnprobe"}
 	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("%v", calls)
 	}

@@ -275,7 +275,7 @@ func TestCatalogNotConfigurable(t *testing.T) {
 		"security.fix.PERM_USER_SSH_DIR", "security.fix.PERM_WORLD_WRITABLE", "security.fix.SSH_CONFIG_PERMS", "security.fix.SYSCTL_NETWORK",
 		"security.fix.TIME_SYNC_OFF", "security.fix.UPDATES_AUTO_DISABLED", "security.fix.USER_EMPTY_PASSWORD", "security.fix.USER_SERVICE_SHELL",
 		"security.scan", "service.restart", "service.start", "ssh.harden", "sshca.trust", "sshca.untrust", "system.info", "system.inventory", "system.reboot", "terminal.open",
-		"wireguard.apply", "wireguard.inspect", "wireguard.keygen", "wireguard.remove"}
+		"vpn.probe.ensure", "vpn.probe.run", "wireguard.apply", "wireguard.inspect", "wireguard.keygen", "wireguard.remove"}
 	if ops.TestOps {
 		want = append(want, "test.config_write")
 		sort.Strings(want)

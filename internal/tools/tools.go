@@ -39,6 +39,11 @@ var Known = map[string]map[string]map[string]string{
 		"amd64": "7758048ad38e580f22559603312874fec8bb638d021a9e64182385fc17cc12a2",
 		"arm64": "15861535d14e26555736b49376c95e14bfd94285366c8446bfac7156a972e76f",
 	}},
+	// E25: движок точки замера; sha256 архивов из .dgst выпуска совпали с посчитанными по скачанным архивам.
+	"xray": {"26.10.31": {
+		"amd64": "e4bd9119f50ae7c41658b1abd0679ae06f98bd864a2907ff33f2f2cf7081b214",
+		"arm64": "1811c8f1da0c3b6dc707ebaf1c8390e987ba39859a8f0a7aadd8526157f2ec8d",
+	}},
 	"docker-buildx": {"0.38.2": {
 		"amd64": "7992ec09413b80ff57ba4e081f56fc833d7bac1d5e71143c6c809e7e6065f6d6",
 		"arm64": "46c0f334772de3cb0b341cc415caf7339fb5cfc8b8438ebcb5a10e7f23800d36",
@@ -61,6 +66,9 @@ var Sources = map[string]Source{
 	}},
 	"docker-compose": {"E17-deploy.md", func(_, a string) string {
 		return "docker-compose-linux-" + map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[a]
+	}},
+	"xray": {"E25-agent.md", func(_, a string) string {
+		return "Xray-linux-" + map[string]string{"amd64": "64", "arm64": "arm64-v8a"}[a] + ".zip"
 	}},
 	"docker-buildx": {"E17-deploy.md", func(v, a string) string { return fmt.Sprintf("buildx-v%s.linux-%s", v, a) }},
 }

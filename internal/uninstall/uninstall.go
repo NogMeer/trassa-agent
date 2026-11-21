@@ -43,6 +43,7 @@ func Plan(p config.Paths, purgeRollback bool) Steps {
 	s.Paths = append(s.Paths,
 		filepath.Join(p.BinDir, "trassa-agent"), filepath.Join(p.BinDir, "trassa-helper"),
 		p.EtcDir, p.RunDir, p.AgentDir, p.HelperDir, p.BinPrevDir, p.CacheDir, p.TargetBin,
+		filepath.Join(p.StateDir, "vpn-probe"),
 	)
 	if purgeRollback {
 		s.Paths = append(s.Paths, p.StateDir)
@@ -116,6 +117,10 @@ func Run(ctx context.Context, p config.Paths, purgeRollback bool, run Runner) er
 		}
 	}
 	if err := run(ctx, "/usr/sbin/userdel", s.User); err != nil && !strings.Contains(err.Error(), "does not exist") {
+		errs = append(errs, err)
+	}
+	// Пользователь движка точки замера (E25) — если ставился.
+	if err := run(ctx, "/usr/sbin/userdel", config.ProbeUserName); err != nil && !strings.Contains(err.Error(), "does not exist") {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)

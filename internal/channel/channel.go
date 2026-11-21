@@ -35,6 +35,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/queue"
 	"github.com/NogMeer/trassa-agent/internal/update"
 	"github.com/NogMeer/trassa-agent/internal/verify"
+	"github.com/NogMeer/trassa-agent/internal/vpnprobe"
 )
 
 // Пределы канала (04, раздел 5 E05).
@@ -488,7 +489,8 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 	stageTools := body.GetType() == ops.TypeBackupInit || body.GetType() == ops.TypeBackupTargetEnsure ||
 		(body.GetType() == ops.TypeBackupRestore && body.GetParams().GetBackupRestore().GetRestic() != nil) ||
 		body.GetType() == ops.TypeDockerEnsure || body.GetType() == ops.TypeProxyEnsure ||
-		(body.GetType() == ops.TypeDeployBuild && body.GetParams().GetDeployBuild().GetRailpack() != nil)
+		(body.GetType() == ops.TypeDeployBuild && body.GetParams().GetDeployBuild().GetRailpack() != nil) ||
+		body.GetType() == ops.TypeVpnProbeEnsure
 	if stageTools && !body.GetDryRun() {
 		if dir := a.stageBackupTools(context.WithoutCancel(sctx), &body); dir != "" {
 			defer os.RemoveAll(dir)
@@ -566,6 +568,10 @@ func (a *Agent) stageBackupTools(ctx context.Context, b *agentv1.OperationBody) 
 	}
 	if t := b.GetParams().GetDeployBuild().GetRailpack(); t != nil {
 		files[deploy.StagedName(t)] = download{t.GetUrl(), deploy.MaxToolDownload}
+	}
+	// E25: движок точки замера; сумма сверяется помощником с параметрами и таблицей.
+	if p := b.GetParams().GetVpnProbeEnsure(); p != nil {
+		files[vpnprobe.Staged] = download{p.GetUrl(), vpnprobe.MaxArchive}
 	}
 	if p := b.GetParams().GetBackupTargetEnsure(); p != nil {
 		files[backup.ResticStaged] = download{p.GetRestic().GetUrl(), backup.MaxResticArchive}

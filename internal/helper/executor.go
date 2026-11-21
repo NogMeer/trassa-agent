@@ -30,6 +30,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/rollback"
 	secretkey "github.com/NogMeer/trassa-agent/internal/sealed"
 	"github.com/NogMeer/trassa-agent/internal/security"
+	"github.com/NogMeer/trassa-agent/internal/vpnprobe"
 	"github.com/NogMeer/trassa-agent/internal/wireguard"
 )
 
@@ -105,6 +106,8 @@ type Executor struct {
 	Deploy *deploy.Env
 	// Remedy — исправления E18 (service.restart/start, disk.cleanup, cert.renew).
 	Remedy *remedy.Env
+	// VpnProbe — точка замера VPN-пакета (E25); nil — VPN_PROBE_UNAVAILABLE.
+	VpnProbe *vpnprobe.Env
 
 	once     sync.Once
 	handlers map[string]handler

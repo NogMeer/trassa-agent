@@ -30,6 +30,10 @@ const ProtocolVersion = 1
 // UserName — непривилегированный пользователь агента.
 const UserName = "trassa"
 
+// ProbeUserName — пользователь движка точки замера (E25): отдельный uid, не trassa. С тем же uid движок прошёл бы
+// в /proc/<pid агента>/root мимо скрытия каталогов и прочитал ключ агента, а агент — доступ замера.
+const ProbeUserName = "trassa-vpnprobe"
+
 // Paths — все пути агента и помощника. В проде — Default(), в тестах — Under(t.TempDir()).
 type Paths struct {
 	StateDir        string // /var/lib/trassa

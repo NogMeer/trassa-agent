@@ -73,6 +73,9 @@ func (e *Executor) builtinHandlers() map[string]handler {
 	for t, x := range e.backupHandlers() {
 		h[t] = x
 	}
+	for t, x := range e.vpnHandlers() {
+		h[t] = x
+	}
 	for t, x := range e.extraHandlers() {
 		h[t] = x
 	}
