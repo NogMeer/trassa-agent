@@ -221,8 +221,77 @@ message SystemRebootParams {
 }
 
 // service.restart (CHANGE).
+// Цель service.restart и service.start (E18): пусто — служба systemd (как в E10).
+enum ServiceTargetKind {
+  SERVICE_TARGET_KIND_UNSPECIFIED = 0;
+  SERVICE_TARGET_KIND_SYSTEMD = 1;
+  // Контейнер Docker по имени; контейнеры приложений и инфраструктуры Trassa отклоняются.
+  SERVICE_TARGET_KIND_CONTAINER = 2;
+}
+
+// service.restart (E10) и service.start (E18): unit — для SYSTEMD, container — для CONTAINER.
 message ServiceRestartParams {
   string unit = 1;
+  ServiceTargetKind kind = 2;
+  string container = 3;
+}
+
+// Итог service.restart и service.start: цель работает 60 с подряд тем же процессом.
+message ServiceRestartResult {
+  bool active = 1;
+  int64 active_since_ms = 2;
+  // systemd NRestarts или Docker RestartCount; нет свойства — 0.
+  uint32 restarts = 3;
+  // ActiveState/SubState или State.Status.
+  string state = 4;
+}
+
+// disk.cleanup (E18, CHANGE, rollback NONE): только восстановимое; тома Docker не трогаются никогда.
+enum DiskCleanupCategory {
+  DISK_CLEANUP_CATEGORY_UNSPECIFIED = 0;
+  // Архивные файлы журнала systemd старше journal_keep_days.
+  DISK_CLEANUP_CATEGORY_JOURNAL = 1;
+  // /var/cache/apt/archives (apt-get clean).
+  DISK_CLEANUP_CATEGORY_APT_CACHE = 2;
+  // Образы без контейнеров, старше docker_unused_older_than_hours, кроме образов Trassa.
+  DISK_CLEANUP_CATEGORY_DOCKER_UNUSED = 3;
+  // Кэш сборки, не использованный docker_unused_older_than_hours.
+  DISK_CLEANUP_CATEGORY_DOCKER_BUILD_CACHE = 4;
+}
+
+message DiskCleanupParams {
+  // Пусто — отказ (R1).
+  repeated DiskCleanupCategory categories = 1;
+  // 1–365; 0 — 7.
+  uint32 journal_keep_days = 2;
+  // 1–8760; 0 — 24.
+  uint32 docker_unused_older_than_hours = 3;
+  // Раздел для «свободно до и после»; пусто — "/".
+  string mount = 4;
+}
+
+message DiskCleanupFreed {
+  DiskCleanupCategory category = 1;
+  // dry_run — оценка (верхняя граница).
+  uint64 bytes = 2;
+  string error = 3;
+}
+
+message DiskCleanupResult {
+  repeated DiskCleanupFreed freed = 1;
+  uint64 free_before_bytes = 2;
+  uint64 free_after_bytes = 3;
+}
+
+// cert.renew (E18, CHANGE, rollback CONFIG): сертификат certbot по имени (--cert-name).
+message CertRenewParams {
+  string domain = 1;
+}
+
+message CertRenewResult {
+  int64 not_after_before_ms = 1;
+  int64 not_after_ms = 2;
+  string issuer = 3;
 }
 
 // ---------- Блок C: детектор ----------

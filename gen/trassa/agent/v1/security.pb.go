@@ -386,6 +386,118 @@ func (UpgradeScope) EnumDescriptor() ([]byte, []int) {
 	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{6}
 }
 
+// service.restart (CHANGE).
+// Цель service.restart и service.start (E18): пусто — служба systemd (как в E10).
+type ServiceTargetKind int32
+
+const (
+	ServiceTargetKind_SERVICE_TARGET_KIND_UNSPECIFIED ServiceTargetKind = 0
+	ServiceTargetKind_SERVICE_TARGET_KIND_SYSTEMD     ServiceTargetKind = 1
+	// Контейнер Docker по имени; контейнеры приложений и инфраструктуры Trassa отклоняются.
+	ServiceTargetKind_SERVICE_TARGET_KIND_CONTAINER ServiceTargetKind = 2
+)
+
+// Enum value maps for ServiceTargetKind.
+var (
+	ServiceTargetKind_name = map[int32]string{
+		0: "SERVICE_TARGET_KIND_UNSPECIFIED",
+		1: "SERVICE_TARGET_KIND_SYSTEMD",
+		2: "SERVICE_TARGET_KIND_CONTAINER",
+	}
+	ServiceTargetKind_value = map[string]int32{
+		"SERVICE_TARGET_KIND_UNSPECIFIED": 0,
+		"SERVICE_TARGET_KIND_SYSTEMD":     1,
+		"SERVICE_TARGET_KIND_CONTAINER":   2,
+	}
+)
+
+func (x ServiceTargetKind) Enum() *ServiceTargetKind {
+	p := new(ServiceTargetKind)
+	*p = x
+	return p
+}
+
+func (x ServiceTargetKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ServiceTargetKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_security_proto_enumTypes[7].Descriptor()
+}
+
+func (ServiceTargetKind) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_security_proto_enumTypes[7]
+}
+
+func (x ServiceTargetKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ServiceTargetKind.Descriptor instead.
+func (ServiceTargetKind) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{7}
+}
+
+// disk.cleanup (E18, CHANGE, rollback NONE): только восстановимое; тома Docker не трогаются никогда.
+type DiskCleanupCategory int32
+
+const (
+	DiskCleanupCategory_DISK_CLEANUP_CATEGORY_UNSPECIFIED DiskCleanupCategory = 0
+	// Архивные файлы журнала systemd старше journal_keep_days.
+	DiskCleanupCategory_DISK_CLEANUP_CATEGORY_JOURNAL DiskCleanupCategory = 1
+	// /var/cache/apt/archives (apt-get clean).
+	DiskCleanupCategory_DISK_CLEANUP_CATEGORY_APT_CACHE DiskCleanupCategory = 2
+	// Образы без контейнеров, старше docker_unused_older_than_hours, кроме образов Trassa.
+	DiskCleanupCategory_DISK_CLEANUP_CATEGORY_DOCKER_UNUSED DiskCleanupCategory = 3
+	// Кэш сборки, не использованный docker_unused_older_than_hours.
+	DiskCleanupCategory_DISK_CLEANUP_CATEGORY_DOCKER_BUILD_CACHE DiskCleanupCategory = 4
+)
+
+// Enum value maps for DiskCleanupCategory.
+var (
+	DiskCleanupCategory_name = map[int32]string{
+		0: "DISK_CLEANUP_CATEGORY_UNSPECIFIED",
+		1: "DISK_CLEANUP_CATEGORY_JOURNAL",
+		2: "DISK_CLEANUP_CATEGORY_APT_CACHE",
+		3: "DISK_CLEANUP_CATEGORY_DOCKER_UNUSED",
+		4: "DISK_CLEANUP_CATEGORY_DOCKER_BUILD_CACHE",
+	}
+	DiskCleanupCategory_value = map[string]int32{
+		"DISK_CLEANUP_CATEGORY_UNSPECIFIED":        0,
+		"DISK_CLEANUP_CATEGORY_JOURNAL":            1,
+		"DISK_CLEANUP_CATEGORY_APT_CACHE":          2,
+		"DISK_CLEANUP_CATEGORY_DOCKER_UNUSED":      3,
+		"DISK_CLEANUP_CATEGORY_DOCKER_BUILD_CACHE": 4,
+	}
+)
+
+func (x DiskCleanupCategory) Enum() *DiskCleanupCategory {
+	p := new(DiskCleanupCategory)
+	*p = x
+	return p
+}
+
+func (x DiskCleanupCategory) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DiskCleanupCategory) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_security_proto_enumTypes[8].Descriptor()
+}
+
+func (DiskCleanupCategory) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_security_proto_enumTypes[8]
+}
+
+func (x DiskCleanupCategory) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DiskCleanupCategory.Descriptor instead.
+func (DiskCleanupCategory) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{8}
+}
+
 // security.scan (READ). checks — коды из каталога E10; пустой список отклоняется (R1).
 type SecurityScanParams struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -1591,10 +1703,12 @@ func (x *SystemRebootParams) GetDelaySeconds() uint32 {
 	return 0
 }
 
-// service.restart (CHANGE).
+// service.restart (E10) и service.start (E18): unit — для SYSTEMD, container — для CONTAINER.
 type ServiceRestartParams struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Unit          string                 `protobuf:"bytes,1,opt,name=unit,proto3" json:"unit,omitempty"`
+	Kind          ServiceTargetKind      `protobuf:"varint,2,opt,name=kind,proto3,enum=trassa.agent.v1.ServiceTargetKind" json:"kind,omitempty"`
+	Container     string                 `protobuf:"bytes,3,opt,name=container,proto3" json:"container,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1636,6 +1750,389 @@ func (x *ServiceRestartParams) GetUnit() string {
 	return ""
 }
 
+func (x *ServiceRestartParams) GetKind() ServiceTargetKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ServiceTargetKind_SERVICE_TARGET_KIND_UNSPECIFIED
+}
+
+func (x *ServiceRestartParams) GetContainer() string {
+	if x != nil {
+		return x.Container
+	}
+	return ""
+}
+
+// Итог service.restart и service.start: цель работает 60 с подряд тем же процессом.
+type ServiceRestartResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Active        bool                   `protobuf:"varint,1,opt,name=active,proto3" json:"active,omitempty"`
+	ActiveSinceMs int64                  `protobuf:"varint,2,opt,name=active_since_ms,json=activeSinceMs,proto3" json:"active_since_ms,omitempty"`
+	// systemd NRestarts или Docker RestartCount; нет свойства — 0.
+	Restarts uint32 `protobuf:"varint,3,opt,name=restarts,proto3" json:"restarts,omitempty"`
+	// ActiveState/SubState или State.Status.
+	State         string `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceRestartResult) Reset() {
+	*x = ServiceRestartResult{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceRestartResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceRestartResult) ProtoMessage() {}
+
+func (x *ServiceRestartResult) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceRestartResult.ProtoReflect.Descriptor instead.
+func (*ServiceRestartResult) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ServiceRestartResult) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+func (x *ServiceRestartResult) GetActiveSinceMs() int64 {
+	if x != nil {
+		return x.ActiveSinceMs
+	}
+	return 0
+}
+
+func (x *ServiceRestartResult) GetRestarts() uint32 {
+	if x != nil {
+		return x.Restarts
+	}
+	return 0
+}
+
+func (x *ServiceRestartResult) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+type DiskCleanupParams struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Пусто — отказ (R1).
+	Categories []DiskCleanupCategory `protobuf:"varint,1,rep,packed,name=categories,proto3,enum=trassa.agent.v1.DiskCleanupCategory" json:"categories,omitempty"`
+	// 1–365; 0 — 7.
+	JournalKeepDays uint32 `protobuf:"varint,2,opt,name=journal_keep_days,json=journalKeepDays,proto3" json:"journal_keep_days,omitempty"`
+	// 1–8760; 0 — 24.
+	DockerUnusedOlderThanHours uint32 `protobuf:"varint,3,opt,name=docker_unused_older_than_hours,json=dockerUnusedOlderThanHours,proto3" json:"docker_unused_older_than_hours,omitempty"`
+	// Раздел для «свободно до и после»; пусто — "/".
+	Mount         string `protobuf:"bytes,4,opt,name=mount,proto3" json:"mount,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiskCleanupParams) Reset() {
+	*x = DiskCleanupParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiskCleanupParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiskCleanupParams) ProtoMessage() {}
+
+func (x *DiskCleanupParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiskCleanupParams.ProtoReflect.Descriptor instead.
+func (*DiskCleanupParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *DiskCleanupParams) GetCategories() []DiskCleanupCategory {
+	if x != nil {
+		return x.Categories
+	}
+	return nil
+}
+
+func (x *DiskCleanupParams) GetJournalKeepDays() uint32 {
+	if x != nil {
+		return x.JournalKeepDays
+	}
+	return 0
+}
+
+func (x *DiskCleanupParams) GetDockerUnusedOlderThanHours() uint32 {
+	if x != nil {
+		return x.DockerUnusedOlderThanHours
+	}
+	return 0
+}
+
+func (x *DiskCleanupParams) GetMount() string {
+	if x != nil {
+		return x.Mount
+	}
+	return ""
+}
+
+type DiskCleanupFreed struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Category DiskCleanupCategory    `protobuf:"varint,1,opt,name=category,proto3,enum=trassa.agent.v1.DiskCleanupCategory" json:"category,omitempty"`
+	// dry_run — оценка (верхняя граница).
+	Bytes         uint64 `protobuf:"varint,2,opt,name=bytes,proto3" json:"bytes,omitempty"`
+	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiskCleanupFreed) Reset() {
+	*x = DiskCleanupFreed{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiskCleanupFreed) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiskCleanupFreed) ProtoMessage() {}
+
+func (x *DiskCleanupFreed) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiskCleanupFreed.ProtoReflect.Descriptor instead.
+func (*DiskCleanupFreed) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DiskCleanupFreed) GetCategory() DiskCleanupCategory {
+	if x != nil {
+		return x.Category
+	}
+	return DiskCleanupCategory_DISK_CLEANUP_CATEGORY_UNSPECIFIED
+}
+
+func (x *DiskCleanupFreed) GetBytes() uint64 {
+	if x != nil {
+		return x.Bytes
+	}
+	return 0
+}
+
+func (x *DiskCleanupFreed) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type DiskCleanupResult struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Freed           []*DiskCleanupFreed    `protobuf:"bytes,1,rep,name=freed,proto3" json:"freed,omitempty"`
+	FreeBeforeBytes uint64                 `protobuf:"varint,2,opt,name=free_before_bytes,json=freeBeforeBytes,proto3" json:"free_before_bytes,omitempty"`
+	FreeAfterBytes  uint64                 `protobuf:"varint,3,opt,name=free_after_bytes,json=freeAfterBytes,proto3" json:"free_after_bytes,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DiskCleanupResult) Reset() {
+	*x = DiskCleanupResult{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiskCleanupResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiskCleanupResult) ProtoMessage() {}
+
+func (x *DiskCleanupResult) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiskCleanupResult.ProtoReflect.Descriptor instead.
+func (*DiskCleanupResult) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DiskCleanupResult) GetFreed() []*DiskCleanupFreed {
+	if x != nil {
+		return x.Freed
+	}
+	return nil
+}
+
+func (x *DiskCleanupResult) GetFreeBeforeBytes() uint64 {
+	if x != nil {
+		return x.FreeBeforeBytes
+	}
+	return 0
+}
+
+func (x *DiskCleanupResult) GetFreeAfterBytes() uint64 {
+	if x != nil {
+		return x.FreeAfterBytes
+	}
+	return 0
+}
+
+// cert.renew (E18, CHANGE, rollback CONFIG): сертификат certbot по имени (--cert-name).
+type CertRenewParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CertRenewParams) Reset() {
+	*x = CertRenewParams{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CertRenewParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CertRenewParams) ProtoMessage() {}
+
+func (x *CertRenewParams) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CertRenewParams.ProtoReflect.Descriptor instead.
+func (*CertRenewParams) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CertRenewParams) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+type CertRenewResult struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	NotAfterBeforeMs int64                  `protobuf:"varint,1,opt,name=not_after_before_ms,json=notAfterBeforeMs,proto3" json:"not_after_before_ms,omitempty"`
+	NotAfterMs       int64                  `protobuf:"varint,2,opt,name=not_after_ms,json=notAfterMs,proto3" json:"not_after_ms,omitempty"`
+	Issuer           string                 `protobuf:"bytes,3,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CertRenewResult) Reset() {
+	*x = CertRenewResult{}
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CertRenewResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CertRenewResult) ProtoMessage() {}
+
+func (x *CertRenewResult) ProtoReflect() protoreflect.Message {
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CertRenewResult.ProtoReflect.Descriptor instead.
+func (*CertRenewResult) Descriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *CertRenewResult) GetNotAfterBeforeMs() int64 {
+	if x != nil {
+		return x.NotAfterBeforeMs
+	}
+	return 0
+}
+
+func (x *CertRenewResult) GetNotAfterMs() int64 {
+	if x != nil {
+		return x.NotAfterMs
+	}
+	return 0
+}
+
+func (x *CertRenewResult) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
 // security.baseline.accept (CHANGE, rollback NONE): «Это сделал я» — объекты детектора с этими отпечатками
 // переходят в базовый список сервера и больше не дают событий. Пустой список отклоняется (R1). Отпечаток — из
 // атрибута fingerprint события security.suspicious.
@@ -1648,7 +2145,7 @@ type SecurityBaselineAcceptParams struct {
 
 func (x *SecurityBaselineAcceptParams) Reset() {
 	*x = SecurityBaselineAcceptParams{}
-	mi := &file_trassa_agent_v1_security_proto_msgTypes[19]
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1660,7 +2157,7 @@ func (x *SecurityBaselineAcceptParams) String() string {
 func (*SecurityBaselineAcceptParams) ProtoMessage() {}
 
 func (x *SecurityBaselineAcceptParams) ProtoReflect() protoreflect.Message {
-	mi := &file_trassa_agent_v1_security_proto_msgTypes[19]
+	mi := &file_trassa_agent_v1_security_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1673,7 +2170,7 @@ func (x *SecurityBaselineAcceptParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SecurityBaselineAcceptParams.ProtoReflect.Descriptor instead.
 func (*SecurityBaselineAcceptParams) Descriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{19}
+	return file_trassa_agent_v1_security_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SecurityBaselineAcceptParams) GetFingerprints() []string {
@@ -1778,9 +2275,38 @@ const file_trassa_agent_v1_security_proto_rawDesc = "" +
 	"\x15PackagesUpgradeParams\x123\n" +
 	"\x05scope\x18\x01 \x01(\x0e2\x1d.trassa.agent.v1.UpgradeScopeR\x05scope\"9\n" +
 	"\x12SystemRebootParams\x12#\n" +
-	"\rdelay_seconds\x18\x01 \x01(\rR\fdelaySeconds\"*\n" +
+	"\rdelay_seconds\x18\x01 \x01(\rR\fdelaySeconds\"\x80\x01\n" +
 	"\x14ServiceRestartParams\x12\x12\n" +
-	"\x04unit\x18\x01 \x01(\tR\x04unit\"B\n" +
+	"\x04unit\x18\x01 \x01(\tR\x04unit\x126\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\".trassa.agent.v1.ServiceTargetKindR\x04kind\x12\x1c\n" +
+	"\tcontainer\x18\x03 \x01(\tR\tcontainer\"\x88\x01\n" +
+	"\x14ServiceRestartResult\x12\x16\n" +
+	"\x06active\x18\x01 \x01(\bR\x06active\x12&\n" +
+	"\x0factive_since_ms\x18\x02 \x01(\x03R\ractiveSinceMs\x12\x1a\n" +
+	"\brestarts\x18\x03 \x01(\rR\brestarts\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\"\xdf\x01\n" +
+	"\x11DiskCleanupParams\x12D\n" +
+	"\n" +
+	"categories\x18\x01 \x03(\x0e2$.trassa.agent.v1.DiskCleanupCategoryR\n" +
+	"categories\x12*\n" +
+	"\x11journal_keep_days\x18\x02 \x01(\rR\x0fjournalKeepDays\x12B\n" +
+	"\x1edocker_unused_older_than_hours\x18\x03 \x01(\rR\x1adockerUnusedOlderThanHours\x12\x14\n" +
+	"\x05mount\x18\x04 \x01(\tR\x05mount\"\x80\x01\n" +
+	"\x10DiskCleanupFreed\x12@\n" +
+	"\bcategory\x18\x01 \x01(\x0e2$.trassa.agent.v1.DiskCleanupCategoryR\bcategory\x12\x14\n" +
+	"\x05bytes\x18\x02 \x01(\x04R\x05bytes\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xa2\x01\n" +
+	"\x11DiskCleanupResult\x127\n" +
+	"\x05freed\x18\x01 \x03(\v2!.trassa.agent.v1.DiskCleanupFreedR\x05freed\x12*\n" +
+	"\x11free_before_bytes\x18\x02 \x01(\x04R\x0ffreeBeforeBytes\x12(\n" +
+	"\x10free_after_bytes\x18\x03 \x01(\x04R\x0efreeAfterBytes\")\n" +
+	"\x0fCertRenewParams\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\"z\n" +
+	"\x0fCertRenewResult\x12-\n" +
+	"\x13not_after_before_ms\x18\x01 \x01(\x03R\x10notAfterBeforeMs\x12 \n" +
+	"\fnot_after_ms\x18\x02 \x01(\x03R\n" +
+	"notAfterMs\x12\x16\n" +
+	"\x06issuer\x18\x03 \x01(\tR\x06issuer\"B\n" +
 	"\x1cSecurityBaselineAcceptParams\x12\"\n" +
 	"\ffingerprints\x18\x01 \x03(\tR\ffingerprints*\x80\x01\n" +
 	"\n" +
@@ -1813,7 +2339,17 @@ const file_trassa_agent_v1_security_proto_rawDesc = "" +
 	"\fUpgradeScope\x12\x1d\n" +
 	"\x19UPGRADE_SCOPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16UPGRADE_SCOPE_SECURITY\x10\x01\x12\x15\n" +
-	"\x11UPGRADE_SCOPE_ALL\x10\x02B=Z;github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1b\x06proto3"
+	"\x11UPGRADE_SCOPE_ALL\x10\x02*|\n" +
+	"\x11ServiceTargetKind\x12#\n" +
+	"\x1fSERVICE_TARGET_KIND_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bSERVICE_TARGET_KIND_SYSTEMD\x10\x01\x12!\n" +
+	"\x1dSERVICE_TARGET_KIND_CONTAINER\x10\x02*\xdb\x01\n" +
+	"\x13DiskCleanupCategory\x12%\n" +
+	"!DISK_CLEANUP_CATEGORY_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dDISK_CLEANUP_CATEGORY_JOURNAL\x10\x01\x12#\n" +
+	"\x1fDISK_CLEANUP_CATEGORY_APT_CACHE\x10\x02\x12'\n" +
+	"#DISK_CLEANUP_CATEGORY_DOCKER_UNUSED\x10\x03\x12,\n" +
+	"(DISK_CLEANUP_CATEGORY_DOCKER_BUILD_CACHE\x10\x04B=Z;github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1b\x06proto3"
 
 var (
 	file_trassa_agent_v1_security_proto_rawDescOnce sync.Once
@@ -1827,8 +2363,8 @@ func file_trassa_agent_v1_security_proto_rawDescGZIP() []byte {
 	return file_trassa_agent_v1_security_proto_rawDescData
 }
 
-var file_trassa_agent_v1_security_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_trassa_agent_v1_security_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_trassa_agent_v1_security_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
+var file_trassa_agent_v1_security_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_trassa_agent_v1_security_proto_goTypes = []any{
 	(CheckState)(0),                      // 0: trassa.agent.v1.CheckState
 	(RootLogin)(0),                       // 1: trassa.agent.v1.RootLogin
@@ -1837,51 +2373,63 @@ var file_trassa_agent_v1_security_proto_goTypes = []any{
 	(FirewallPlanMode)(0),                // 4: trassa.agent.v1.FirewallPlanMode
 	(FirewallApplyMode)(0),               // 5: trassa.agent.v1.FirewallApplyMode
 	(UpgradeScope)(0),                    // 6: trassa.agent.v1.UpgradeScope
-	(*SecurityScanParams)(nil),           // 7: trassa.agent.v1.SecurityScanParams
-	(*CheckResult)(nil),                  // 8: trassa.agent.v1.CheckResult
-	(*Listener)(nil),                     // 9: trassa.agent.v1.Listener
-	(*SshEffective)(nil),                 // 10: trassa.agent.v1.SshEffective
-	(*FirewallState)(nil),                // 11: trassa.agent.v1.FirewallState
-	(*SecurityScanResult)(nil),           // 12: trassa.agent.v1.SecurityScanResult
-	(*PackagesListUpdatesParams)(nil),    // 13: trassa.agent.v1.PackagesListUpdatesParams
-	(*PackageUpdate)(nil),                // 14: trassa.agent.v1.PackageUpdate
-	(*PackagesListUpdatesResult)(nil),    // 15: trassa.agent.v1.PackagesListUpdatesResult
-	(*SecurityFixParams)(nil),            // 16: trassa.agent.v1.SecurityFixParams
-	(*SshHardenParams)(nil),              // 17: trassa.agent.v1.SshHardenParams
-	(*FirewallRule)(nil),                 // 18: trassa.agent.v1.FirewallRule
-	(*FirewallRuleset)(nil),              // 19: trassa.agent.v1.FirewallRuleset
-	(*FirewallPlanParams)(nil),           // 20: trassa.agent.v1.FirewallPlanParams
-	(*FirewallPlanResult)(nil),           // 21: trassa.agent.v1.FirewallPlanResult
-	(*FirewallApplyParams)(nil),          // 22: trassa.agent.v1.FirewallApplyParams
-	(*PackagesUpgradeParams)(nil),        // 23: trassa.agent.v1.PackagesUpgradeParams
-	(*SystemRebootParams)(nil),           // 24: trassa.agent.v1.SystemRebootParams
-	(*ServiceRestartParams)(nil),         // 25: trassa.agent.v1.ServiceRestartParams
-	(*SecurityBaselineAcceptParams)(nil), // 26: trassa.agent.v1.SecurityBaselineAcceptParams
-	nil,                                  // 27: trassa.agent.v1.SshEffective.SettingsEntry
+	(ServiceTargetKind)(0),               // 7: trassa.agent.v1.ServiceTargetKind
+	(DiskCleanupCategory)(0),             // 8: trassa.agent.v1.DiskCleanupCategory
+	(*SecurityScanParams)(nil),           // 9: trassa.agent.v1.SecurityScanParams
+	(*CheckResult)(nil),                  // 10: trassa.agent.v1.CheckResult
+	(*Listener)(nil),                     // 11: trassa.agent.v1.Listener
+	(*SshEffective)(nil),                 // 12: trassa.agent.v1.SshEffective
+	(*FirewallState)(nil),                // 13: trassa.agent.v1.FirewallState
+	(*SecurityScanResult)(nil),           // 14: trassa.agent.v1.SecurityScanResult
+	(*PackagesListUpdatesParams)(nil),    // 15: trassa.agent.v1.PackagesListUpdatesParams
+	(*PackageUpdate)(nil),                // 16: trassa.agent.v1.PackageUpdate
+	(*PackagesListUpdatesResult)(nil),    // 17: trassa.agent.v1.PackagesListUpdatesResult
+	(*SecurityFixParams)(nil),            // 18: trassa.agent.v1.SecurityFixParams
+	(*SshHardenParams)(nil),              // 19: trassa.agent.v1.SshHardenParams
+	(*FirewallRule)(nil),                 // 20: trassa.agent.v1.FirewallRule
+	(*FirewallRuleset)(nil),              // 21: trassa.agent.v1.FirewallRuleset
+	(*FirewallPlanParams)(nil),           // 22: trassa.agent.v1.FirewallPlanParams
+	(*FirewallPlanResult)(nil),           // 23: trassa.agent.v1.FirewallPlanResult
+	(*FirewallApplyParams)(nil),          // 24: trassa.agent.v1.FirewallApplyParams
+	(*PackagesUpgradeParams)(nil),        // 25: trassa.agent.v1.PackagesUpgradeParams
+	(*SystemRebootParams)(nil),           // 26: trassa.agent.v1.SystemRebootParams
+	(*ServiceRestartParams)(nil),         // 27: trassa.agent.v1.ServiceRestartParams
+	(*ServiceRestartResult)(nil),         // 28: trassa.agent.v1.ServiceRestartResult
+	(*DiskCleanupParams)(nil),            // 29: trassa.agent.v1.DiskCleanupParams
+	(*DiskCleanupFreed)(nil),             // 30: trassa.agent.v1.DiskCleanupFreed
+	(*DiskCleanupResult)(nil),            // 31: trassa.agent.v1.DiskCleanupResult
+	(*CertRenewParams)(nil),              // 32: trassa.agent.v1.CertRenewParams
+	(*CertRenewResult)(nil),              // 33: trassa.agent.v1.CertRenewResult
+	(*SecurityBaselineAcceptParams)(nil), // 34: trassa.agent.v1.SecurityBaselineAcceptParams
+	nil,                                  // 35: trassa.agent.v1.SshEffective.SettingsEntry
 }
 var file_trassa_agent_v1_security_proto_depIdxs = []int32{
 	0,  // 0: trassa.agent.v1.CheckResult.state:type_name -> trassa.agent.v1.CheckState
-	27, // 1: trassa.agent.v1.SshEffective.settings:type_name -> trassa.agent.v1.SshEffective.SettingsEntry
-	8,  // 2: trassa.agent.v1.SecurityScanResult.checks:type_name -> trassa.agent.v1.CheckResult
-	9,  // 3: trassa.agent.v1.SecurityScanResult.listeners:type_name -> trassa.agent.v1.Listener
-	11, // 4: trassa.agent.v1.SecurityScanResult.firewall:type_name -> trassa.agent.v1.FirewallState
-	10, // 5: trassa.agent.v1.SecurityScanResult.ssh:type_name -> trassa.agent.v1.SshEffective
-	14, // 6: trassa.agent.v1.PackagesListUpdatesResult.packages:type_name -> trassa.agent.v1.PackageUpdate
+	35, // 1: trassa.agent.v1.SshEffective.settings:type_name -> trassa.agent.v1.SshEffective.SettingsEntry
+	10, // 2: trassa.agent.v1.SecurityScanResult.checks:type_name -> trassa.agent.v1.CheckResult
+	11, // 3: trassa.agent.v1.SecurityScanResult.listeners:type_name -> trassa.agent.v1.Listener
+	13, // 4: trassa.agent.v1.SecurityScanResult.firewall:type_name -> trassa.agent.v1.FirewallState
+	12, // 5: trassa.agent.v1.SecurityScanResult.ssh:type_name -> trassa.agent.v1.SshEffective
+	16, // 6: trassa.agent.v1.PackagesListUpdatesResult.packages:type_name -> trassa.agent.v1.PackageUpdate
 	1,  // 7: trassa.agent.v1.SshHardenParams.root_login:type_name -> trassa.agent.v1.RootLogin
 	2,  // 8: trassa.agent.v1.SshHardenParams.crypto_preset:type_name -> trassa.agent.v1.CryptoPreset
 	3,  // 9: trassa.agent.v1.FirewallRule.target:type_name -> trassa.agent.v1.FirewallTarget
-	18, // 10: trassa.agent.v1.FirewallRuleset.rules:type_name -> trassa.agent.v1.FirewallRule
+	20, // 10: trassa.agent.v1.FirewallRuleset.rules:type_name -> trassa.agent.v1.FirewallRule
 	4,  // 11: trassa.agent.v1.FirewallPlanParams.mode:type_name -> trassa.agent.v1.FirewallPlanMode
-	19, // 12: trassa.agent.v1.FirewallPlanParams.ruleset:type_name -> trassa.agent.v1.FirewallRuleset
-	18, // 13: trassa.agent.v1.FirewallPlanResult.imported:type_name -> trassa.agent.v1.FirewallRule
-	19, // 14: trassa.agent.v1.FirewallApplyParams.ruleset:type_name -> trassa.agent.v1.FirewallRuleset
+	21, // 12: trassa.agent.v1.FirewallPlanParams.ruleset:type_name -> trassa.agent.v1.FirewallRuleset
+	20, // 13: trassa.agent.v1.FirewallPlanResult.imported:type_name -> trassa.agent.v1.FirewallRule
+	21, // 14: trassa.agent.v1.FirewallApplyParams.ruleset:type_name -> trassa.agent.v1.FirewallRuleset
 	5,  // 15: trassa.agent.v1.FirewallApplyParams.mode:type_name -> trassa.agent.v1.FirewallApplyMode
 	6,  // 16: trassa.agent.v1.PackagesUpgradeParams.scope:type_name -> trassa.agent.v1.UpgradeScope
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	7,  // 17: trassa.agent.v1.ServiceRestartParams.kind:type_name -> trassa.agent.v1.ServiceTargetKind
+	8,  // 18: trassa.agent.v1.DiskCleanupParams.categories:type_name -> trassa.agent.v1.DiskCleanupCategory
+	8,  // 19: trassa.agent.v1.DiskCleanupFreed.category:type_name -> trassa.agent.v1.DiskCleanupCategory
+	30, // 20: trassa.agent.v1.DiskCleanupResult.freed:type_name -> trassa.agent.v1.DiskCleanupFreed
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_security_proto_init() }
@@ -1895,8 +2443,8 @@ func file_trassa_agent_v1_security_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_trassa_agent_v1_security_proto_rawDesc), len(file_trassa_agent_v1_security_proto_rawDesc)),
-			NumEnums:      7,
-			NumMessages:   21,
+			NumEnums:      9,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

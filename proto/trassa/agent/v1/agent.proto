@@ -222,6 +222,10 @@ message OperationParams {
     DeployImagesPruneParams deploy_images_prune = 59;
     // E13, после блоков E16 и E17.
     BackupTargetRevokeReaderParams backup_target_revoke_reader = 70;
+    // E18: 80–89.
+    ServiceRestartParams service_start = 80;
+    DiskCleanupParams disk_cleanup = 81;
+    CertRenewParams cert_renew = 82;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }
@@ -362,6 +366,8 @@ message OperationResult {
   // PROXY_PORT_BUSY, TLS_ISSUE_FAILED, GIT_ACCESS_DENIED, GIT_COMMIT_MISMATCH, REGISTRY_UNAVAILABLE,
   // REGISTRY_AUTH_FAILED, DOCKER_TOO_OLD, DOCKER_KEY_MISMATCH, DEPLOY_TOOL_UNKNOWN, DEPLOY_COMPOSE_FORBIDDEN,
   // DEPLOY_PORT_FORBIDDEN, DEPLOY_IMAGE_NOT_PINNED, DEPLOY_ROUTES_STALE, CANCELLED, CANCEL_TOO_LATE.
+  // E18: SERVICE_NOT_FOUND, SERVICE_NOT_STABLE, CONTAINER_MANAGED_BY_TRASSA, CERT_NOT_FOUND, CERT_NOT_DUE,
+  // CERT_RENEW_FAILED, CERT_RENEW_UNSUPPORTED, CERT_MANAGED_BY_PROXY.
   string error_code = 3;
   string message = 4;
   int64 started_at_ms = 5;
@@ -410,6 +416,10 @@ message OperationResult {
     DeployInspectResult deploy_inspect = 65;
     DeployRemoveResult deploy_remove = 66;
     DeployImagesPruneResult deploy_images_prune = 67;
+    // E18: 80–89. service_restart — итог service.restart и service.start.
+    ServiceRestartResult service_restart = 80;
+    DiskCleanupResult disk_cleanup = 81;
+    CertRenewResult cert_renew = 82;
   }
 }
 
