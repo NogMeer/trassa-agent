@@ -74,11 +74,11 @@ message ConfigReadResult {
 
 // exec.run (DESTRUCTIVE, rollback SNAPSHOT — снапшот хостера снимает панель до подписи). Выполняется только при
 // allow_exec = true в /etc/trassa/agent.toml (иначе EXEC_DISABLED_ON_SERVER до разбора параметров) и после
-// запретов R28 в помощнике (EXEC_DENIED). Команда — `/bin/bash --noprofile --norc -f -c <command>` (без
-// раскрытия шаблонов) во временной службе systemd: по таймауту останавливается вся её группа процессов.
+// запретов R28 в помощнике (EXEC_DENIED). Без оболочки: argv запускается напрямую (execve) во временной службе
+// systemd — ни конвейеров, ни подстановок, ни шаблонов; по таймауту останавливается вся её группа процессов.
 // Вывод — поток OperationProgress (stdout и stderr), секреты вычищены.
 message ExecRunParams {
-  // 1–2000 знаков, без перевода строки и управляющих знаков.
+  // Не принимается (PARAMS_INVALID): строка для оболочки заменена на argv (decisions/E20-agent.md). Должно быть пусто.
   string command = 1;
   // root или имя существующего пользователя; trassa* — нет (EXEC_USER_INVALID). Пусто — root.
   string run_as = 2;
@@ -88,6 +88,9 @@ message ExecRunParams {
   uint32 timeout_sec = 4;
   // 1–262144: сколько байт вывода (stdout и stderr вместе) уходит в журнал; остальное отбрасывается.
   uint32 max_output_bytes = 5;
+  // Программа и аргументы: 1–64 слова, вместе до 2000 знаков, без управляющих знаков и «$». argv[0] — абсолютный
+  // путь или имя из фиксированного PATH; помощник находит файл, раскрывает ссылки и запускает его по полному пути.
+  repeated string argv = 6;
 }
 
 message ExecRunResult {
@@ -98,7 +101,7 @@ message ExecRunResult {
   uint64 output_bytes = 3;
   bool output_truncated = 4;
   uint64 duration_ms = 5;
-  // Программы команды после разбора (для журнала).
+  // Полный путь запущенной программы после ссылок (один элемент).
   repeated string programs = 6;
   // При EXEC_DENIED — код запрета R28 (EXEC_UNPARSEABLE, EXEC_SECRETS_READ …).
   string denied_code = 7;

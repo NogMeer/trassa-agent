@@ -425,12 +425,12 @@ func (x *ConfigReadResult) GetModifiedAtMs() int64 {
 
 // exec.run (DESTRUCTIVE, rollback SNAPSHOT — снапшот хостера снимает панель до подписи). Выполняется только при
 // allow_exec = true в /etc/trassa/agent.toml (иначе EXEC_DISABLED_ON_SERVER до разбора параметров) и после
-// запретов R28 в помощнике (EXEC_DENIED). Команда — `/bin/bash --noprofile --norc -f -c <command>` (без
-// раскрытия шаблонов) во временной службе systemd: по таймауту останавливается вся её группа процессов.
+// запретов R28 в помощнике (EXEC_DENIED). Без оболочки: argv запускается напрямую (execve) во временной службе
+// systemd — ни конвейеров, ни подстановок, ни шаблонов; по таймауту останавливается вся её группа процессов.
 // Вывод — поток OperationProgress (stdout и stderr), секреты вычищены.
 type ExecRunParams struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// 1–2000 знаков, без перевода строки и управляющих знаков.
+	// Не принимается (PARAMS_INVALID): строка для оболочки заменена на argv (decisions/E20-agent.md). Должно быть пусто.
 	Command string `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
 	// root или имя существующего пользователя; trassa* — нет (EXEC_USER_INVALID). Пусто — root.
 	RunAs string `protobuf:"bytes,2,opt,name=run_as,json=runAs,proto3" json:"run_as,omitempty"`
@@ -440,8 +440,11 @@ type ExecRunParams struct {
 	TimeoutSec uint32 `protobuf:"varint,4,opt,name=timeout_sec,json=timeoutSec,proto3" json:"timeout_sec,omitempty"`
 	// 1–262144: сколько байт вывода (stdout и stderr вместе) уходит в журнал; остальное отбрасывается.
 	MaxOutputBytes uint32 `protobuf:"varint,5,opt,name=max_output_bytes,json=maxOutputBytes,proto3" json:"max_output_bytes,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Программа и аргументы: 1–64 слова, вместе до 2000 знаков, без управляющих знаков и «$». argv[0] — абсолютный
+	// путь или имя из фиксированного PATH; помощник находит файл, раскрывает ссылки и запускает его по полному пути.
+	Argv          []string `protobuf:"bytes,6,rep,name=argv,proto3" json:"argv,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExecRunParams) Reset() {
@@ -509,6 +512,13 @@ func (x *ExecRunParams) GetMaxOutputBytes() uint32 {
 	return 0
 }
 
+func (x *ExecRunParams) GetArgv() []string {
+	if x != nil {
+		return x.Argv
+	}
+	return nil
+}
+
 type ExecRunResult struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Код возврата; -1 — завершена сигналом или по таймауту.
@@ -518,7 +528,7 @@ type ExecRunResult struct {
 	OutputBytes     uint64 `protobuf:"varint,3,opt,name=output_bytes,json=outputBytes,proto3" json:"output_bytes,omitempty"`
 	OutputTruncated bool   `protobuf:"varint,4,opt,name=output_truncated,json=outputTruncated,proto3" json:"output_truncated,omitempty"`
 	DurationMs      uint64 `protobuf:"varint,5,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	// Программы команды после разбора (для журнала).
+	// Полный путь запущенной программы после ссылок (один элемент).
 	Programs []string `protobuf:"bytes,6,rep,name=programs,proto3" json:"programs,omitempty"`
 	// При EXEC_DENIED — код запрета R28 (EXEC_UNPARSEABLE, EXEC_SECRETS_READ …).
 	DeniedCode    string `protobuf:"bytes,7,opt,name=denied_code,json=deniedCode,proto3" json:"denied_code,omitempty"`
@@ -643,14 +653,15 @@ const file_trassa_agent_v1_operator_proto_rawDesc = "" +
 	"\n" +
 	"size_bytes\x18\x04 \x01(\x04R\tsizeBytes\x12\x1a\n" +
 	"\bredacted\x18\x05 \x01(\rR\bredacted\x12$\n" +
-	"\x0emodified_at_ms\x18\x06 \x01(\x03R\fmodifiedAtMs\"\x9d\x01\n" +
+	"\x0emodified_at_ms\x18\x06 \x01(\x03R\fmodifiedAtMs\"\xb1\x01\n" +
 	"\rExecRunParams\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x15\n" +
 	"\x06run_as\x18\x02 \x01(\tR\x05runAs\x12\x10\n" +
 	"\x03cwd\x18\x03 \x01(\tR\x03cwd\x12\x1f\n" +
 	"\vtimeout_sec\x18\x04 \x01(\rR\n" +
 	"timeoutSec\x12(\n" +
-	"\x10max_output_bytes\x18\x05 \x01(\rR\x0emaxOutputBytes\"\xf5\x01\n" +
+	"\x10max_output_bytes\x18\x05 \x01(\rR\x0emaxOutputBytes\x12\x12\n" +
+	"\x04argv\x18\x06 \x03(\tR\x04argv\"\xf5\x01\n" +
 	"\rExecRunResult\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x1b\n" +
 	"\ttimed_out\x18\x02 \x01(\bR\btimedOut\x12!\n" +
