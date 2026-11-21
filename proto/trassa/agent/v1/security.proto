@@ -135,6 +135,8 @@ message SshHardenParams {
   uint32 max_auth_tries = 4;
   CryptoPreset crypto_preset = 5;
   optional bool empty_passwords = 6;
+  // X11Forwarding no (E10-T13-R1, находка SSH_FORWARDING); только выключение, true отклоняется.
+  optional bool x11_forwarding = 7;
 }
 
 enum FirewallTarget {

@@ -1084,8 +1084,10 @@ type SshHardenParams struct {
 	MaxAuthTries   uint32                 `protobuf:"varint,4,opt,name=max_auth_tries,json=maxAuthTries,proto3" json:"max_auth_tries,omitempty"`
 	CryptoPreset   CryptoPreset           `protobuf:"varint,5,opt,name=crypto_preset,json=cryptoPreset,proto3,enum=trassa.agent.v1.CryptoPreset" json:"crypto_preset,omitempty"`
 	EmptyPasswords *bool                  `protobuf:"varint,6,opt,name=empty_passwords,json=emptyPasswords,proto3,oneof" json:"empty_passwords,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// X11Forwarding no (E10-T13-R1, находка SSH_FORWARDING); только выключение, true отклоняется.
+	X11Forwarding *bool `protobuf:"varint,7,opt,name=x11_forwarding,json=x11Forwarding,proto3,oneof" json:"x11_forwarding,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SshHardenParams) Reset() {
@@ -1156,6 +1158,13 @@ func (x *SshHardenParams) GetCryptoPreset() CryptoPreset {
 func (x *SshHardenParams) GetEmptyPasswords() bool {
 	if x != nil && x.EmptyPasswords != nil {
 		return *x.EmptyPasswords
+	}
+	return false
+}
+
+func (x *SshHardenParams) GetX11Forwarding() bool {
+	if x != nil && x.X11Forwarding != nil {
+		return *x.X11Forwarding
 	}
 	return false
 }
@@ -1730,7 +1739,7 @@ const file_trassa_agent_v1_security_proto_rawDesc = "" +
 	"\x0freboot_required\x18\x02 \x01(\bR\x0erebootRequired\x12'\n" +
 	"\x0freboot_packages\x18\x03 \x03(\tR\x0erebootPackages\"/\n" +
 	"\x11SecurityFixParams\x12\x1a\n" +
-	"\bsubjects\x18\x01 \x03(\tR\bsubjects\"\xc8\x02\n" +
+	"\bsubjects\x18\x01 \x03(\tR\bsubjects\"\x87\x03\n" +
 	"\x0fSshHardenParams\x12(\n" +
 	"\rpassword_auth\x18\x01 \x01(\bH\x00R\fpasswordAuth\x88\x01\x01\x129\n" +
 	"\n" +
@@ -1738,9 +1747,11 @@ const file_trassa_agent_v1_security_proto_rawDesc = "" +
 	"\x04port\x18\x03 \x01(\rR\x04port\x12$\n" +
 	"\x0emax_auth_tries\x18\x04 \x01(\rR\fmaxAuthTries\x12B\n" +
 	"\rcrypto_preset\x18\x05 \x01(\x0e2\x1d.trassa.agent.v1.CryptoPresetR\fcryptoPreset\x12,\n" +
-	"\x0fempty_passwords\x18\x06 \x01(\bH\x01R\x0eemptyPasswords\x88\x01\x01B\x10\n" +
+	"\x0fempty_passwords\x18\x06 \x01(\bH\x01R\x0eemptyPasswords\x88\x01\x01\x12*\n" +
+	"\x0ex11_forwarding\x18\a \x01(\bH\x02R\rx11Forwarding\x88\x01\x01B\x10\n" +
 	"\x0e_password_authB\x12\n" +
-	"\x10_empty_passwords\"\xc4\x01\n" +
+	"\x10_empty_passwordsB\x11\n" +
+	"\x0f_x11_forwarding\"\xc4\x01\n" +
 	"\fFirewallRule\x127\n" +
 	"\x06target\x18\x01 \x01(\x0e2\x1f.trassa.agent.v1.FirewallTargetR\x06target\x12\x1a\n" +
 	"\bprotocol\x18\x02 \x01(\tR\bprotocol\x12\x12\n" +

@@ -67,6 +67,7 @@ func TestSSHHardenValidate(t *testing.T) {
 		"пусто":            {},
 		"включить пароль":  {PasswordAuth: ptr(true)},
 		"пустые пароли":    {EmptyPasswords: ptr(true)},
+		"включить X11":     {X11Forwarding: ptr(true)},
 		"порт":             {Port: 70000},
 		"попыток слишком":  {MaxAuthTries: 11},
 		"неизвестный root": {RootLogin: 9},
@@ -104,14 +105,20 @@ func TestSSHHardenPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Второй запуск сохраняет прежние значения файла.
-	p2, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{EmptyPasswords: ptr(false)})
+	p2, err := PlanSSHHarden(context.Background(), sys, &agentv1.SshHardenParams{EmptyPasswords: ptr(false), X11Forwarding: ptr(false)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = p2.Apply(context.Background())
 	b, _ = os.ReadFile(filepath.Join(sys.Root, SSHConfigFile))
-	if !strings.Contains(string(b), "MaxAuthTries 3") || !strings.Contains(string(b), "PermitEmptyPasswords no") {
+	if !strings.Contains(string(b), "MaxAuthTries 3") || !strings.Contains(string(b), "PermitEmptyPasswords no") || !strings.Contains(string(b), "X11Forwarding no\n") {
 		t.Fatalf("%s", b)
+	}
+	if err := p2.Verify(context.Background()); err != nil {
+		t.Fatalf("проверка X11Forwarding: %v", err)
+	}
+	if err := ValidateSSHHarden(&agentv1.SshHardenParams{X11Forwarding: ptr(false)}); err != nil {
+		t.Fatalf("только X11: %v", err)
 	}
 	// Действующее значение не совпало (пользовательский Match или sshd не перечитал) — проверка падает.
 	sys.Run = fakeSSHD(sys, "passwordauthentication yes\n")

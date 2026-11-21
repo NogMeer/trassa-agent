@@ -30,7 +30,7 @@ var strictCrypto = map[string]string{
 
 // sshdOrder — порядок строк в файле Trassa.
 var sshdOrder = []string{"Port", "PasswordAuthentication", "KbdInteractiveAuthentication", "PermitRootLogin",
-	"PermitEmptyPasswords", "MaxAuthTries", "KexAlgorithms", "Ciphers", "MACs"}
+	"PermitEmptyPasswords", "X11Forwarding", "MaxAuthTries", "KexAlgorithms", "Ciphers", "MACs"}
 
 // MaxSSHAuthTries — верхняя граница max_auth_tries в ssh.harden.
 const MaxSSHAuthTries = 10
@@ -43,6 +43,9 @@ func ValidateSSHHarden(p *agentv1.SshHardenParams) error {
 	}
 	if p.EmptyPasswords != nil && p.GetEmptyPasswords() {
 		return errors.New("empty_passwords: ssh.harden только запрещает пустые пароли")
+	}
+	if p.X11Forwarding != nil && p.GetX11Forwarding() {
+		return errors.New("x11_forwarding: ssh.harden только выключает пересылку X11")
 	}
 	if p.GetRootLogin() < agentv1.RootLogin_ROOT_LOGIN_UNSPECIFIED || p.GetRootLogin() > agentv1.RootLogin_ROOT_LOGIN_KEY_ONLY {
 		return errors.New("root_login")
@@ -71,6 +74,9 @@ func targets(p *agentv1.SshHardenParams) map[string]string {
 	}
 	if p.EmptyPasswords != nil {
 		t["PermitEmptyPasswords"] = "no"
+	}
+	if p.X11Forwarding != nil {
+		t["X11Forwarding"] = "no"
 	}
 	switch p.GetRootLogin() {
 	case agentv1.RootLogin_ROOT_LOGIN_NO:
