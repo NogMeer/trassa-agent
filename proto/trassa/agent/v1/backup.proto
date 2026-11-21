@@ -35,6 +35,17 @@ message DatabaseSource {
   string database = 2;
 }
 
+// Как копировать том Docker (план E13, sources.mode).
+enum VolumeMode {
+  // = LIVE (совместимость).
+  VOLUME_MODE_UNSPECIFIED = 0;
+  // Том копируется на ходу.
+  VOLUME_MODE_LIVE = 1;
+  // Работающие контейнеры с этим томом останавливаются на время копии и запускаются после неё при любом исходе
+  // (3 попытки, иначе BACKUP_CONTAINER_NOT_RESTARTED и событие CRIT backup.container_not_restarted).
+  VOLUME_MODE_STOP = 2;
+}
+
 message BackupSource {
   // Имя источника в плане — по нему итог и снимок.
   string name = 1;
@@ -44,6 +55,8 @@ message BackupSource {
     DatabaseSource postgres = 4;
     DatabaseSource mysql = 5;
   }
+  // Только для docker_volume.
+  VolumeMode volume_mode = 6;
 }
 
 // Политика хранения: для хранилищ «только добавление» — сроки (--keep-within-*), decisions E13 п. 3.
@@ -110,6 +123,9 @@ message SourceResult {
   uint64 files_changed = 7;
   string error = 8;
   string warning = 9;
+  // VOLUME_MODE_STOP: какие контейнеры останавливались и какие не удалось запустить снова.
+  repeated string stopped_containers = 10;
+  repeated string not_restarted = 11;
 }
 
 message BackupRunResult {

@@ -236,6 +236,15 @@ func serve(ctx context.Context, log *slog.Logger) error {
 	}
 	// Терминалы прошлого запуска без таймеров продления жить не должны (decisions E16, 9.3).
 	ex.StopOrphanTerminals(ctx)
+	// Бэкап в режиме STOP прервался (падение помощника) — контейнеры с томом не остаются остановленными.
+	if ex.Backup != nil {
+		if err := ex.Backup.RestartStopped(ctx); err != nil {
+			log.Error("trassa-helper: контейнеры после прерванного бэкапа не запущены", "err", err)
+			ex.PushEvent(&agentv1.Event{Kind: backup.EventContainerNotRestarted, Severity: agentv1.EventSeverity_EVENT_SEVERITY_CRIT,
+				AtMs: time.Now().UnixMilli(), Message: "контейнеры не запустились после прерванного бэкапа",
+				Attributes: map[string]string{"state": "firing", "subject": "restart-after-crash"}})
+		}
+	}
 	p := config.Default()
 	// /run/trassa создаёт systemd (RuntimeDirectory, root:root 0750); агенту нужна группа, чтобы дойти до сокета.
 	if err := os.MkdirAll(p.RunDir, 0o750); err != nil {

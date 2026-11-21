@@ -250,6 +250,9 @@ func plainPath(p string) error {
 }
 
 func checkSource(s *agentv1.BackupSource) error {
+	if _, vol := s.GetSource().(*agentv1.BackupSource_DockerVolume); !vol && s.GetVolumeMode() != agentv1.VolumeMode_VOLUME_MODE_UNSPECIFIED {
+		return fmt.Errorf("источник %q: volume_mode только у тома", s.GetName())
+	}
 	if !sourceRe.MatchString(s.GetName()) {
 		return fmt.Errorf("источник %q: имя", s.GetName())
 	}
@@ -276,6 +279,9 @@ func checkSource(s *agentv1.BackupSource) error {
 	case *agentv1.BackupSource_DockerVolume:
 		if !volumeRe.MatchString(v.DockerVolume) {
 			return fmt.Errorf("источник %q: том", s.GetName())
+		}
+		if m := s.GetVolumeMode(); m < agentv1.VolumeMode_VOLUME_MODE_UNSPECIFIED || m > agentv1.VolumeMode_VOLUME_MODE_STOP {
+			return fmt.Errorf("источник %q: volume_mode", s.GetName())
 		}
 		return nil
 	case *agentv1.BackupSource_Postgres:

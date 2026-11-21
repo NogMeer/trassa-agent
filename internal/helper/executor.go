@@ -110,6 +110,7 @@ type Executor struct {
 	reads    chan struct{}
 	mu       sync.Mutex
 	cancels  map[string]*cancelable
+	events   []*agentv1.Event // события операций (бэкап), уходят агенту через MethodEventsPoll
 	running  map[string]chan struct{}
 }
 
@@ -220,11 +221,14 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 		_ = send(helperrpc.Response{Kind: helperrpc.KindWgStats, Result: raw})
 	case helperrpc.MethodEventsPoll:
 		var raw [][]byte
+		var evs []*agentv1.Event
 		if e.Security != nil && e.Security.Detector != nil {
-			for _, ev := range e.Security.Detector.Drain() {
-				if b, err := proto.Marshal(ev); err == nil {
-					raw = append(raw, b)
-				}
+			evs = e.Security.Detector.Drain()
+		}
+		evs = append(evs, e.drainEvents()...)
+		for _, ev := range evs {
+			if b, err := proto.Marshal(ev); err == nil {
+				raw = append(raw, b)
 			}
 		}
 		_ = send(helperrpc.Response{Kind: helperrpc.KindEvents, Events: raw})
@@ -856,4 +860,25 @@ func redactPreview(p *agentv1.Preview) *agentv1.Preview {
 		f.Diff = d
 	}
 	return p
+}
+
+// maxOpEvents — сколько событий операций ждут опроса агентом (старые вытесняются).
+const maxOpEvents = 100
+
+// PushEvent — событие операции в очередь опроса.
+func (e *Executor) PushEvent(ev *agentv1.Event) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.events = append(e.events, ev)
+	if len(e.events) > maxOpEvents {
+		e.events = e.events[len(e.events)-maxOpEvents:]
+	}
+}
+
+func (e *Executor) drainEvents() []*agentv1.Event {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := e.events
+	e.events = nil
+	return out
 }

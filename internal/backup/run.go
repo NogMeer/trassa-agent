@@ -23,6 +23,8 @@ type RunJob struct {
 	Params   *agentv1.BackupRunParams
 	Deadline time.Time
 	Progress func(source string, st Status)
+	// Event — событие для панели (контейнер не поднялся после STOP); nil — только в итоге.
+	Event func(*agentv1.Event)
 }
 
 // RunPlan — снимок на каждый источник (decisions E13 п. 2): пути и тома — файлами, базы — дампом потоком без
@@ -31,6 +33,7 @@ type RunJob struct {
 func (e *Env) RunPlan(ctx context.Context, r *Restic, j RunJob) (*agentv1.BackupRunResult, string, error) {
 	res := &agentv1.BackupRunResult{}
 	code := ""
+	notRestarted := false
 	for _, src := range j.Params.GetSources() {
 		sr := &agentv1.SourceResult{Name: src.GetName()}
 		res.Sources = append(res.Sources, sr)
@@ -40,6 +43,7 @@ func (e *Env) RunPlan(ctx context.Context, r *Restic, j RunJob) (*agentv1.Backup
 			spec.Progress = func(st Status) { j.Progress(name, st) }
 		}
 		failCode := CodeSourceFailed
+		var restart func()
 		switch v := src.GetSource().(type) {
 		case *agentv1.BackupSource_Path:
 			if _, err := os.Lstat(v.Path.GetPath()); err != nil {
@@ -56,6 +60,27 @@ func (e *Env) RunPlan(ctx context.Context, r *Restic, j RunJob) (*agentv1.Backup
 				continue
 			}
 			spec.Kind, spec.Paths = KindVolume, []string{mp}
+			if src.GetVolumeMode() == agentv1.VolumeMode_VOLUME_MODE_STOP {
+				stopped, start, err := e.stopVolumeUsers(ctx, v.DockerVolume)
+				if err != nil {
+					sr.Error = "том " + v.DockerVolume + ": " + err.Error()
+					code = firstCode(code, failCode)
+					continue
+				}
+				for _, c := range stopped {
+					sr.StoppedContainers = append(sr.StoppedContainers, c.name())
+				}
+				restart = func() {
+					_, failed := start()
+					if len(failed) == 0 {
+						return
+					}
+					sr.NotRestarted, notRestarted = failed, true
+					if j.Event != nil {
+						j.Event(notRestartedEvent(v.DockerVolume, failed, time.Now()))
+					}
+				}
+			}
 		case *agentv1.BackupSource_Postgres, *agentv1.BackupSource_Mysql:
 			failCode = CodeDumpFailed
 			engine, db := KindPostgres, src.GetPostgres()
@@ -72,8 +97,15 @@ func (e *Env) RunPlan(ctx context.Context, r *Restic, j RunJob) (*agentv1.Backup
 			spec.Container, spec.Database = db.GetContainer(), db.GetDatabase()
 		}
 		sum, warning, err := Backup(ctx, r, spec)
+		// Контейнеры поднимаются сразу после копии тома, до любого выхода из цикла.
+		if restart != nil {
+			restart()
+		}
 		if errors.Is(err, ErrDeadline) {
 			sr.Error = "срок окна вышел"
+			if notRestarted {
+				return res, CodeContainerNotRestarted, nil
+			}
 			return res, CodeWindowExceeded, nil
 		}
 		if errors.Is(err, ErrRepoPassword) || errors.Is(err, ErrRepoLocked) || errors.Is(err, ErrTargetDown) {
@@ -87,6 +119,9 @@ func (e *Env) RunPlan(ctx context.Context, r *Restic, j RunJob) (*agentv1.Backup
 		}
 		sr.Ok, sr.SnapshotId, sr.Warning = true, sum.SnapshotID, warning
 		sr.BytesAdded, sr.BytesProcessed, sr.FilesNew, sr.FilesChanged = sum.DataAdded, sum.BytesProcessed, sum.FilesNew, sum.FilesChanged
+	}
+	if notRestarted {
+		return res, CodeContainerNotRestarted, nil
 	}
 	return res, code, nil
 }

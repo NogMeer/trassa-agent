@@ -299,7 +299,8 @@ func (e *Executor) applyBackupRun(ctx context.Context, r *run) *agentv1.Operatio
 	if fail != nil {
 		return fail
 	}
-	out, code, err := env.RunPlan(ctx, rs, backup.RunJob{Params: p, Deadline: env.Deadline(p.GetDeadlineMs()), Progress: r.backupProgress()})
+	out, code, err := env.RunPlan(ctx, rs, backup.RunJob{Params: p, Deadline: env.Deadline(p.GetDeadlineMs()), Progress: r.backupProgress(),
+		Event: e.PushEvent})
 	var res *agentv1.OperationResult
 	switch {
 	case err != nil:

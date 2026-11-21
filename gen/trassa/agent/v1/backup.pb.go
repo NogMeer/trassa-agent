@@ -25,6 +25,60 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Как копировать том Docker (план E13, sources.mode).
+type VolumeMode int32
+
+const (
+	// = LIVE (совместимость).
+	VolumeMode_VOLUME_MODE_UNSPECIFIED VolumeMode = 0
+	// Том копируется на ходу.
+	VolumeMode_VOLUME_MODE_LIVE VolumeMode = 1
+	// Работающие контейнеры с этим томом останавливаются на время копии и запускаются после неё при любом исходе
+	// (3 попытки, иначе BACKUP_CONTAINER_NOT_RESTARTED и событие CRIT backup.container_not_restarted).
+	VolumeMode_VOLUME_MODE_STOP VolumeMode = 2
+)
+
+// Enum value maps for VolumeMode.
+var (
+	VolumeMode_name = map[int32]string{
+		0: "VOLUME_MODE_UNSPECIFIED",
+		1: "VOLUME_MODE_LIVE",
+		2: "VOLUME_MODE_STOP",
+	}
+	VolumeMode_value = map[string]int32{
+		"VOLUME_MODE_UNSPECIFIED": 0,
+		"VOLUME_MODE_LIVE":        1,
+		"VOLUME_MODE_STOP":        2,
+	}
+)
+
+func (x VolumeMode) Enum() *VolumeMode {
+	p := new(VolumeMode)
+	*p = x
+	return p
+}
+
+func (x VolumeMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (VolumeMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_trassa_agent_v1_backup_proto_enumTypes[0].Descriptor()
+}
+
+func (VolumeMode) Type() protoreflect.EnumType {
+	return &file_trassa_agent_v1_backup_proto_enumTypes[0]
+}
+
+func (x VolumeMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use VolumeMode.Descriptor instead.
+func (VolumeMode) EnumDescriptor() ([]byte, []int) {
+	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{0}
+}
+
 type RestoreMode int32
 
 const (
@@ -61,11 +115,11 @@ func (x RestoreMode) String() string {
 }
 
 func (RestoreMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_trassa_agent_v1_backup_proto_enumTypes[0].Descriptor()
+	return file_trassa_agent_v1_backup_proto_enumTypes[1].Descriptor()
 }
 
 func (RestoreMode) Type() protoreflect.EnumType {
-	return &file_trassa_agent_v1_backup_proto_enumTypes[0]
+	return &file_trassa_agent_v1_backup_proto_enumTypes[1]
 }
 
 func (x RestoreMode) Number() protoreflect.EnumNumber {
@@ -74,7 +128,7 @@ func (x RestoreMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RestoreMode.Descriptor instead.
 func (RestoreMode) EnumDescriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{0}
+	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{1}
 }
 
 // Права ключа на репозиторий цели.
@@ -112,11 +166,11 @@ func (x BackupAccess) String() string {
 }
 
 func (BackupAccess) Descriptor() protoreflect.EnumDescriptor {
-	return file_trassa_agent_v1_backup_proto_enumTypes[1].Descriptor()
+	return file_trassa_agent_v1_backup_proto_enumTypes[2].Descriptor()
 }
 
 func (BackupAccess) Type() protoreflect.EnumType {
-	return &file_trassa_agent_v1_backup_proto_enumTypes[1]
+	return &file_trassa_agent_v1_backup_proto_enumTypes[2]
 }
 
 func (x BackupAccess) Number() protoreflect.EnumNumber {
@@ -125,7 +179,7 @@ func (x BackupAccess) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BackupAccess.Descriptor instead.
 func (BackupAccess) EnumDescriptor() ([]byte, []int) {
-	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{1}
+	return file_trassa_agent_v1_backup_proto_rawDescGZIP(), []int{2}
 }
 
 // Секрет, зашифрованный панелью на ключ помощника: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM,
@@ -361,7 +415,9 @@ type BackupSource struct {
 	//	*BackupSource_DockerVolume
 	//	*BackupSource_Postgres
 	//	*BackupSource_Mysql
-	Source        isBackupSource_Source `protobuf_oneof:"source"`
+	Source isBackupSource_Source `protobuf_oneof:"source"`
+	// Только для docker_volume.
+	VolumeMode    VolumeMode `protobuf:"varint,6,opt,name=volume_mode,json=volumeMode,proto3,enum=trassa.agent.v1.VolumeMode" json:"volume_mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -444,6 +500,13 @@ func (x *BackupSource) GetMysql() *DatabaseSource {
 		}
 	}
 	return nil
+}
+
+func (x *BackupSource) GetVolumeMode() VolumeMode {
+	if x != nil {
+		return x.VolumeMode
+	}
+	return VolumeMode_VOLUME_MODE_UNSPECIFIED
 }
 
 type isBackupSource_Source interface {
@@ -837,8 +900,11 @@ type SourceResult struct {
 	FilesChanged   uint64                 `protobuf:"varint,7,opt,name=files_changed,json=filesChanged,proto3" json:"files_changed,omitempty"`
 	Error          string                 `protobuf:"bytes,8,opt,name=error,proto3" json:"error,omitempty"`
 	Warning        string                 `protobuf:"bytes,9,opt,name=warning,proto3" json:"warning,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// VOLUME_MODE_STOP: какие контейнеры останавливались и какие не удалось запустить снова.
+	StoppedContainers []string `protobuf:"bytes,10,rep,name=stopped_containers,json=stoppedContainers,proto3" json:"stopped_containers,omitempty"`
+	NotRestarted      []string `protobuf:"bytes,11,rep,name=not_restarted,json=notRestarted,proto3" json:"not_restarted,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *SourceResult) Reset() {
@@ -932,6 +998,20 @@ func (x *SourceResult) GetWarning() string {
 		return x.Warning
 	}
 	return ""
+}
+
+func (x *SourceResult) GetStoppedContainers() []string {
+	if x != nil {
+		return x.StoppedContainers
+	}
+	return nil
+}
+
+func (x *SourceResult) GetNotRestarted() []string {
+	if x != nil {
+		return x.NotRestarted
+	}
+	return nil
 }
 
 type BackupRunResult struct {
@@ -2597,13 +2677,15 @@ const file_trassa_agent_v1_backup_proto_rawDesc = "" +
 	"\bexcludes\x18\x02 \x03(\tR\bexcludes\"J\n" +
 	"\x0eDatabaseSource\x12\x1c\n" +
 	"\tcontainer\x18\x01 \x01(\tR\tcontainer\x12\x1a\n" +
-	"\bdatabase\x18\x02 \x01(\tR\bdatabase\"\xfe\x01\n" +
+	"\bdatabase\x18\x02 \x01(\tR\bdatabase\"\xbc\x02\n" +
 	"\fBackupSource\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x121\n" +
 	"\x04path\x18\x02 \x01(\v2\x1b.trassa.agent.v1.PathSourceH\x00R\x04path\x12%\n" +
 	"\rdocker_volume\x18\x03 \x01(\tH\x00R\fdockerVolume\x12=\n" +
 	"\bpostgres\x18\x04 \x01(\v2\x1f.trassa.agent.v1.DatabaseSourceH\x00R\bpostgres\x127\n" +
-	"\x05mysql\x18\x05 \x01(\v2\x1f.trassa.agent.v1.DatabaseSourceH\x00R\x05mysqlB\b\n" +
+	"\x05mysql\x18\x05 \x01(\v2\x1f.trassa.agent.v1.DatabaseSourceH\x00R\x05mysql\x12<\n" +
+	"\vvolume_mode\x18\x06 \x01(\x0e2\x1b.trassa.agent.v1.VolumeModeR\n" +
+	"volumeModeB\b\n" +
 	"\x06source\"\xb2\x01\n" +
 	"\tRetention\x12\x1b\n" +
 	"\tkeep_last\x18\x01 \x01(\rR\bkeepLast\x12*\n" +
@@ -2633,7 +2715,7 @@ const file_trassa_agent_v1_backup_proto_rawDesc = "" +
 	"\asources\x18\x02 \x03(\v2\x1d.trassa.agent.v1.BackupSourceR\asources\x12(\n" +
 	"\x10rate_limit_kibps\x18\x03 \x01(\rR\x0erateLimitKibps\x12\x1f\n" +
 	"\vdeadline_ms\x18\x04 \x01(\x03R\n" +
-	"deadlineMs\"\x8f\x02\n" +
+	"deadlineMs\"\xe3\x02\n" +
 	"\fSourceResult\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
 	"\x02ok\x18\x02 \x01(\bR\x02ok\x12\x1f\n" +
@@ -2645,7 +2727,10 @@ const file_trassa_agent_v1_backup_proto_rawDesc = "" +
 	"\tfiles_new\x18\x06 \x01(\x04R\bfilesNew\x12#\n" +
 	"\rfiles_changed\x18\a \x01(\x04R\ffilesChanged\x12\x14\n" +
 	"\x05error\x18\b \x01(\tR\x05error\x12\x18\n" +
-	"\awarning\x18\t \x01(\tR\awarning\"J\n" +
+	"\awarning\x18\t \x01(\tR\awarning\x12-\n" +
+	"\x12stopped_containers\x18\n" +
+	" \x03(\tR\x11stoppedContainers\x12#\n" +
+	"\rnot_restarted\x18\v \x03(\tR\fnotRestarted\"J\n" +
 	"\x0fBackupRunResult\x127\n" +
 	"\asources\x18\x01 \x03(\v2\x1d.trassa.agent.v1.SourceResultR\asources\"\xdb\x01\n" +
 	"\x12BackupVerifyParams\x12\x17\n" +
@@ -2776,7 +2861,12 @@ const file_trassa_agent_v1_backup_proto_rawDesc = "" +
 	"bytesTotal\x12\x1d\n" +
 	"\n" +
 	"files_done\x18\x03 \x01(\x04R\tfilesDone\x12%\n" +
-	"\x0ecurrent_source\x18\x04 \x01(\tR\rcurrentSource*\x80\x01\n" +
+	"\x0ecurrent_source\x18\x04 \x01(\tR\rcurrentSource*U\n" +
+	"\n" +
+	"VolumeMode\x12\x1b\n" +
+	"\x17VOLUME_MODE_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10VOLUME_MODE_LIVE\x10\x01\x12\x14\n" +
+	"\x10VOLUME_MODE_STOP\x10\x02*\x80\x01\n" +
 	"\vRestoreMode\x12\x1c\n" +
 	"\x18RESTORE_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15RESTORE_MODE_TEMP_DIR\x10\x01\x12\x19\n" +
@@ -2799,78 +2889,80 @@ func file_trassa_agent_v1_backup_proto_rawDescGZIP() []byte {
 	return file_trassa_agent_v1_backup_proto_rawDescData
 }
 
-var file_trassa_agent_v1_backup_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_trassa_agent_v1_backup_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_trassa_agent_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_trassa_agent_v1_backup_proto_goTypes = []any{
-	(RestoreMode)(0),                       // 0: trassa.agent.v1.RestoreMode
-	(BackupAccess)(0),                      // 1: trassa.agent.v1.BackupAccess
-	(*SealedSecret)(nil),                   // 2: trassa.agent.v1.SealedSecret
-	(*BackupRepo)(nil),                     // 3: trassa.agent.v1.BackupRepo
-	(*PathSource)(nil),                     // 4: trassa.agent.v1.PathSource
-	(*DatabaseSource)(nil),                 // 5: trassa.agent.v1.DatabaseSource
-	(*BackupSource)(nil),                   // 6: trassa.agent.v1.BackupSource
-	(*Retention)(nil),                      // 7: trassa.agent.v1.Retention
-	(*RestoreSelection)(nil),               // 8: trassa.agent.v1.RestoreSelection
-	(*BackupInitParams)(nil),               // 9: trassa.agent.v1.BackupInitParams
-	(*BackupInitResult)(nil),               // 10: trassa.agent.v1.BackupInitResult
-	(*BackupRunParams)(nil),                // 11: trassa.agent.v1.BackupRunParams
-	(*SourceResult)(nil),                   // 12: trassa.agent.v1.SourceResult
-	(*BackupRunResult)(nil),                // 13: trassa.agent.v1.BackupRunResult
-	(*BackupVerifyParams)(nil),             // 14: trassa.agent.v1.BackupVerifyParams
-	(*DumpCheck)(nil),                      // 15: trassa.agent.v1.DumpCheck
-	(*BackupVerifyResult)(nil),             // 16: trassa.agent.v1.BackupVerifyResult
-	(*BackupRestoreParams)(nil),            // 17: trassa.agent.v1.BackupRestoreParams
-	(*BackupRestoreResult)(nil),            // 18: trassa.agent.v1.BackupRestoreResult
-	(*BackupDiscoverParams)(nil),           // 19: trassa.agent.v1.BackupDiscoverParams
-	(*DiscoveredVolume)(nil),               // 20: trassa.agent.v1.DiscoveredVolume
-	(*DiscoveredDatabase)(nil),             // 21: trassa.agent.v1.DiscoveredDatabase
-	(*BackupDiscoverResult)(nil),           // 22: trassa.agent.v1.BackupDiscoverResult
-	(*BackupSnapshotsParams)(nil),          // 23: trassa.agent.v1.BackupSnapshotsParams
-	(*BackupSnapshot)(nil),                 // 24: trassa.agent.v1.BackupSnapshot
-	(*BackupSnapshotsResult)(nil),          // 25: trassa.agent.v1.BackupSnapshotsResult
-	(*BackupBrowseParams)(nil),             // 26: trassa.agent.v1.BackupBrowseParams
-	(*BrowseEntry)(nil),                    // 27: trassa.agent.v1.BrowseEntry
-	(*BackupBrowseResult)(nil),             // 28: trassa.agent.v1.BackupBrowseResult
-	(*BackupPruneParams)(nil),              // 29: trassa.agent.v1.BackupPruneParams
-	(*BackupPruneResult)(nil),              // 30: trassa.agent.v1.BackupPruneResult
-	(*BackupTool)(nil),                     // 31: trassa.agent.v1.BackupTool
-	(*BackupTargetEnsureParams)(nil),       // 32: trassa.agent.v1.BackupTargetEnsureParams
-	(*BackupTargetRevokeReaderParams)(nil), // 33: trassa.agent.v1.BackupTargetRevokeReaderParams
-	(*BackupTargetEnsureResult)(nil),       // 34: trassa.agent.v1.BackupTargetEnsureResult
-	(*BackupTargetRemoveParams)(nil),       // 35: trassa.agent.v1.BackupTargetRemoveParams
-	(*BackupUnconfigureParams)(nil),        // 36: trassa.agent.v1.BackupUnconfigureParams
-	(*BackupProgress)(nil),                 // 37: trassa.agent.v1.BackupProgress
-	nil,                                    // 38: trassa.agent.v1.BackupRepo.EnvEntry
+	(VolumeMode)(0),                        // 0: trassa.agent.v1.VolumeMode
+	(RestoreMode)(0),                       // 1: trassa.agent.v1.RestoreMode
+	(BackupAccess)(0),                      // 2: trassa.agent.v1.BackupAccess
+	(*SealedSecret)(nil),                   // 3: trassa.agent.v1.SealedSecret
+	(*BackupRepo)(nil),                     // 4: trassa.agent.v1.BackupRepo
+	(*PathSource)(nil),                     // 5: trassa.agent.v1.PathSource
+	(*DatabaseSource)(nil),                 // 6: trassa.agent.v1.DatabaseSource
+	(*BackupSource)(nil),                   // 7: trassa.agent.v1.BackupSource
+	(*Retention)(nil),                      // 8: trassa.agent.v1.Retention
+	(*RestoreSelection)(nil),               // 9: trassa.agent.v1.RestoreSelection
+	(*BackupInitParams)(nil),               // 10: trassa.agent.v1.BackupInitParams
+	(*BackupInitResult)(nil),               // 11: trassa.agent.v1.BackupInitResult
+	(*BackupRunParams)(nil),                // 12: trassa.agent.v1.BackupRunParams
+	(*SourceResult)(nil),                   // 13: trassa.agent.v1.SourceResult
+	(*BackupRunResult)(nil),                // 14: trassa.agent.v1.BackupRunResult
+	(*BackupVerifyParams)(nil),             // 15: trassa.agent.v1.BackupVerifyParams
+	(*DumpCheck)(nil),                      // 16: trassa.agent.v1.DumpCheck
+	(*BackupVerifyResult)(nil),             // 17: trassa.agent.v1.BackupVerifyResult
+	(*BackupRestoreParams)(nil),            // 18: trassa.agent.v1.BackupRestoreParams
+	(*BackupRestoreResult)(nil),            // 19: trassa.agent.v1.BackupRestoreResult
+	(*BackupDiscoverParams)(nil),           // 20: trassa.agent.v1.BackupDiscoverParams
+	(*DiscoveredVolume)(nil),               // 21: trassa.agent.v1.DiscoveredVolume
+	(*DiscoveredDatabase)(nil),             // 22: trassa.agent.v1.DiscoveredDatabase
+	(*BackupDiscoverResult)(nil),           // 23: trassa.agent.v1.BackupDiscoverResult
+	(*BackupSnapshotsParams)(nil),          // 24: trassa.agent.v1.BackupSnapshotsParams
+	(*BackupSnapshot)(nil),                 // 25: trassa.agent.v1.BackupSnapshot
+	(*BackupSnapshotsResult)(nil),          // 26: trassa.agent.v1.BackupSnapshotsResult
+	(*BackupBrowseParams)(nil),             // 27: trassa.agent.v1.BackupBrowseParams
+	(*BrowseEntry)(nil),                    // 28: trassa.agent.v1.BrowseEntry
+	(*BackupBrowseResult)(nil),             // 29: trassa.agent.v1.BackupBrowseResult
+	(*BackupPruneParams)(nil),              // 30: trassa.agent.v1.BackupPruneParams
+	(*BackupPruneResult)(nil),              // 31: trassa.agent.v1.BackupPruneResult
+	(*BackupTool)(nil),                     // 32: trassa.agent.v1.BackupTool
+	(*BackupTargetEnsureParams)(nil),       // 33: trassa.agent.v1.BackupTargetEnsureParams
+	(*BackupTargetRevokeReaderParams)(nil), // 34: trassa.agent.v1.BackupTargetRevokeReaderParams
+	(*BackupTargetEnsureResult)(nil),       // 35: trassa.agent.v1.BackupTargetEnsureResult
+	(*BackupTargetRemoveParams)(nil),       // 36: trassa.agent.v1.BackupTargetRemoveParams
+	(*BackupUnconfigureParams)(nil),        // 37: trassa.agent.v1.BackupUnconfigureParams
+	(*BackupProgress)(nil),                 // 38: trassa.agent.v1.BackupProgress
+	nil,                                    // 39: trassa.agent.v1.BackupRepo.EnvEntry
 }
 var file_trassa_agent_v1_backup_proto_depIdxs = []int32{
-	2,  // 0: trassa.agent.v1.BackupRepo.password:type_name -> trassa.agent.v1.SealedSecret
-	38, // 1: trassa.agent.v1.BackupRepo.env:type_name -> trassa.agent.v1.BackupRepo.EnvEntry
-	4,  // 2: trassa.agent.v1.BackupSource.path:type_name -> trassa.agent.v1.PathSource
-	5,  // 3: trassa.agent.v1.BackupSource.postgres:type_name -> trassa.agent.v1.DatabaseSource
-	5,  // 4: trassa.agent.v1.BackupSource.mysql:type_name -> trassa.agent.v1.DatabaseSource
-	3,  // 5: trassa.agent.v1.BackupInitParams.repo:type_name -> trassa.agent.v1.BackupRepo
-	6,  // 6: trassa.agent.v1.BackupRunParams.sources:type_name -> trassa.agent.v1.BackupSource
-	12, // 7: trassa.agent.v1.BackupRunResult.sources:type_name -> trassa.agent.v1.SourceResult
-	15, // 8: trassa.agent.v1.BackupVerifyResult.dumps:type_name -> trassa.agent.v1.DumpCheck
-	0,  // 9: trassa.agent.v1.BackupRestoreParams.mode:type_name -> trassa.agent.v1.RestoreMode
-	8,  // 10: trassa.agent.v1.BackupRestoreParams.selection:type_name -> trassa.agent.v1.RestoreSelection
-	3,  // 11: trassa.agent.v1.BackupRestoreParams.repo:type_name -> trassa.agent.v1.BackupRepo
-	31, // 12: trassa.agent.v1.BackupRestoreParams.restic:type_name -> trassa.agent.v1.BackupTool
-	20, // 13: trassa.agent.v1.BackupDiscoverResult.volumes:type_name -> trassa.agent.v1.DiscoveredVolume
-	21, // 14: trassa.agent.v1.BackupDiscoverResult.databases:type_name -> trassa.agent.v1.DiscoveredDatabase
-	24, // 15: trassa.agent.v1.BackupSnapshotsResult.snapshots:type_name -> trassa.agent.v1.BackupSnapshot
-	27, // 16: trassa.agent.v1.BackupBrowseResult.entries:type_name -> trassa.agent.v1.BrowseEntry
-	7,  // 17: trassa.agent.v1.BackupPruneParams.retention:type_name -> trassa.agent.v1.Retention
-	3,  // 18: trassa.agent.v1.BackupPruneParams.maintenance_repo:type_name -> trassa.agent.v1.BackupRepo
-	31, // 19: trassa.agent.v1.BackupTargetEnsureParams.rclone:type_name -> trassa.agent.v1.BackupTool
-	31, // 20: trassa.agent.v1.BackupTargetEnsureParams.restic:type_name -> trassa.agent.v1.BackupTool
-	1,  // 21: trassa.agent.v1.BackupTargetEnsureResult.access:type_name -> trassa.agent.v1.BackupAccess
-	2,  // 22: trassa.agent.v1.BackupRepo.EnvEntry.value:type_name -> trassa.agent.v1.SealedSecret
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	3,  // 0: trassa.agent.v1.BackupRepo.password:type_name -> trassa.agent.v1.SealedSecret
+	39, // 1: trassa.agent.v1.BackupRepo.env:type_name -> trassa.agent.v1.BackupRepo.EnvEntry
+	5,  // 2: trassa.agent.v1.BackupSource.path:type_name -> trassa.agent.v1.PathSource
+	6,  // 3: trassa.agent.v1.BackupSource.postgres:type_name -> trassa.agent.v1.DatabaseSource
+	6,  // 4: trassa.agent.v1.BackupSource.mysql:type_name -> trassa.agent.v1.DatabaseSource
+	0,  // 5: trassa.agent.v1.BackupSource.volume_mode:type_name -> trassa.agent.v1.VolumeMode
+	4,  // 6: trassa.agent.v1.BackupInitParams.repo:type_name -> trassa.agent.v1.BackupRepo
+	7,  // 7: trassa.agent.v1.BackupRunParams.sources:type_name -> trassa.agent.v1.BackupSource
+	13, // 8: trassa.agent.v1.BackupRunResult.sources:type_name -> trassa.agent.v1.SourceResult
+	16, // 9: trassa.agent.v1.BackupVerifyResult.dumps:type_name -> trassa.agent.v1.DumpCheck
+	1,  // 10: trassa.agent.v1.BackupRestoreParams.mode:type_name -> trassa.agent.v1.RestoreMode
+	9,  // 11: trassa.agent.v1.BackupRestoreParams.selection:type_name -> trassa.agent.v1.RestoreSelection
+	4,  // 12: trassa.agent.v1.BackupRestoreParams.repo:type_name -> trassa.agent.v1.BackupRepo
+	32, // 13: trassa.agent.v1.BackupRestoreParams.restic:type_name -> trassa.agent.v1.BackupTool
+	21, // 14: trassa.agent.v1.BackupDiscoverResult.volumes:type_name -> trassa.agent.v1.DiscoveredVolume
+	22, // 15: trassa.agent.v1.BackupDiscoverResult.databases:type_name -> trassa.agent.v1.DiscoveredDatabase
+	25, // 16: trassa.agent.v1.BackupSnapshotsResult.snapshots:type_name -> trassa.agent.v1.BackupSnapshot
+	28, // 17: trassa.agent.v1.BackupBrowseResult.entries:type_name -> trassa.agent.v1.BrowseEntry
+	8,  // 18: trassa.agent.v1.BackupPruneParams.retention:type_name -> trassa.agent.v1.Retention
+	4,  // 19: trassa.agent.v1.BackupPruneParams.maintenance_repo:type_name -> trassa.agent.v1.BackupRepo
+	32, // 20: trassa.agent.v1.BackupTargetEnsureParams.rclone:type_name -> trassa.agent.v1.BackupTool
+	32, // 21: trassa.agent.v1.BackupTargetEnsureParams.restic:type_name -> trassa.agent.v1.BackupTool
+	2,  // 22: trassa.agent.v1.BackupTargetEnsureResult.access:type_name -> trassa.agent.v1.BackupAccess
+	3,  // 23: trassa.agent.v1.BackupRepo.EnvEntry.value:type_name -> trassa.agent.v1.SealedSecret
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_backup_proto_init() }
@@ -2889,7 +2981,7 @@ func file_trassa_agent_v1_backup_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_trassa_agent_v1_backup_proto_rawDesc), len(file_trassa_agent_v1_backup_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   0,
