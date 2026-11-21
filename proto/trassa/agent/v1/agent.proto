@@ -12,6 +12,7 @@ package trassa.agent.v1;
 import "trassa/agent/v1/access.proto";
 import "trassa/agent/v1/backup.proto";
 import "trassa/agent/v1/deploy.proto";
+import "trassa/agent/v1/operator.proto";
 import "trassa/agent/v1/security.proto";
 import "trassa/agent/v1/vpn.proto";
 import "trassa/agent/v1/wireguard.proto";
@@ -81,7 +82,8 @@ message Hello {
   ProtocolVersion protocol_version = 3;
   string agent_version = 4;
   string helper_version = 5;
-  // Типы операций, которые умеет эта сборка (список помощника).
+  // Типы операций, которые умеет эта сборка (список помощника). exec.run — только при allow_exec = true в
+  // /etc/trassa/agent.toml (E20): по нему панель показывает execEnabled.
   repeated string capabilities = 6;
   string os = 7;
   string os_version = 8;
@@ -227,6 +229,10 @@ message OperationParams {
     ServiceRestartParams service_start = 80;
     DiskCleanupParams disk_cleanup = 81;
     CertRenewParams cert_renew = 82;
+    // E20: 90–99.
+    DiskUsageParams disk_usage = 90;
+    ConfigReadParams config_read = 91;
+    ExecRunParams exec_run = 92;
     // E25: 110–119.
     VpnProbeEnsureParams vpn_probe_ensure = 110;
     VpnProbeRunParams vpn_probe_run = 111;
@@ -372,6 +378,9 @@ message OperationResult {
   // DEPLOY_PORT_FORBIDDEN, DEPLOY_IMAGE_NOT_PINNED, DEPLOY_ROUTES_STALE, CANCELLED, CANCEL_TOO_LATE.
   // E18: SERVICE_NOT_FOUND, SERVICE_NOT_STABLE, CONTAINER_MANAGED_BY_TRASSA, CERT_NOT_FOUND, CERT_NOT_DUE,
   // CERT_RENEW_FAILED, CERT_RENEW_UNSUPPORTED, CERT_MANAGED_BY_PROXY.
+  // E20: DISK_PATH_FORBIDDEN, DISK_PATH_NOT_FOUND, CONFIG_PATH_FORBIDDEN, CONFIG_NOT_FOUND, CONFIG_TOO_LARGE,
+  // CONFIG_NOT_TEXT, EXEC_DISABLED_ON_SERVER, EXEC_DENIED, EXEC_USER_INVALID, EXEC_CWD_INVALID, EXEC_TIMEOUT,
+  // EXEC_FAILED, EXEC_UNAVAILABLE.
   string error_code = 3;
   string message = 4;
   int64 started_at_ms = 5;
@@ -424,6 +433,10 @@ message OperationResult {
     ServiceRestartResult service_restart = 80;
     DiskCleanupResult disk_cleanup = 81;
     CertRenewResult cert_renew = 82;
+    // E20: 90–99.
+    DiskUsageResult disk_usage = 90;
+    ConfigReadResult config_read = 91;
+    ExecRunResult exec_run = 92;
     // E25: 110–119.
     VpnProbeEnsureResult vpn_probe_ensure = 110;
     VpnProbeRunResult vpn_probe_run = 111;
@@ -483,6 +496,7 @@ message SystemInfoResult {
   int64 boot_time_ms = 12;
   string agent_version = 13;
   string helper_version = 14;
+  // allow_exec из /etc/trassa/agent.toml (E20); файла нет или он не прошёл проверку — false.
   bool allow_exec = 15;
 }
 

@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: Apache-2.0
+// Операции для ИИ-оператора (E20, раздел 6): чтение занятого места и конфигурации, произвольная команда.
+// Решения — docs/plan/decisions/E20-agent.md.
+syntax = "proto3";
+
+package trassa.agent.v1;
+
+option go_package = "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1;agentv1";
+
+// disk.usage (READ): занятое место по каталогам и файлам, как `du -x`: одна файловая система, ссылки не
+// раскрываются, жёсткие ссылки считаются один раз. Помощник обходит дерево сам, внешних программ нет.
+message DiskUsageParams {
+  // Абсолютный путь без «..» и ссылок: «/» или каталог внутри корня из списка помощника (/var, /home, /opt,
+  // /srv, /tmp, /usr, /root, /mnt …). Иначе — DISK_PATH_FORBIDDEN.
+  string path = 1;
+  // Глубина записей 1–3 (относительно path).
+  uint32 depth = 2;
+  // Сколько самых больших записей вернуть, 1–20.
+  uint32 top = 3;
+}
+
+message DiskUsageEntry {
+  // Абсолютный путь; непечатаемые знаки заменены на «?», до 1024 байт.
+  string path = 1;
+  // Занято на диске (блоки); у каталога — со всем содержимым.
+  uint64 bytes = 2;
+  bool dir = 3;
+  // 1…depth.
+  uint32 depth = 4;
+}
+
+message DiskUsageResult {
+  string path = 1;
+  // Всего под path.
+  uint64 total_bytes = 2;
+  // До top записей глубины 1…depth, по убыванию bytes (каталог и его подкаталоги могут быть рядом, как у du).
+  repeated DiskUsageEntry entries = 3;
+  // Просмотрено записей.
+  uint64 files = 4;
+  // Файловая система path.
+  uint64 fs_size_bytes = 5;
+  uint64 fs_free_bytes = 6;
+  // Свободно для непривилегированных пользователей.
+  uint64 fs_avail_bytes = 7;
+  // Точки монтирования внутри path, куда обход не заходил (другая файловая система), до 50.
+  repeated string other_mounts = 8;
+  // Обход прерван по времени (60 с) или числу записей: суммы — нижняя граница.
+  bool truncated = 9;
+  // Записей, которые не удалось прочитать.
+  uint32 unreadable = 10;
+}
+
+// config.read (READ): один файл конфигурации из зашитого списка шаблонов (/etc/nginx/**,
+// /etc/systemd/system/*.service, /etc/docker/daemon.json, compose приложений Trassa), до 64 КиБ. Ключи,
+// .env, .htpasswd, службы Trassa — нет. Путь после ссылок тоже должен попасть в список, иначе
+// CONFIG_PATH_FORBIDDEN. Содержимое проходит фильтр секретов помощника.
+message ConfigReadParams {
+  // Абсолютный путь без «..», до 512 байт.
+  string path = 1;
+}
+
+message ConfigReadResult {
+  string path = 1;
+  // Путь после ссылок (sites-enabled → sites-available).
+  string resolved_path = 2;
+  // Текст UTF-8 с вычищенными секретами.
+  string content = 3;
+  // Размер файла до фильтра.
+  uint64 size_bytes = 4;
+  // Сколько значений заменено на [REDACTED].
+  uint32 redacted = 5;
+  int64 modified_at_ms = 6;
+}
+
+// exec.run (DESTRUCTIVE, rollback SNAPSHOT — снапшот хостера снимает панель до подписи). Выполняется только при
+// allow_exec = true в /etc/trassa/agent.toml (иначе EXEC_DISABLED_ON_SERVER до разбора параметров) и после
+// запретов R28 в помощнике (EXEC_DENIED). Команда — `/bin/bash --noprofile --norc -f -c <command>` (без
+// раскрытия шаблонов) во временной службе systemd: по таймауту останавливается вся её группа процессов.
+// Вывод — поток OperationProgress (stdout и stderr), секреты вычищены.
+message ExecRunParams {
+  // 1–2000 знаков, без перевода строки и управляющих знаков.
+  string command = 1;
+  // root или имя существующего пользователя; trassa* — нет (EXEC_USER_INVALID). Пусто — root.
+  string run_as = 2;
+  // Абсолютный каталог без «..»; пусто — «/». Нет каталога или он в каталогах Trassa — EXEC_CWD_INVALID.
+  string cwd = 3;
+  // 1–300.
+  uint32 timeout_sec = 4;
+  // 1–262144: сколько байт вывода (stdout и stderr вместе) уходит в журнал; остальное отбрасывается.
+  uint32 max_output_bytes = 5;
+}
+
+message ExecRunResult {
+  // Код возврата; -1 — завершена сигналом или по таймауту.
+  int32 exit_code = 1;
+  bool timed_out = 2;
+  // Всего выведено байт (и сверх предела).
+  uint64 output_bytes = 3;
+  bool output_truncated = 4;
+  uint64 duration_ms = 5;
+  // Программы команды после разбора (для журнала).
+  repeated string programs = 6;
+  // При EXEC_DENIED — код запрета R28 (EXEC_UNPARSEABLE, EXEC_SECRETS_READ …).
+  string denied_code = 7;
+}
