@@ -22,7 +22,7 @@ func (e *Executor) remedyHandlers() map[string]handler {
 		ops.TypeServiceRestart: {apply: e.applyService(false), dry: e.dryService(false)},
 		ops.TypeServiceStart:   {apply: e.applyService(true), dry: e.dryService(true)},
 		ops.TypeDiskCleanup:    {apply: e.applyCleanup(false), dry: e.applyCleanup(true)},
-		ops.TypeCertRenew:      {apply: e.applyCertRenew, preview: e.previewCertRenew},
+		ops.TypeCertRenew:      {apply: e.applyCertRenew, dry: e.dryCertRenew},
 	}
 }
 
@@ -140,19 +140,27 @@ func (e *Executor) applyCleanup(dry bool) func(context.Context, *run) *agentv1.O
 	}
 }
 
-func (e *Executor) previewCertRenew(_ context.Context, r *run) (*agentv1.Preview, *agentv1.OperationResult) {
+// dryCertRenew — предпросмотр: чем выпущен, когда истекает; без продления.
+func (e *Executor) dryCertRenew(_ context.Context, r *run) *agentv1.OperationResult {
 	env, fail := e.remedyEnv(r)
 	if fail != nil {
-		return nil, fail
+		return fail
 	}
 	name := r.body.GetParams().GetCertRenew().GetDomain()
 	conf, _, err := env.CertLineage(name)
 	if err != nil {
-		return nil, r.failed(remedyCode(err), err.Error())
+		return r.failed(remedyCode(err), err.Error())
 	}
-	return &agentv1.Preview{Summary: "Продление сертификата certbot " + name, Services: nil,
+	out, err := env.CertState(name)
+	if err != nil {
+		return r.failed(remedyCode(err), err.Error())
+	}
+	res := r.succeeded("")
+	res.Preview = &agentv1.Preview{Summary: "Продление сертификата certbot " + name,
 		Files: []*agentv1.FileChange{{Path: conf, Kind: agentv1.FileChangeKind_FILE_CHANGE_KIND_MODIFY}},
-		Notes: []string{"certbot renew --cert-name " + name + " --non-interactive; хуки — из настроек certbot сервера"}}, nil
+		Notes: []string{"certbot renew --cert-name " + name + " --non-interactive; хуки — из настроек certbot сервера"}}
+	res.Data = &agentv1.OperationResult_CertRenew{CertRenew: out}
+	return res
 }
 
 // applyCertRenew — cert.renew с точкой отката CONFIG: файл продления и прежние ссылки live/<имя>/*.

@@ -4,11 +4,13 @@ package remedy
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -136,7 +138,7 @@ func (e *Env) RenewCert(ctx context.Context, name string) (*agentv1.CertRenewRes
 	if err != nil {
 		return nil, err
 	}
-	res := &agentv1.CertRenewResult{NotAfterBeforeMs: before.UnixMilli()}
+	res := &agentv1.CertRenewResult{NotAfterBeforeMs: before.UnixMilli(), Manager: "certbot"}
 	if out, err := e.Run(ctx, "certbot", "renew", "--cert-name", name, "--non-interactive"); err != nil {
 		return res, fmt.Errorf("%w: %v %s", ErrCertFailed, err, tail(out))
 	}
@@ -148,7 +150,42 @@ func (e *Env) RenewCert(ctx context.Context, name string) (*agentv1.CertRenewRes
 	if !after.After(before) {
 		return res, fmt.Errorf("%w: certbot не продлил %s (срок до %s)", ErrCertNotDue, name, before.UTC().Format(time.DateOnly))
 	}
+	// Сведения: отдаёт ли сервер уже новый сертификат (веб-сервер перечитывает его хуком владельца).
+	if e.Served != nil {
+		if c, err := e.Served(ctx, name); err == nil && c != nil {
+			res.ServedNew = c.NotAfter.Equal(after)
+		}
+	}
 	return res, nil
+}
+
+// CertState — предпросмотр cert.renew: текущий срок и издатель, без продления.
+func (e *Env) CertState(name string) (*agentv1.CertRenewResult, error) {
+	if _, _, err := e.CertLineage(name); err != nil {
+		return nil, err
+	}
+	na, issuer, err := e.notAfter(name)
+	if err != nil {
+		return nil, err
+	}
+	return &agentv1.CertRenewResult{NotAfterBeforeMs: na.UnixMilli(), Issuer: issuer, Manager: "certbot"}, nil
+}
+
+// ServedTLS — сертификат, который отдаёт 127.0.0.1:443 для имени (SNI); проверка цепочки не нужна: сравнивается срок.
+func ServedTLS(ctx context.Context, name string) (*x509.Certificate, error) {
+	d := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 5 * time.Second}, Config: &tls.Config{ServerName: name, InsecureSkipVerify: true}} //nolint:gosec // сравнивается только срок
+	dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	conn, err := d.DialContext(dctx, "tcp", "127.0.0.1:443")
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	st := conn.(*tls.Conn).ConnectionState()
+	if len(st.PeerCertificates) == 0 {
+		return nil, errors.New("нет сертификата")
+	}
+	return st.PeerCertificates[0], nil
 }
 
 // Certs — сертификаты certbot: имя → срок (для события cert.expiring); сертификаты прокси Trassa пропускаются.

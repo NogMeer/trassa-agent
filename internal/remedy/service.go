@@ -3,8 +3,13 @@
 package remedy
 
 import (
+	"encoding/binary"
+	"errors"
+	"io"
+
 	"context"
 	"fmt"
+	"github.com/NogMeer/trassa-agent/internal/redact"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -88,10 +93,75 @@ func (e *Env) container(ctx context.Context, name string) (*containerState, erro
 // Service — service.restart (start=false) и service.start: команда, затем «работает Stable подряд тем же
 // процессом». Активная служба при start не перезапускается — только проверяется.
 func (e *Env) Service(ctx context.Context, p *agentv1.ServiceRestartParams, start bool) (*agentv1.ServiceRestartResult, error) {
+	var res *agentv1.ServiceRestartResult
+	var err error
+	var id string
 	if p.GetKind() == agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_CONTAINER {
-		return e.containerService(ctx, p.GetContainer(), start)
+		res, id, err = e.containerService(ctx, p.GetContainer(), start)
+	} else {
+		res, err = e.unitService(ctx, p.GetUnit(), start)
 	}
-	return e.unitService(ctx, p.GetUnit(), start)
+	// Провал команды или проверки — хвост журнала цели для отчёта (секреты вычищены).
+	if errors.Is(err, ErrNotStable) || errors.Is(err, ErrRestartFailed) {
+		if res == nil {
+			res = &agentv1.ServiceRestartResult{}
+		}
+		res.LogTail = e.logTail(context.WithoutCancel(ctx), p, id)
+	}
+	return res, err
+}
+
+// LogTailLines — сколько строк журнала цели уходит в итог при провале.
+const LogTailLines = 20
+
+func (e *Env) logTail(ctx context.Context, p *agentv1.ServiceRestartParams, id string) []string {
+	var raw []byte
+	if p.GetKind() == agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_CONTAINER {
+		if id == "" || e.Docker == nil {
+			return nil
+		}
+		resp, err := e.Docker.Do(ctx, http.MethodGet, "/containers/"+id+"/logs?stdout=1&stderr=1&tail="+strconv.Itoa(LogTailLines), nil, nil)
+		if err != nil {
+			return nil
+		}
+		defer resp.Body.Close()
+		raw, _ = io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+		raw = demux(raw)
+	} else {
+		out, err := e.Run(ctx, "journalctl", "-u", p.GetUnit(), "-n", strconv.Itoa(LogTailLines), "--no-pager", "-o", "cat")
+		if err != nil {
+			return nil
+		}
+		raw = out
+	}
+	var lines []string
+	for _, l := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
+		l = strings.ToValidUTF8(redact.Text(strings.TrimRight(l, "\r")), "")
+		if len(l) > 500 {
+			l = l[:500]
+		}
+		lines = append(lines, l)
+	}
+	if len(lines) > LogTailLines {
+		lines = lines[len(lines)-LogTailLines:]
+	}
+	return lines
+}
+
+// demux — поток журнала Docker без TTY: кадры с 8-байтовым заголовком; с TTY — как есть.
+func demux(b []byte) []byte {
+	if len(b) < 8 || b[0] > 2 || b[1] != 0 || b[2] != 0 || b[3] != 0 {
+		return b
+	}
+	var out []byte
+	for len(b) >= 8 {
+		n := int(binary.BigEndian.Uint32(b[4:8]))
+		if n > len(b)-8 {
+			n = len(b) - 8
+		}
+		out, b = append(out, b[8:8+n]...), b[8+n:]
+	}
+	return out
 }
 
 func (e *Env) unitService(ctx context.Context, unit string, start bool) (*agentv1.ServiceRestartResult, error) {
@@ -147,13 +217,13 @@ func managed(c *containerState) bool {
 	return l[labelApp] != "" || l[labelRole] != "" || strings.HasPrefix(strings.TrimPrefix(c.Name, "/"), builderPrefix)
 }
 
-func (e *Env) containerService(ctx context.Context, name string, start bool) (*agentv1.ServiceRestartResult, error) {
+func (e *Env) containerService(ctx context.Context, name string, start bool) (*agentv1.ServiceRestartResult, string, error) {
 	c, err := e.container(ctx, name)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if managed(c) {
-		return nil, fmt.Errorf("%w: %s — контейнер Trassa (приложение — deploy.control)", ErrManaged, name)
+		return nil, "", fmt.Errorf("%w: %s — контейнер Trassa (приложение — deploy.control)", ErrManaged, name)
 	}
 	if !(start && c.State.Status == "running") {
 		path := "/containers/" + c.ID + "/restart?t=10"
@@ -161,7 +231,7 @@ func (e *Env) containerService(ctx context.Context, name string, start bool) (*a
 			path = "/containers/" + c.ID + "/start"
 		}
 		if _, err := e.docker(ctx, http.MethodPost, path, nil); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrRestartFailed, err)
+			return nil, c.ID, fmt.Errorf("%w: %v", ErrRestartFailed, err)
 		}
 	}
 	stable, poll, settle := e.durations()
@@ -171,26 +241,26 @@ func (e *Env) containerService(ctx context.Context, name string, start bool) (*a
 	for {
 		cur, err := e.container(ctx, name)
 		if err != nil {
-			return nil, err
+			return nil, c.ID, err
 		}
 		res := &agentv1.ServiceRestartResult{State: cur.State.Status, Restarts: cur.RestartCount}
 		switch {
 		case cur.ID != c.ID:
-			return res, fmt.Errorf("%w: контейнер %s пересоздан за время проверки", ErrNotStable, name)
+			return res, c.ID, fmt.Errorf("%w: контейнер %s пересоздан за время проверки", ErrNotStable, name)
 		case cur.State.Status != "running":
 			if first != nil || e.now().After(deadline) {
-				return res, fmt.Errorf("%w: %s %s", ErrNotStable, name, cur.State.Status)
+				return res, c.ID, fmt.Errorf("%w: %s %s", ErrNotStable, name, cur.State.Status)
 			}
 		case first == nil:
 			first, since = cur, e.now()
 		case cur.State.StartedAt != first.State.StartedAt || cur.RestartCount != first.RestartCount:
-			return res, fmt.Errorf("%w: %s перезапускался за время проверки", ErrNotStable, name)
+			return res, c.ID, fmt.Errorf("%w: %s перезапускался за время проверки", ErrNotStable, name)
 		case e.now().Sub(since) >= stable:
 			res.Active, res.ActiveSinceMs = true, since.UnixMilli()
-			return res, nil
+			return res, c.ID, nil
 		}
 		if err := e.sleep(ctx, poll); err != nil {
-			return nil, err
+			return nil, c.ID, err
 		}
 	}
 }

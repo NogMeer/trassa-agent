@@ -7,6 +7,7 @@ package remedy
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,9 +50,11 @@ type Env struct {
 	// ProxyHosts — имена, сертификаты которых выпускает Caddy Trassa (cert.renew их не трогает).
 	ProxyHosts func() []string
 	// TrassaImages — образы релизов приложений Trassa (их disk.cleanup не удаляет).
-	TrassaImages func() map[string]bool
-	// Free — свободно на разделе (байт).
-	Free func(path string) (uint64, error)
+	TrassaImages func() (map[string]bool, error)
+	// Free — свободно и всего на разделе (байт).
+	Free func(path string) (free, total uint64, err error)
+	// Served — сертификат, который отдаёт TLS на этом сервере для имени (nil — проверка не делается).
+	Served func(ctx context.Context, name string) (*x509.Certificate, error)
 	// PackagesBusy — держатель блокировки пакетов (пусто — свободно).
 	PackagesBusy func(ctx context.Context) string
 }

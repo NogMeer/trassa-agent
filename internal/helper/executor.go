@@ -183,7 +183,7 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 	e.init()
 	switch req.Method {
 	case helperrpc.MethodHello:
-		r := helperrpc.Response{Kind: helperrpc.KindHello, HelperVersion: e.Version, Capabilities: e.Checker.Catalog.Types()}
+		r := helperrpc.Response{Kind: helperrpc.KindHello, HelperVersion: e.Version, Capabilities: append(e.Checker.Catalog.Types(), ExtraCapabilities...)}
 		if e.Secrets != nil {
 			r.EncryptionPublicKey, r.EncryptionKeyID = e.Secrets.Public(), e.Secrets.ID
 		}
@@ -889,4 +889,10 @@ func (e *Executor) drainEvents() []*agentv1.Event {
 	out := e.events
 	e.events = nil
 	return out
+}
+
+// ExtraCapabilities — возможности сверх типов каталога (варианты параметров, которых нет в старых помощниках).
+var ExtraCapabilities = []string{
+	// E18: service.restart и service.start с kind = CONTAINER.
+	"service.restart.container",
 }

@@ -124,25 +124,42 @@ type systemDF struct {
 	BuildCache []dfCache `json:"BuildCache"`
 }
 
-// unusedImages — кандидаты DOCKER_UNUSED (решение E18, развилка 2а): без контейнеров (и остановленных), старше
-// срока, без метки Trassa и не образы релизов приложений Trassa (точки отката E17).
-func (e *Env) unusedImages(df *systemDF, older time.Time) []dfImage {
-	keep := map[string]bool{}
-	if e.TrassaImages != nil {
-		keep = e.TrassaImages()
+// releaseIDs — id образов релизов Trassa: ссылки state.json разрешаются через Engine API (у Docker тег может быть
+// записан иначе: docker.io/library/x и x). Любая ошибка, кроме «образа уже нет», — ошибка категории.
+func (e *Env) releaseIDs(ctx context.Context) (map[string]bool, error) {
+	ids := map[string]bool{}
+	if e.TrassaImages == nil {
+		return ids, nil
 	}
+	refs, err := e.TrassaImages()
+	if err != nil {
+		return nil, fmt.Errorf("образы релизов Trassa не прочитаны: %w", err)
+	}
+	for ref := range refs {
+		var im struct {
+			ID string `json:"Id"`
+		}
+		code, err := e.docker(ctx, http.MethodGet, "/images/"+ref+"/json", &im)
+		if code == http.StatusNotFound {
+			continue
+		}
+		if err != nil || im.ID == "" {
+			return nil, fmt.Errorf("образ релиза %s: %v", ref, err)
+		}
+		ids[im.ID] = true
+	}
+	return ids, nil
+}
+
+// unusedImages — кандидаты DOCKER_UNUSED (решение E18, развилка 2а): без контейнеров (и остановленных), старше
+// срока, без метки Trassa и не образы релизов приложений Trassa (точки отката E17), сравнение по id.
+func unusedImages(df *systemDF, older time.Time, keep map[string]bool) []dfImage {
 	var out []dfImage
 	for _, im := range df.Images {
 		if im.Containers != 0 || im.Labels[labelApp] != "" || time.Unix(im.Created, 0).After(older) || keep[im.ID] {
 			continue
 		}
-		trassa := false
-		for _, r := range append(append([]string{}, im.RepoTags...), im.RepoDigests...) {
-			trassa = trassa || keep[r]
-		}
-		if !trassa {
-			out = append(out, im)
-		}
+		out = append(out, im)
 	}
 	return out
 }
@@ -167,8 +184,8 @@ func (e *Env) Cleanup(ctx context.Context, p *agentv1.DiskCleanupParams, dryRun 
 	}
 	res := &agentv1.DiskCleanupResult{}
 	if e.Free != nil {
-		if f, err := e.Free(e.path(mount)); err == nil {
-			res.FreeBeforeBytes = f
+		if f, total, err := e.Free(e.path(mount)); err == nil {
+			res.FreeBeforeBytes, res.TotalBytes = f, total
 		}
 	}
 	now := e.now()
@@ -230,7 +247,11 @@ func (e *Env) Cleanup(ctx context.Context, p *agentv1.DiskCleanupParams, dryRun 
 			if d, err = loadDF(); err != nil {
 				break
 			}
-			for _, im := range e.unusedImages(d, now.Add(-time.Duration(olderHours(p))*time.Hour)) {
+			var keep map[string]bool
+			if keep, err = e.releaseIDs(ctx); err != nil {
+				break // без списка точек отката не удаляется ничего
+			}
+			for _, im := range unusedImages(d, now.Add(-time.Duration(olderHours(p))*time.Hour), keep) {
 				if dryRun {
 					fr.Bytes += uint64(max(im.Size, 0))
 					continue
@@ -269,7 +290,7 @@ func (e *Env) Cleanup(ctx context.Context, p *agentv1.DiskCleanupParams, dryRun 
 		}
 	}
 	if e.Free != nil && !dryRun {
-		if f, err := e.Free(e.path(mount)); err == nil {
+		if f, _, err := e.Free(e.path(mount)); err == nil {
 			res.FreeAfterBytes = f
 		}
 	}

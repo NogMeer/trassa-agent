@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/helperrpc"
 	"github.com/NogMeer/trassa-agent/internal/ops"
 	"github.com/NogMeer/trassa-agent/internal/remedy"
 )
@@ -38,5 +39,24 @@ func TestDiskCleanupOperation(t *testing.T) {
 	f.e.Remedy.PackagesBusy = func(context.Context) string { return "lock-frontend (apt, pid 7)" }
 	if o := f.exec(sealed(f.body(ops.TypeDiskCleanup, params))); o.result.GetErrorCode() != "PACKAGE_MANAGER_BUSY" || ran != 0 {
 		t.Fatalf("занят: %+v", o.result)
+	}
+}
+
+// hello: типы E18 и вариант «контейнер» у перезапуска.
+func TestHelloCapabilitiesE18(t *testing.T) {
+	f := newFixture(t)
+	var caps []string
+	f.e.Serve(context.Background(), helperrpc.Request{Method: helperrpc.MethodHello}, func(r helperrpc.Response) error {
+		caps = r.Capabilities
+		return nil
+	})
+	have := map[string]bool{}
+	for _, c := range caps {
+		have[c] = true
+	}
+	for _, want := range []string{"service.start", "disk.cleanup", "cert.renew", "service.restart", "service.restart.container"} {
+		if !have[want] {
+			t.Errorf("нет %s в %v", want, caps)
+		}
 	}
 }

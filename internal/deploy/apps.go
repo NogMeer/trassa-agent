@@ -377,12 +377,16 @@ func (e *Env) ProxyHosts() []string {
 	return out
 }
 
-// ReleaseImages — образы релизов всех приложений Trassa (точки отката; disk.cleanup E18 их не удаляет).
-func (e *Env) ReleaseImages() map[string]bool {
+// ReleaseImages — образы релизов всех приложений Trassa (точки отката; disk.cleanup E18 их не удаляет). Ошибка
+// чтения — ошибка, а не пустой список: иначе очистка удалила бы точки отката.
+func (e *Env) ReleaseImages() (map[string]bool, error) {
 	out := map[string]bool{}
 	ents, err := os.ReadDir(e.AppsDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return out, nil
+	}
 	if err != nil {
-		return out
+		return nil, err
 	}
 	for _, d := range ents {
 		if !d.IsDir() {
@@ -390,11 +394,11 @@ func (e *Env) ReleaseImages() map[string]bool {
 		}
 		st, err := e.loadApp(d.Name())
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("приложение %s: %w", d.Name(), err)
 		}
 		for _, img := range st.Images {
 			out[img] = true
 		}
 	}
-	return out
+	return out, nil
 }

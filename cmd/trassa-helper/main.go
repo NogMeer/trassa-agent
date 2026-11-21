@@ -368,13 +368,14 @@ func remedyEnv(p config.Paths, sec *security.System) *remedy.Env {
 	d := deployEnv(p)
 	return &remedy.Env{Root: "/", Run: backup.RunCommand, Docker: &dockerapi.Client{},
 		ProxyHosts: d.ProxyHosts, TrassaImages: d.ReleaseImages,
-		Free: func(path string) (uint64, error) {
+		Free: func(path string) (uint64, uint64, error) {
 			fs, err := metrics.New().Statfs(path)
 			if err != nil {
-				return 0, err
+				return 0, 0, err
 			}
-			return fs.Bavail * uint64(fs.Bsize), nil
+			return fs.Bavail * uint64(fs.Bsize), fs.Blocks * uint64(fs.Bsize), nil
 		},
+		Served: remedy.ServedTLS,
 		PackagesBusy: func(context.Context) string {
 			h, err := security.PackageManagerBusy(sec)
 			if err != nil {

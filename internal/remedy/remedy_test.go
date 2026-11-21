@@ -160,9 +160,14 @@ func startDocker(t *testing.T, c *clock) (*fakeDocker, *dockerapi.Client) {
 			}
 			d.c.t = d.c.t.Add(5 * time.Second)
 			_ = json.NewEncoder(w).Encode(ci)
+		case len(parts) == 3 && parts[0] == "containers" && parts[2] == "logs":
+			msg := []byte("crash: ghp_" + strings.Repeat("A", 36) + "\n")
+			_, _ = w.Write(append([]byte{2, 0, 0, 0, 0, 0, 0, byte(len(msg))}, msg...))
 		case len(parts) == 3 && parts[0] == "containers":
 			d.posts = append(d.posts, parts[2])
 			w.WriteHeader(http.StatusNoContent)
+		case p == "/images/docker.io/library/app:1/json":
+			_, _ = w.Write([]byte(`{"Id":"sha256:release"}`))
 		case p == "/system/df":
 			_ = json.NewEncoder(w).Encode(d.df)
 		case strings.HasPrefix(p, "/images/") && r.Method == http.MethodDelete:
@@ -194,6 +199,13 @@ func TestContainerService(t *testing.T) {
 	if err != nil || !res.GetActive() || len(d.posts) != 1 || d.posts[0] != "restart" {
 		t.Fatalf("%v %+v %v", err, res, d.posts)
 	}
+	// Не поднялся — SERVICE_NOT_STABLE и хвост журнала без секрета.
+	d.cont["worker"] = inspect("c9", "worker", "exited", nil)
+	res, err = e.Service(context.Background(), &agentv1.ServiceRestartParams{Kind: agentv1.ServiceTargetKind_SERVICE_TARGET_KIND_CONTAINER, Container: "worker"}, true)
+	if !errors.Is(err, ErrNotStable) || len(res.GetLogTail()) != 1 || !strings.HasPrefix(res.GetLogTail()[0], "crash: ") || strings.Contains(res.GetLogTail()[0], "ghp_") {
+		t.Fatalf("журнал: %v %+v", err, res)
+	}
+	d.posts = d.posts[:1]
 	// Контейнеры Trassa — отказ без действий.
 	d.cont["app"] = inspect("c2", "app", "exited", map[string]string{"trassa.app_id": "x"})
 	d.cont["buildx_buildkit_trassa-2048"] = inspect("c3", "buildx_buildkit_trassa-2048", "running", nil)
@@ -228,13 +240,14 @@ func TestCleanup(t *testing.T) {
 		_ = os.WriteFile(p, []byte(data), 0o644)
 		_ = os.Chtimes(p, old, old)
 	}
-	e.TrassaImages = func() map[string]bool { return map[string]bool{"reg.example.com/app@sha256:aa": true} }
+	// Ссылка в state.json записана иначе, чем тег у Docker: защита — по id образа.
+	e.TrassaImages = func() (map[string]bool, error) { return map[string]bool{"docker.io/library/app:1": true}, nil }
 	created := c.t.Add(-48 * time.Hour).Unix()
 	d.df = map[string]any{"Images": []map[string]any{
 		{"Id": "sha256:free", "Created": created, "Size": 100, "Containers": 0},
 		{"Id": "sha256:used", "Created": created, "Size": 200, "Containers": 1},
 		{"Id": "sha256:trassa", "Created": created, "Size": 300, "Containers": 0, "Labels": map[string]string{"trassa.app_id": "x"}},
-		{"Id": "sha256:release", "Created": created, "Size": 400, "Containers": 0, "RepoDigests": []string{"reg.example.com/app@sha256:aa"}},
+		{"Id": "sha256:release", "Created": created, "Size": 400, "Containers": 0, "RepoTags": []string{"app:1"}},
 		{"Id": "sha256:fresh", "Created": c.t.Unix(), "Size": 500, "Containers": 0},
 	}, "BuildCache": []map[string]any{{"InUse": false, "Size": 50, "LastUsedAt": old.Format(time.RFC3339)}, {"InUse": true, "Size": 60}}}
 	all := []agentv1.DiskCleanupCategory{agentv1.DiskCleanupCategory_DISK_CLEANUP_CATEGORY_JOURNAL, agentv1.DiskCleanupCategory_DISK_CLEANUP_CATEGORY_APT_CACHE,
@@ -261,9 +274,13 @@ func TestCleanup(t *testing.T) {
 			t.Errorf("оценка %v: %d, ждали %d", f.GetCategory(), f.GetBytes(), want[i])
 		}
 	}
+	e.Free = func(string) (uint64, uint64, error) { return 10, 1000, nil }
 	res, err := e.Cleanup(context.Background(), p, false)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if res.GetTotalBytes() != 1000 || res.GetFreeBeforeBytes() != 10 {
+		t.Fatalf("раздел: %+v", res)
 	}
 	if strings.Join(d.deleted, ",") != "sha256:free" {
 		t.Fatalf("удалены образы %v", d.deleted)
@@ -274,6 +291,13 @@ func TestCleanup(t *testing.T) {
 	if res.GetFreed()[0].GetBytes() != 1000 || res.GetFreed()[1].GetBytes() != 300 || res.GetFreed()[3].GetBytes() != 777 ||
 		!strings.Contains(strings.Join(d.posts, ","), `{"until":["24h"]}`) {
 		t.Fatalf("итог %+v %v", res, d.posts)
+	}
+	// Список образов релизов не прочитан — образы не удаляются вовсе.
+	d.deleted = nil
+	e.TrassaImages = func() (map[string]bool, error) { return nil, errors.New("state.json повреждён") }
+	res, err = e.Cleanup(context.Background(), &agentv1.DiskCleanupParams{Categories: all[2:3]}, false)
+	if err == nil || len(d.deleted) != 0 || !strings.Contains(res.GetFreed()[0].GetError(), "не прочитаны") {
+		t.Fatalf("без списка релизов: %v %v %+v", err, d.deleted, res)
 	}
 	// Менеджер пакетов занят — категория не чистится, остальные идут.
 	e.PackagesBusy = func(context.Context) string { return "lock-frontend (apt, pid 12)" }
@@ -339,9 +363,15 @@ func TestCertRenew(t *testing.T) {
 		certTree(t, e.Root, "shop.example.com", 2, c.t.Add(90*24*time.Hour))
 		return nil, nil
 	}
+	var served time.Time
+	e.Served = func(context.Context, string) (*x509.Certificate, error) { return &x509.Certificate{NotAfter: served}, nil }
+	served = c.t.Add(90 * 24 * time.Hour).Truncate(time.Second)
 	res, err := e.RenewCert(context.Background(), "shop.example.com")
-	if err != nil || res.GetNotAfterMs() <= res.GetNotAfterBeforeMs() || res.GetIssuer() != "shop.example.com" {
+	if err != nil || res.GetNotAfterMs() <= res.GetNotAfterBeforeMs() || res.GetIssuer() != "shop.example.com" || res.GetManager() != "certbot" || !res.GetServedNew() {
 		t.Fatalf("%v %+v", err, res)
+	}
+	if st, err := e.CertState("shop.example.com"); err != nil || st.GetNotAfterBeforeMs() != res.GetNotAfterMs() || st.GetManager() != "certbot" {
+		t.Fatalf("предпросмотр: %v %+v", err, st)
 	}
 	if strings.Join(args, " ") != "certbot renew --cert-name shop.example.com --non-interactive" {
 		t.Fatalf("certbot: %v", args)
