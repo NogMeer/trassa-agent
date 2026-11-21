@@ -443,7 +443,11 @@ func (a *Agent) readLoop(ctx context.Context, c *conn) error {
 		case *agentv1.GatewayMessage_Cancel:
 			// Отмена релиза или сборки (E17): подпись, сроки и шаг проверяет помощник.
 			r := p.Cancel
-			go a.cancelOperation(context.WithoutCancel(ctx), r)
+			a.opWG.Add(1)
+			go func() {
+				defer a.opWG.Done()
+				a.cancelOperation(ctx, c, r)
+			}()
 		case *agentv1.GatewayMessage_Close:
 			return closeErr(p.Close)
 		case *agentv1.GatewayMessage_Subscribe, *agentv1.GatewayMessage_Unsubscribe:

@@ -2633,6 +2633,9 @@ func (x *DeployImagesPruneResult) GetFreedBytes() uint64 {
 
 // Отмена релиза или сборки до SWITCH: подпись Ed25519 на "trassa-cancel-v1" || 0x00 || body (CancelBody).
 // После SWITCH — CANCEL_TOO_LATE; отменённая операция — ROLLED_BACK с error_code CANCELLED.
+// А также (E10-T14, «Вернуть как было») операция в AWAIT_CONFIRM с автооткатом конфигурации: немедленный откат
+// тем же путём, что у таймера, итог ROLLED_BACK с CANCELLED уходит сразу; после подтверждения — CANCEL_TOO_LATE.
+// Возможность в hello — operations.cancel_confirm.
 type SignedCancel struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Body          []byte                 `protobuf:"bytes,1,opt,name=body,proto3" json:"body,omitempty"`

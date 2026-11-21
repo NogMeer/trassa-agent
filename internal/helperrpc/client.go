@@ -219,10 +219,12 @@ func (c *Client) TerminalRenew(ctx context.Context, signed []byte) error {
 	return err
 }
 
-// Cancel — передать подписанную отмену релиза или сборки; отказ — код помощника (CANCEL_TOO_LATE и др.).
-func (c *Client) Cancel(ctx context.Context, signed []byte) error {
-	_, err := c.call(ctx, Request{Method: MethodCancel, Signed: signed}, KindOK)
-	return err
+// Cancel — передать подписанную отмену релиза, сборки или операции в ожидании подтверждения (E10-T14). Для
+// последней — итог отката (OperationResult, protobuf); для релиза и сборки — пусто (итог придёт с операцией).
+// Отказ — код помощника (CANCEL_TOO_LATE и др.).
+func (c *Client) Cancel(ctx context.Context, signed []byte) ([]byte, error) {
+	r, err := c.call(ctx, Request{Method: MethodCancel, Signed: signed}, KindResult)
+	return r.Result, err
 }
 
 // TerminalClose — закрыть терминал (простой, клиент закрыл): сужение доступа, подпись не нужна.

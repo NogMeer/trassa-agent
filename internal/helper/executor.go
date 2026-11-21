@@ -245,12 +245,13 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 		}
 		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})
 	case helperrpc.MethodCancel:
-		if code := e.Cancel(req.Signed); code != "" {
+		res, code := e.Cancel(ctx, req.Signed)
+		if code != "" {
 			e.log().Warn("helper: отмена отклонена", "code", code)
 			_ = send(helperrpc.Response{Kind: helperrpc.KindError, Code: code})
 			return
 		}
-		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})
+		_ = send(helperrpc.Response{Kind: helperrpc.KindResult, Result: res})
 	case helperrpc.MethodTerminalClose:
 		if !e.TerminalClose(req.SessionID, agentv1.TerminalEndReason(req.Reason)) {
 			_ = send(helperrpc.Response{Kind: helperrpc.KindError, Code: "TERMINAL_NOT_FOUND"})
@@ -665,6 +666,12 @@ func (e *Executor) AutoRollback(ctx context.Context, op string) error {
 }
 
 func (e *Executor) autoRollbackLocked(ctx context.Context, op string) error {
+	return e.rollbackAwaitingLocked(ctx, op, false)
+}
+
+// rollbackAwaitingLocked — откат операции в ожидании подтверждения (под e.Lock): по таймеру или при старте
+// (cancelled = false) и по подписанной отмене человека (cancelled = true, итог CANCELLED). Путь один.
+func (e *Executor) rollbackAwaitingLocked(ctx context.Context, op string, cancelled bool) error {
 	rec, err := e.Auto.Get(op)
 	if err != nil || rec == nil {
 		return err
@@ -689,6 +696,9 @@ func (e *Executor) autoRollbackLocked(ctx context.Context, op string) error {
 			res.Outcome, res.ErrorCode, res.Message = agentv1.OperationOutcome_OPERATION_OUTCOME_FAILED, CodeRollbackFailed, redact.Text(rerr.Error())
 		} else {
 			res.Outcome, res.ErrorCode, res.Message = agentv1.OperationOutcome_OPERATION_OUTCOME_ROLLED_BACK, CodeAutoRollback, "Нет подтверждения связи после изменения: прежнее состояние возвращено"
+			if cancelled {
+				res.ErrorCode, res.Message = CodeCancelled, "Отменено человеком: прежнее состояние возвращено"
+			}
 			if m, _ := e.Rollback.Load(op); m != nil && len(m.Services) > 0 {
 				if err := e.Services.Restart(ctx, m.Services...); err != nil {
 					res.Message += "; перезапуск служб: " + redact.Text(err.Error())
@@ -895,4 +905,6 @@ func (e *Executor) drainEvents() []*agentv1.Event {
 var ExtraCapabilities = []string{
 	// E18: service.restart и service.start с kind = CONTAINER.
 	"service.restart.container",
+	// E10-T14: SignedCancel для операции в ожидании подтверждения — немедленный откат («Вернуть как было»).
+	"operations.cancel_confirm",
 }

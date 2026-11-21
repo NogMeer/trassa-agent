@@ -364,7 +364,9 @@ func TestCertRenew(t *testing.T) {
 		return nil, nil
 	}
 	var served time.Time
-	e.Served = func(context.Context, string) (*x509.Certificate, error) { return &x509.Certificate{NotAfter: served}, nil }
+	e.Served = func(context.Context, string) (*x509.Certificate, error) {
+		return &x509.Certificate{NotAfter: served}, nil
+	}
 	served = c.t.Add(90 * 24 * time.Hour).Truncate(time.Second)
 	res, err := e.RenewCert(context.Background(), "shop.example.com")
 	if err != nil || res.GetNotAfterMs() <= res.GetNotAfterBeforeMs() || res.GetIssuer() != "shop.example.com" || res.GetManager() != "certbot" || !res.GetServedNew() {
