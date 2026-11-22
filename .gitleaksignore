@@ -1,0 +1,3 @@
+# Ложные срабатывания gitleaks: отпечаток находки и причина. Настоящие секреты сюда не вносятся.
+# публичный ключ minisign выпусков trassa-release-1, зашит намеренно (scripts/install.sh:24)
+1c2176d7847773810a09466695591b900882587e:scripts/install.sh:generic-api-key:24
