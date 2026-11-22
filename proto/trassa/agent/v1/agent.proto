@@ -556,6 +556,15 @@ message ServiceEntry {
   string name = 1;
   // active, inactive, failed …
   string state = 2;
+  // E06: «служба должна работать» (proto/testdata/service-expected.json) — из D-Bus systemd.
+  // SubState: running, dead, exited, auto-restart …
+  string sub_state = 3;
+  // UnitFileState: enabled, enabled-runtime, disabled, static, masked, indirect, generated, transient, alias …
+  string unit_file_state = 4;
+  // Service.Type: simple, exec, forking, oneshot, notify, dbus, idle.
+  string service_type = 5;
+  // TriggeredBy: таймеры, сокеты и path-юниты, которые её запускают (до 16 имён).
+  repeated string triggered_by = 6;
 }
 
 message ContainerEntry {
@@ -563,6 +572,14 @@ message ContainerEntry {
   string image = 2;
   string state = 3;
   repeated string published_ports = 4;
+  // E06: «контейнер должен работать» — из Docker API (inspect и метки compose).
+  // HostConfig.RestartPolicy.Name: no, always, unless-stopped, on-failure (пусто — no).
+  string restart_policy = 5;
+  // State.ExitCode последнего завершения (у работающего — 0).
+  int32 exit_code = 6;
+  // Метки com.docker.compose.project и com.docker.compose.service; пусто — не compose.
+  string compose_project = 7;
+  string compose_service = 8;
 }
 
 message PortEntry {

@@ -5037,7 +5037,16 @@ type ServiceEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// active, inactive, failed …
-	State         string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	State string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	// E06: «служба должна работать» (proto/testdata/service-expected.json) — из D-Bus systemd.
+	// SubState: running, dead, exited, auto-restart …
+	SubState string `protobuf:"bytes,3,opt,name=sub_state,json=subState,proto3" json:"sub_state,omitempty"`
+	// UnitFileState: enabled, enabled-runtime, disabled, static, masked, indirect, generated, transient, alias …
+	UnitFileState string `protobuf:"bytes,4,opt,name=unit_file_state,json=unitFileState,proto3" json:"unit_file_state,omitempty"`
+	// Service.Type: simple, exec, forking, oneshot, notify, dbus, idle.
+	ServiceType string `protobuf:"bytes,5,opt,name=service_type,json=serviceType,proto3" json:"service_type,omitempty"`
+	// TriggeredBy: таймеры, сокеты и path-юниты, которые её запускают (до 16 имён).
+	TriggeredBy   []string `protobuf:"bytes,6,rep,name=triggered_by,json=triggeredBy,proto3" json:"triggered_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5086,12 +5095,48 @@ func (x *ServiceEntry) GetState() string {
 	return ""
 }
 
+func (x *ServiceEntry) GetSubState() string {
+	if x != nil {
+		return x.SubState
+	}
+	return ""
+}
+
+func (x *ServiceEntry) GetUnitFileState() string {
+	if x != nil {
+		return x.UnitFileState
+	}
+	return ""
+}
+
+func (x *ServiceEntry) GetServiceType() string {
+	if x != nil {
+		return x.ServiceType
+	}
+	return ""
+}
+
+func (x *ServiceEntry) GetTriggeredBy() []string {
+	if x != nil {
+		return x.TriggeredBy
+	}
+	return nil
+}
+
 type ContainerEntry struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Image          string                 `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
 	State          string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
 	PublishedPorts []string               `protobuf:"bytes,4,rep,name=published_ports,json=publishedPorts,proto3" json:"published_ports,omitempty"`
+	// E06: «контейнер должен работать» — из Docker API (inspect и метки compose).
+	// HostConfig.RestartPolicy.Name: no, always, unless-stopped, on-failure (пусто — no).
+	RestartPolicy string `protobuf:"bytes,5,opt,name=restart_policy,json=restartPolicy,proto3" json:"restart_policy,omitempty"`
+	// State.ExitCode последнего завершения (у работающего — 0).
+	ExitCode int32 `protobuf:"varint,6,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	// Метки com.docker.compose.project и com.docker.compose.service; пусто — не compose.
+	ComposeProject string `protobuf:"bytes,7,opt,name=compose_project,json=composeProject,proto3" json:"compose_project,omitempty"`
+	ComposeService string `protobuf:"bytes,8,opt,name=compose_service,json=composeService,proto3" json:"compose_service,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -5152,6 +5197,34 @@ func (x *ContainerEntry) GetPublishedPorts() []string {
 		return x.PublishedPorts
 	}
 	return nil
+}
+
+func (x *ContainerEntry) GetRestartPolicy() string {
+	if x != nil {
+		return x.RestartPolicy
+	}
+	return ""
+}
+
+func (x *ContainerEntry) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *ContainerEntry) GetComposeProject() string {
+	if x != nil {
+		return x.ComposeProject
+	}
+	return ""
+}
+
+func (x *ContainerEntry) GetComposeService() string {
+	if x != nil {
+		return x.ComposeService
+	}
+	return ""
 }
 
 type PortEntry struct {
@@ -6340,15 +6413,23 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"containers\x18\x02 \x03(\v2\x1f.trassa.agent.v1.ContainerEntryR\n" +
 	"containers\x120\n" +
-	"\x05ports\x18\x03 \x03(\v2\x1a.trassa.agent.v1.PortEntryR\x05ports\"8\n" +
+	"\x05ports\x18\x03 \x03(\v2\x1a.trassa.agent.v1.PortEntryR\x05ports\"\xc3\x01\n" +
 	"\fServiceEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05state\x18\x02 \x01(\tR\x05state\"y\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\x12\x1b\n" +
+	"\tsub_state\x18\x03 \x01(\tR\bsubState\x12&\n" +
+	"\x0funit_file_state\x18\x04 \x01(\tR\runitFileState\x12!\n" +
+	"\fservice_type\x18\x05 \x01(\tR\vserviceType\x12!\n" +
+	"\ftriggered_by\x18\x06 \x03(\tR\vtriggeredBy\"\x8f\x02\n" +
 	"\x0eContainerEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x14\n" +
 	"\x05state\x18\x03 \x01(\tR\x05state\x12'\n" +
-	"\x0fpublished_ports\x18\x04 \x03(\tR\x0epublishedPorts\"o\n" +
+	"\x0fpublished_ports\x18\x04 \x03(\tR\x0epublishedPorts\x12%\n" +
+	"\x0erestart_policy\x18\x05 \x01(\tR\rrestartPolicy\x12\x1b\n" +
+	"\texit_code\x18\x06 \x01(\x05R\bexitCode\x12'\n" +
+	"\x0fcompose_project\x18\a \x01(\tR\x0ecomposeProject\x12'\n" +
+	"\x0fcompose_service\x18\b \x01(\tR\x0ecomposeService\"o\n" +
 	"\tPortEntry\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x1a\n" +
