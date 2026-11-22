@@ -92,6 +92,10 @@ message Hello {
   // Ключ X25519 помощника для секретов (HPKE, E13): 32 байта; id меняется при смене ключа.
   bytes encryption_public_key = 12;
   string encryption_key_id = 13;
+  // E24: агент ждёт подтверждения перевода (agent.rebind) — id операции прежней панели. Новая панель, у которой этот
+  // сервер есть (рукопожатие прошло ключом агента), отвечает SignedConfirm с этим operation_id своим ключом.
+  // Пусто — перевода нет.
+  string rebind_operation_id = 14;
 }
 
 // Рукопожатие принято.
@@ -236,6 +240,8 @@ message OperationParams {
     // E25: 110–119.
     VpnProbeEnsureParams vpn_probe_ensure = 110;
     VpnProbeRunParams vpn_probe_run = 111;
+    // E24: 120–129.
+    AgentRebindParams agent_rebind = 120;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }
@@ -267,6 +273,43 @@ message ReleaseArtifact {
   string url = 3;
   // Шестнадцатеричный SHA-256.
   string sha256 = 4;
+}
+
+// E24-T20: перевод агента в другую панель (перенос пространства). Агент сохраняет прежние адрес и ключи панели,
+// подключается к gateway_url, проходит рукопожатие своим ключом и ждёт SignedConfirm этой операции, подписанный одним
+// из panel_keys, не дольше confirm_within_sec (OperationBody, 60–600). Нет подтверждения, адрес недоступен, сертификат
+// не проверен или рукопожатие отклонено — агент возвращает прежние адрес и ключи, подключается к прежней панели и
+// присылает итог ROLLED_BACK с REBIND_ROLLED_BACK и причиной (AgentRebindResult). Меняется только запись о регистрации.
+message AgentRebindParams {
+  // wss://host[:port]/путь — как gatewayUrl записи о регистрации; без userinfo.
+  string gateway_url = 1;
+  // Ключи подписи операций новой панели: 1 или 2 (ротация), keyId не пустые и разные.
+  repeated RebindPanelKey panel_keys = 2;
+}
+
+message RebindPanelKey {
+  string key_id = 1;
+  // 32 байта Ed25519.
+  bytes public_key = 2;
+}
+
+// Почему перевод не состоялся (итог ROLLED_BACK, error_code REBIND_ROLLED_BACK).
+enum RebindFailure {
+  REBIND_FAILURE_UNSPECIFIED = 0;
+  // Адрес не разрешается или соединение не устанавливается.
+  REBIND_FAILURE_UNREACHABLE = 1;
+  // Сертификат не прошёл проверку (самоподписанный, чужое имя, истёк).
+  REBIND_FAILURE_TLS_UNTRUSTED = 2;
+  // Новая панель отклонила рукопожатие (сервера у неё нет, ключ агента не совпал) или закрыла соединение.
+  REBIND_FAILURE_HANDSHAKE_REJECTED = 3;
+  // Соединение есть, но подписанного подтверждения нет за confirm_within_sec.
+  REBIND_FAILURE_NO_CONFIRM = 4;
+}
+
+message AgentRebindResult {
+  RebindFailure failure = 1;
+  // Короткое описание без секретов, до 300 символов: текст ошибки TLS или соединения.
+  string detail = 2;
 }
 
 message AgentUninstallParams {
@@ -440,6 +483,8 @@ message OperationResult {
     // E25: 110–119.
     VpnProbeEnsureResult vpn_probe_ensure = 110;
     VpnProbeRunResult vpn_probe_run = 111;
+    // E24: 120–129.
+    AgentRebindResult agent_rebind = 120;
   }
 }
 
