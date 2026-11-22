@@ -416,8 +416,17 @@ func TestWatcher(t *testing.T) {
 		return map[string]any{"Id": "c1", "State": map[string]any{"ExitCode": code}, "HostConfig": map[string]any{"RestartPolicy": map[string]any{"Name": policy}}}
 	}
 	d.list = []map[string]any{{"Id": "c1", "Names": []string{"/worker"}, "State": "exited", "Labels": map[string]string{}}}
+	// unless-stopped в exited — его остановили (упавший Docker перезапустил бы сам): события нет никогда.
 	d.cont["c1"] = crash(1, "unless-stopped")
 	w := &Watcher{Env: e}
+	_ = w.Containers(context.Background())
+	c.t = c.t.Add(5 * time.Minute)
+	if ev := w.Containers(context.Background()); len(ev) != 0 {
+		t.Fatalf("unless-stopped в exited: %v", ev)
+	}
+	// on-failure: попытки кончились, контейнер лежит с ненулевым кодом — упал.
+	d.cont["c1"] = crash(1, "on-failure")
+	w = &Watcher{Env: e}
 	if ev := w.Containers(context.Background()); len(ev) != 0 {
 		t.Fatalf("сразу: %v", ev)
 	}
@@ -433,7 +442,7 @@ func TestWatcher(t *testing.T) {
 	if ev := w.Containers(context.Background()); len(ev) != 1 || ev[0].GetAttributes()["state"] != "resolved" {
 		t.Fatalf("поднялся: %v", ev)
 	}
-	// Остановлен вручную (143) или без политики — события нет.
+	// Остановлен вручную (always в exited) или без политики — события нет.
 	d.list[0]["State"] = "exited"
 	d.cont["c1"] = crash(143, "always")
 	c.t = c.t.Add(5 * time.Minute)

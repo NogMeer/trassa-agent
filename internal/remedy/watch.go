@@ -4,7 +4,9 @@ package remedy
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"os"
 	"net/url"
 	"sort"
 	"strconv"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/fsutil"
 )
 
 // Коды событий E18 (справочник E09: container.down, cert.expiring).
@@ -33,22 +36,28 @@ type downState struct {
 	since      time.Time
 	restarting int
 	firing     bool
+	// subject — имя контейнера в сработавшем событии: снятие уходит с тем же subject (отпечаток инцидента).
+	subject string
 }
 
-// Watcher — наблюдение помощника (решения E18 пп. 6, 7). Состояние в памяти: после перезапуска действующее
-// условие сработает снова (E09 склеивает по fingerprint).
+// Watcher — наблюдение помощника (решения E18 пп. 6, 7). Сработавшие container.down хранятся в StatePath: после
+// перезапуска помощника снятие всё равно уйдёт. Остальное состояние (сроки, счётчики) — в памяти.
 type Watcher struct {
-	Env        *Env
+	Env *Env
+	// StatePath — файл сработавших container.down (helper/watch.json); пусто — только в памяти.
+	StatePath  string
 	containers map[string]*downState
 	certs      map[string]int // имя → сработавший порог
 	apps       map[string]*appWatch
+	loaded     bool
 }
 
 type listed struct {
-	ID     string            `json:"Id"`
-	Names  []string          `json:"Names"`
-	State  string            `json:"State"`
-	Labels map[string]string `json:"Labels"`
+	ID      string            `json:"Id"`
+	Names   []string          `json:"Names"`
+	State   string            `json:"State"`
+	Created int64             `json:"Created"`
+	Labels  map[string]string `json:"Labels"`
 }
 
 type inspected struct {
@@ -67,89 +76,194 @@ func event(kind string, sev agentv1.EventSeverity, now time.Time, msg string, at
 	return &agentv1.Event{Kind: kind, Severity: sev, AtMs: now.UnixMilli(), Message: msg, Attributes: attrs}
 }
 
-// crashed — остановка не похожа на ручную: docker stop даёт 0 (обработал SIGTERM) или 143 (SIGTERM). Признак
-// эвристический (Engine API не отдаёт «остановлен вручную»): падение с кодом 0 события не даст.
-func crashed(i *inspected) bool {
-	return i.State.OOMKilled || (i.State.ExitCode != 0 && i.State.ExitCode != 143)
+// Метки compose: служба опознаётся по проекту и имени службы, а не по имени контейнера с номером копии.
+const (
+	labelComposeProject = "com.docker.compose.project"
+	labelComposeService = "com.docker.compose.service"
+)
+
+// containerKey — служба контейнера: compose — «проект/служба» (замена копии trassa-api-10 → trassa-api-11 — та
+// же служба), иначе имя контейнера (пересоздание с тем же именем — тот же контейнер).
+func containerKey(c listed, name string) string {
+	if p, s := c.Labels[labelComposeProject], c.Labels[labelComposeService]; p != "" && s != "" {
+		return "compose:" + p + "/" + s
+	}
+	return "name:" + name
 }
 
-// Containers — события container.down и снятие (resolved) по списку контейнеров.
+// crashedAfterStop — контейнер остался в exited после падения, а не после остановки. С политикой always и
+// unless-stopped упавший контейнер Docker запускает сам (цикл виден как restarting), поэтому такой контейнер в
+// exited остановили (docker stop, compose при замене копии) — это не «упал». Падение в exited бывает только у
+// on-failure (попытки кончились) с ненулевым кодом или OOM. Без политики остановка — норма.
+func crashedAfterStop(i *inspected) bool {
+	if i.HostConfig.RestartPolicy.Name != "on-failure" {
+		return false
+	}
+	return i.State.OOMKilled || i.State.ExitCode != 0
+}
+
+type member struct {
+	c    listed
+	name string
+}
+
+// Containers — события container.down и снятие (resolved) по службам контейнеров. Служба на связи, если хоть одна
+// её копия running: замена копии и пересоздание с тем же именем — не падение. Удалённый контейнер просто выпадает
+// из службы — это не «остановился»; служба без единого контейнера снимает сработавшее событие.
 func (w *Watcher) Containers(ctx context.Context) []*agentv1.Event {
 	if w.containers == nil {
 		w.containers = map[string]*downState{}
 	}
+	w.load()
 	var cs []listed
 	if _, err := w.Env.docker(ctx, http.MethodGet, "/containers/json?all=1", &cs); err != nil {
 		return nil // нет Docker или ответа — состояние не меняется
 	}
 	now := w.Env.now()
-	seen := map[string]bool{}
-	var out []*agentv1.Event
+	groups := map[string][]member{}
 	sort.Slice(cs, func(i, j int) bool { return cs[i].ID < cs[j].ID })
 	for i, c := range cs {
-		if i >= MaxWatched || len(c.Names) == 0 {
+		if i >= MaxWatched {
 			break
+		}
+		if len(c.Names) == 0 {
+			continue
 		}
 		name := strings.TrimPrefix(c.Names[0], "/")
 		if c.Labels[labelRole] != "" || strings.HasPrefix(name, builderPrefix) {
 			continue
 		}
-		seen[name] = true
-		st := w.containers[name]
-		attrs := map[string]string{"subject": name}
-		if a := c.Labels[labelApp]; a != "" {
-			attrs["app_id"] = a
+		k := containerKey(c, name)
+		groups[k] = append(groups[k], member{c: c, name: name})
+	}
+	keys := make([]string, 0, len(groups))
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var out []*agentv1.Event
+	changed := false
+	for _, k := range keys {
+		ms := groups[k]
+		st := w.containers[k]
+		running := false
+		for _, m := range ms {
+			running = running || m.c.State == "running"
 		}
-		if c.State == "running" {
+		if running {
 			if st != nil && st.firing {
-				attrs["state"] = "resolved"
-				out = append(out, event(EventContainerDown, agentv1.EventSeverity_EVENT_SEVERITY_INFO, now, "контейнер снова работает", attrs))
+				out = append(out, w.resolved(now, st.subject, ms[0].c, "служба снова работает"))
+				changed = true
 			}
-			delete(w.containers, name)
+			delete(w.containers, k)
 			continue
 		}
-		if c.State != "exited" && c.State != "dead" && c.State != "restarting" {
-			continue
+		// Ни одной работающей копии: решает самая новая (её состояние и политика).
+		sort.Slice(ms, func(i, j int) bool { return ms[i].c.Created > ms[j].c.Created })
+		cur := ms[0]
+		if cur.c.State != "exited" && cur.c.State != "dead" && cur.c.State != "restarting" {
+			continue // created, paused, removing — ни падения, ни снятия
 		}
 		var info inspected
-		if _, err := w.Env.docker(ctx, http.MethodGet, "/containers/"+url.PathEscape(c.ID)+"/json", &info); err != nil {
+		if _, err := w.Env.docker(ctx, http.MethodGet, "/containers/"+url.PathEscape(cur.c.ID)+"/json", &info); err != nil {
 			continue
 		}
-		switch info.HostConfig.RestartPolicy.Name {
-		case "always", "unless-stopped", "on-failure":
-		default:
+		if info.HostConfig.RestartPolicy.Name == "" || info.HostConfig.RestartPolicy.Name == "no" {
 			continue // без политики перезапуска остановка — норма
 		}
 		if st == nil {
 			st = &downState{since: now}
-			w.containers[name] = st
+			w.containers[k] = st
 		}
 		down := false
-		if c.State == "restarting" {
+		if cur.c.State == "restarting" || cur.c.State == "dead" {
 			st.restarting++
 			down = st.restarting >= RestartingTicks
 		} else {
 			st.restarting = 0
-			down = crashed(&info) && now.Sub(st.since) >= DownFor
+			down = crashedAfterStop(&info) && now.Sub(st.since) >= DownFor
 		}
 		if down && !st.firing {
-			st.firing = true
+			st.firing, st.subject = true, cur.name
+			attrs := w.attrs(cur.name, cur.c)
 			attrs["state"], attrs["exit_code"] = "firing", strconv.Itoa(info.State.ExitCode)
 			attrs["oom"] = strconv.FormatBool(info.State.OOMKilled)
 			out = append(out, event(EventContainerDown, agentv1.EventSeverity_EVENT_SEVERITY_CRIT, now, "контейнер не работает", attrs))
+			changed = true
 		}
 	}
-	for name, st := range w.containers {
-		if !seen[name] {
-			// Контейнер удалён: событие снимается, если было.
-			if st.firing {
-				out = append(out, event(EventContainerDown, agentv1.EventSeverity_EVENT_SEVERITY_INFO, now, "контейнер удалён",
-					map[string]string{"subject": name, "state": "resolved"}))
-			}
-			delete(w.containers, name)
+	for k, st := range w.containers {
+		if _, ok := groups[k]; ok {
+			continue
 		}
+		// Служба удалена целиком: сработавшее снимается, «остановился» не бывает.
+		if st.firing {
+			out = append(out, event(EventContainerDown, agentv1.EventSeverity_EVENT_SEVERITY_INFO, now, "контейнер удалён",
+				map[string]string{"subject": st.subject, "state": "resolved"}))
+			changed = true
+		}
+		delete(w.containers, k)
+	}
+	if changed {
+		w.save()
 	}
 	return out
+}
+
+func (w *Watcher) attrs(subject string, c listed) map[string]string {
+	a := map[string]string{"subject": subject}
+	if v := c.Labels[labelApp]; v != "" {
+		a["app_id"] = v
+	}
+	if p, s := c.Labels[labelComposeProject], c.Labels[labelComposeService]; p != "" && s != "" {
+		a["compose_project"], a["compose_service"] = p, s
+	}
+	return a
+}
+
+func (w *Watcher) resolved(now time.Time, subject string, c listed, msg string) *agentv1.Event {
+	a := w.attrs(subject, c)
+	a["state"] = "resolved"
+	return event(EventContainerDown, agentv1.EventSeverity_EVENT_SEVERITY_INFO, now, msg, a)
+}
+
+// fired — запись файла состояния: служба → subject сработавшего события.
+type fired map[string]string
+
+func (w *Watcher) load() {
+	if w.loaded || w.StatePath == "" {
+		w.loaded = true
+		return
+	}
+	w.loaded = true
+	raw, err := os.ReadFile(w.StatePath)
+	if err != nil {
+		return
+	}
+	var f fired
+	if json.Unmarshal(raw, &f) != nil {
+		return
+	}
+	now := w.Env.now()
+	for k, subj := range f {
+		if _, ok := w.containers[k]; !ok && subj != "" {
+			w.containers[k] = &downState{since: now, firing: true, subject: subj}
+		}
+	}
+}
+
+func (w *Watcher) save() {
+	if w.StatePath == "" {
+		return
+	}
+	f := fired{}
+	for k, st := range w.containers {
+		if st.firing {
+			f[k] = st.subject
+		}
+	}
+	raw, _ := json.Marshal(f)
+	_ = fsutil.WriteFileAtomic(w.StatePath, raw, 0o600, fsutil.Keep)
 }
 
 // threshold — наименьший порог, до которого дошёл срок (0 — дальше всех порогов).

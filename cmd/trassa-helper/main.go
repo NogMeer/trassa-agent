@@ -298,7 +298,7 @@ func serve(ctx context.Context, log *slog.Logger) error {
 	}
 	// Падение контейнеров и срок сертификатов certbot (E18): события — агенту через опрос событий.
 	if ex.Remedy != nil {
-		w := &remedy.Watcher{Env: ex.Remedy}
+		w := &remedy.Watcher{Env: ex.Remedy, StatePath: filepath.Join(p.HelperDir, "watch.json")}
 		go w.Run(ctx, time.Minute, 6*time.Hour, ex.PushEvent)
 	}
 	// Детектор (E10-T7) наблюдает, пока работает помощник.
