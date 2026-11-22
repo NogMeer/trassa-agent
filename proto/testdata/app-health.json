@@ -1,0 +1,525 @@
+{
+ "_comment": "Здоровье приложения Trassa (E17-T26-R1). states — правило состояния, общее для панели (runtimeState в apps/api/src/modules/deploy/app-health.ts) и агента (remedy.AppState): контейнеры {state, health} → state и reason. sequences — гашение дребезга агентом (опрос раз в минуту): наблюдения [state, reason] по порядку и события app.unhealthy с номером наблюдения (at, с 0); firing после 3 нездоровых подряд, resolved после 2 здоровых подряд, STOPPED сбрасывает счёт.",
+ "states": [
+  {
+   "name": "нет контейнеров",
+   "containers": [],
+   "state": "UNHEALTHY",
+   "reason": "MISSING"
+  },
+  {
+   "name": "один работает без проверки",
+   "containers": [
+    {
+     "state": "running",
+     "health": ""
+    }
+   ],
+   "state": "HEALTHY",
+   "reason": ""
+  },
+  {
+   "name": "работает и здоров",
+   "containers": [
+    {
+     "state": "running",
+     "health": "healthy"
+    }
+   ],
+   "state": "HEALTHY",
+   "reason": ""
+  },
+  {
+   "name": "проверка ещё идёт",
+   "containers": [
+    {
+     "state": "running",
+     "health": "starting"
+    }
+   ],
+   "state": "HEALTHY",
+   "reason": ""
+  },
+  {
+   "name": "проверка не прошла",
+   "containers": [
+    {
+     "state": "running",
+     "health": "unhealthy"
+    }
+   ],
+   "state": "UNHEALTHY",
+   "reason": "HEALTHCHECK"
+  },
+  {
+   "name": "один из двух нездоров",
+   "containers": [
+    {
+     "state": "running",
+     "health": "healthy"
+    },
+    {
+     "state": "running",
+     "health": "unhealthy"
+    }
+   ],
+   "state": "UNHEALTHY",
+   "reason": "HEALTHCHECK"
+  },
+  {
+   "name": "цикл перезапусков",
+   "containers": [
+    {
+     "state": "restarting",
+     "health": ""
+    }
+   ],
+   "state": "UNHEALTHY",
+   "reason": "RESTARTING"
+  },
+  {
+   "name": "перезапуск рядом с работающим",
+   "containers": [
+    {
+     "state": "running",
+     "health": "healthy"
+    },
+    {
+     "state": "restarting",
+     "health": ""
+    }
+   ],
+   "state": "UNHEALTHY",
+   "reason": "RESTARTING"
+  },
+  {
+   "name": "dead",
+   "containers": [
+    {
+     "state": "running",
+     "health": ""
+    },
+    {
+     "state": "dead",
+     "health": ""
+    }
+   ],
+   "state": "UNHEALTHY",
+   "reason": "RESTARTING"
+  },
+  {
+   "name": "перезапуск важнее проверки",
+   "containers": [
+    {
+     "state": "running",
+     "health": "unhealthy"
+    },
+    {
+     "state": "restarting",
+     "health": ""
+    }
+   ],
+   "state": "UNHEALTHY",
+   "reason": "RESTARTING"
+  },
+  {
+   "name": "все остановлены",
+   "containers": [
+    {
+     "state": "exited",
+     "health": ""
+    },
+    {
+     "state": "exited",
+     "health": ""
+    }
+   ],
+   "state": "STOPPED",
+   "reason": ""
+  },
+  {
+   "name": "остановлен один",
+   "containers": [
+    {
+     "state": "exited",
+     "health": ""
+    }
+   ],
+   "state": "STOPPED",
+   "reason": ""
+  },
+  {
+   "name": "создан, не запущен",
+   "containers": [
+    {
+     "state": "created",
+     "health": ""
+    }
+   ],
+   "state": "STOPPED",
+   "reason": ""
+  },
+  {
+   "name": "на паузе",
+   "containers": [
+    {
+     "state": "paused",
+     "health": ""
+    }
+   ],
+   "state": "STOPPED",
+   "reason": ""
+  },
+  {
+   "name": "миграции завершились",
+   "containers": [
+    {
+     "state": "running",
+     "health": "healthy"
+    },
+    {
+     "state": "exited",
+     "health": ""
+    }
+   ],
+   "state": "HEALTHY",
+   "reason": ""
+  },
+  {
+   "name": "миграции и нездоровый",
+   "containers": [
+    {
+     "state": "exited",
+     "health": ""
+    },
+    {
+     "state": "running",
+     "health": "unhealthy"
+    }
+   ],
+   "state": "UNHEALTHY",
+   "reason": "HEALTHCHECK"
+  },
+  {
+   "name": "остановленный с прошлой проверкой unhealthy",
+   "containers": [
+    {
+     "state": "exited",
+     "health": "unhealthy"
+    }
+   ],
+   "state": "STOPPED",
+   "reason": ""
+  }
+ ],
+ "sequences": [
+  {
+   "name": "дребезг: два нездоровых подряд — тишина",
+   "observations": [
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "HEALTHY",
+     ""
+    ]
+   ],
+   "events": []
+  },
+  {
+   "name": "три нездоровых подряд — firing",
+   "observations": [
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ]
+   ],
+   "events": [
+    {
+     "at": 2,
+     "state": "firing",
+     "reason": "HEALTHCHECK"
+    }
+   ]
+  },
+  {
+   "name": "один здоровый в середине сбрасывает",
+   "observations": [
+    [
+     "UNHEALTHY",
+     "RESTARTING"
+    ],
+    [
+     "UNHEALTHY",
+     "RESTARTING"
+    ],
+    [
+     "HEALTHY",
+     ""
+    ],
+    [
+     "UNHEALTHY",
+     "RESTARTING"
+    ],
+    [
+     "UNHEALTHY",
+     "RESTARTING"
+    ],
+    [
+     "UNHEALTHY",
+     "RESTARTING"
+    ]
+   ],
+   "events": [
+    {
+     "at": 5,
+     "state": "firing",
+     "reason": "RESTARTING"
+    }
+   ]
+  },
+  {
+   "name": "resolved после двух здоровых",
+   "observations": [
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "HEALTHY",
+     ""
+    ],
+    [
+     "HEALTHY",
+     ""
+    ]
+   ],
+   "events": [
+    {
+     "at": 2,
+     "state": "firing",
+     "reason": "HEALTHCHECK"
+    },
+    {
+     "at": 4,
+     "state": "resolved",
+     "reason": "HEALTHCHECK"
+    }
+   ]
+  },
+  {
+   "name": "один здоровый после firing — ещё не resolved",
+   "observations": [
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "HEALTHY",
+     ""
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "HEALTHY",
+     ""
+    ],
+    [
+     "HEALTHY",
+     ""
+    ]
+   ],
+   "events": [
+    {
+     "at": 2,
+     "state": "firing",
+     "reason": "HEALTHCHECK"
+    },
+    {
+     "at": 6,
+     "state": "resolved",
+     "reason": "HEALTHCHECK"
+    }
+   ]
+  },
+  {
+   "name": "повторного firing нет, пока не снято",
+   "observations": [
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ]
+   ],
+   "events": [
+    {
+     "at": 2,
+     "state": "firing",
+     "reason": "HEALTHCHECK"
+    }
+   ]
+  },
+  {
+   "name": "остановка сбрасывает счёт и событий не даёт",
+   "observations": [
+    [
+     "UNHEALTHY",
+     "RESTARTING"
+    ],
+    [
+     "UNHEALTHY",
+     "RESTARTING"
+    ],
+    [
+     "STOPPED",
+     ""
+    ],
+    [
+     "UNHEALTHY",
+     "RESTARTING"
+    ],
+    [
+     "STOPPED",
+     ""
+    ]
+   ],
+   "events": []
+  },
+  {
+   "name": "сработавшее при остановке не снимается агентом",
+   "observations": [
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "STOPPED",
+     ""
+    ],
+    [
+     "STOPPED",
+     ""
+    ],
+    [
+     "HEALTHY",
+     ""
+    ],
+    [
+     "HEALTHY",
+     ""
+    ]
+   ],
+   "events": [
+    {
+     "at": 2,
+     "state": "firing",
+     "reason": "HEALTHCHECK"
+    },
+    {
+     "at": 6,
+     "state": "resolved",
+     "reason": "HEALTHCHECK"
+    }
+   ]
+  },
+  {
+   "name": "причина в resolved — последняя",
+   "observations": [
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "HEALTHCHECK"
+    ],
+    [
+     "UNHEALTHY",
+     "RESTARTING"
+    ],
+    [
+     "UNHEALTHY",
+     "MISSING"
+    ],
+    [
+     "HEALTHY",
+     ""
+    ],
+    [
+     "HEALTHY",
+     ""
+    ]
+   ],
+   "events": [
+    {
+     "at": 2,
+     "state": "firing",
+     "reason": "RESTARTING"
+    },
+    {
+     "at": 5,
+     "state": "resolved",
+     "reason": "MISSING"
+    }
+   ]
+  }
+ ]
+}

@@ -41,6 +41,7 @@ type Watcher struct {
 	Env        *Env
 	containers map[string]*downState
 	certs      map[string]int // имя → сработавший порог
+	apps       map[string]*appWatch
 }
 
 type listed struct {
@@ -213,6 +214,9 @@ func (w *Watcher) Run(ctx context.Context, every, certEvery time.Duration, push 
 	var lastCerts time.Time
 	for {
 		for _, ev := range w.Containers(ctx) {
+			push(ev)
+		}
+		for _, ev := range w.Apps(ctx) {
 			push(ev)
 		}
 		if time.Since(lastCerts) >= certEvery {
