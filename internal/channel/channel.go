@@ -83,6 +83,17 @@ type Config struct {
 	Logs *logs.Spool
 	// Local — операции, которые исполняет сам агент (net.check); nil — все операции идут помощнику.
 	Local *Local
+	// Reload — адрес шлюза и ключи панели из записи о регистрации; вызывается перед каждым подключением (после
+	// agent.rebind запись меняет помощник, после возврата — возвращает). nil — GatewayURL и PanelKeys неизменны.
+	Reload func() (string, []verify.PanelKey, error)
+	// Rebind — состояние перевода у помощника (E24-T20); nil — перевода не бывает.
+	Rebind RebindHelper
+}
+
+// RebindHelper — перевод в другую панель глазами агента (helperrpc.Client).
+type RebindHelper interface {
+	RebindState(ctx context.Context) ([]byte, error)
+	RebindFail(ctx context.Context, operationID string, failure int32, detail string, now bool) error
 }
 
 var (
@@ -102,7 +113,18 @@ type Agent struct {
 	// cur — соединение текущего сеанса шлюза (кадры терминала); terms — открытые терминалы (E16).
 	cur   *conn
 	terms map[string]*termBridge
+	// gw, keys — действующие адрес шлюза и ключи панели (Reload перед сеансом).
+	gw   string
+	keys []verify.PanelKey
+	// kick — завершить сеанс и сразу подключиться заново (перевод применён).
+	kick chan struct{}
+	// rebindFails — неудачных подключений к новой панели подряд; pendingRebind — перевод ждёт подтверждения на
+	// текущем адресе (только горутина Run).
+	rebindFails   int
+	pendingRebind *pendingRebind
 }
+
+var errRebindSwitch = errors.New("перевод в другую панель: переподключение")
 
 // New создаёт агента.
 func New(cfg Config) *Agent {
@@ -118,7 +140,19 @@ func New(cfg Config) *Agent {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{}
 	}
-	return &Agent{cfg: cfg, ob: newOutbox()}
+	return &Agent{cfg: cfg, ob: newOutbox(), gw: cfg.GatewayURL, keys: cfg.PanelKeys, kick: make(chan struct{}, 1)}
+}
+
+func (a *Agent) panelKeys() []verify.PanelKey {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.keys
+}
+
+func (a *Agent) gateway() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.gw
 }
 
 // Sessions — сколько раз рукопожатие прошло.
@@ -135,6 +169,10 @@ func (a *Agent) Run(ctx context.Context) error {
 	for {
 		start := a.cfg.Now()
 		err := a.session(ctx)
+		if errors.Is(err, errRebindSwitch) || errors.Is(err, errRebindReturn) {
+			attempt = 0
+			continue
+		}
 		if errors.Is(err, ErrRevoked) {
 			a.cfg.Log.Error("агент отозван панелью: подключений больше не будет")
 			return err
@@ -147,6 +185,10 @@ func (a *Agent) Run(ctx context.Context) error {
 		}
 		d := a.cfg.Backoff.Delay(attempt)
 		attempt++
+		if a.pendingRebind != nil && d > RebindRetry {
+			// Перевод ждёт: три попытки к новой панели — за полминуты, а не по общему росту задержки.
+			d = RebindRetry
+		}
 		a.cfg.Log.Warn("канал оборван, переподключение", "err", err, "delay", d.Round(time.Millisecond))
 		select {
 		case <-ctx.Done():
@@ -229,21 +271,35 @@ func closeErr(cl *agentv1.Close) error {
 	case agentv1.CloseReason_CLOSE_REASON_DUPLICATE:
 		return fmt.Errorf("%w: похоже, сервер скопирован вместе с ключом агента: переустановите агент на копии", errClosed)
 	default:
-		return fmt.Errorf("%w: %v %s", errClosed, cl.GetReason(), cl.GetMessage())
+		return &closeError{fmt.Errorf("%w: %v %s", errClosed, cl.GetReason(), cl.GetMessage())}
 	}
 }
 
+// closeError — шлюз закрыл соединение кадром Close (не обрыв сети).
+type closeError struct{ err error }
+
+func (e *closeError) Error() string { return e.err.Error() }
+func (e *closeError) Unwrap() error { return e.err }
+
 func (a *Agent) session(ctx context.Context) error {
+	a.reload(ctx)
+	gw := a.gateway()
 	dctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	ws, resp, err := websocket.Dial(dctx, a.cfg.GatewayURL, &websocket.DialOptions{
+	ws, resp, err := websocket.Dial(dctx, gw, &websocket.DialOptions{
 		HTTPClient: a.cfg.HTTPClient,
 		HTTPHeader: http.Header{"User-Agent": {"trassa-agent/" + a.cfg.Version}},
 	})
 	cancel()
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusForbidden {
+			if a.pendingRebind != nil {
+				return a.rebindFailed(ctx, agentv1.RebindFailure_REBIND_FAILURE_HANDSHAKE_REJECTED, "HTTP 403", true)
+			}
 			// 403 AGENT_REVOKED при подключении (раздел 5).
 			return fmt.Errorf("%w (HTTP 403)", ErrRevoked)
+		}
+		if a.pendingRebind != nil {
+			return a.rebindDialFailed(ctx, err)
 		}
 		return err
 	}
@@ -255,15 +311,27 @@ func (a *Agent) session(ctx context.Context) error {
 
 	hb, err := a.handshake(sctx, c)
 	if err != nil {
+		if a.pendingRebind != nil {
+			var cl *closeError
+			if errors.As(err, &cl) || errors.Is(err, ErrRevoked) {
+				return a.rebindFailed(ctx, agentv1.RebindFailure_REBIND_FAILURE_HANDSHAKE_REJECTED, err.Error(), true)
+			}
+			return a.rebindDialFailed(ctx, err)
+		}
 		return err
 	}
+	a.rebindFails = 0
 	a.mu.Lock()
 	a.sessions++
 	a.mu.Unlock()
 	a.cfg.Log.Info("канал установлен", "heartbeat", hb)
 
-	// Итоги, которые шлюз ещё не подтвердил: из прошлых сессий и автооткаты без связи.
-	if reps, err := a.cfg.Helper.Reports(sctx); err != nil {
+	// Итоги, которые шлюз ещё не подтвердил: из прошлых сессий и автооткаты без связи. Пока новая панель не
+	// подтвердила перевод, итоги прежней ей не отдаются: они уйдут прежней после возврата или пропадут после
+	// подтверждения (у новой панели этих операций нет).
+	if a.pendingRebind != nil {
+		// пропуск
+	} else if reps, err := a.cfg.Helper.Reports(sctx); err != nil {
 		a.cfg.Log.Warn("помощник: итоги не получены", "err", err)
 	} else {
 		for _, raw := range reps {
@@ -271,6 +339,9 @@ func (a *Agent) session(ctx context.Context) error {
 		}
 	}
 	for _, r := range a.ob.pending() {
+		if a.pendingRebind != nil {
+			break
+		}
 		if _, err := c.send(sctx, &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_OperationResult{OperationResult: r}}); err != nil {
 			return err
 		}
@@ -308,8 +379,30 @@ func (a *Agent) session(ctx context.Context) error {
 			})
 		}()
 	}
-	err = <-errc
+	watch := time.NewTicker(RebindPoll)
+	defer watch.Stop()
+wait:
+	for {
+		select {
+		case err = <-errc:
+			break wait
+		case <-a.kick:
+			err = errRebindSwitch
+			break wait
+		case <-watch.C:
+			if werr := a.rebindWatch(sctx); werr != nil {
+				err = werr
+				break wait
+			}
+		}
+	}
 	scancel()
+	// Новая панель закрыла соединение после рукопожатия (в том числе «отозван»): это отказ в переводе, а не отзыв
+	// агента прежней панелью.
+	var cl *closeError
+	if a.pendingRebind != nil && (errors.As(err, &cl) || errors.Is(err, ErrRevoked)) {
+		return a.rebindFailed(ctx, agentv1.RebindFailure_REBIND_FAILURE_HANDSHAKE_REJECTED, err.Error(), true)
+	}
 	if err == nil {
 		err = errClosed
 	}
@@ -361,7 +454,7 @@ func (a *Agent) handshake(ctx context.Context, c *conn) (time.Duration, error) {
 		ServerId: a.cfg.ServerID, Signature: sig, ProtocolVersion: agentv1.ProtocolVersion_PROTOCOL_VERSION_1,
 		AgentVersion: a.cfg.Version, HelperVersion: helperVersion, Capabilities: caps,
 		Os: a.cfg.OS, OsVersion: a.cfg.OSVersion, Arch: a.cfg.Arch, AgentTimeMs: a.cfg.Now().UnixMilli(),
-		EncryptionPublicKey: encPub, EncryptionKeyId: encID,
+		EncryptionPublicKey: encPub, EncryptionKeyId: encID, RebindOperationId: a.rebindOperationID(),
 	}}}); err != nil {
 		return 0, err
 	}
@@ -471,7 +564,7 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 			OperationId: opID, Accepted: accepted, RejectCode: code,
 		}}})
 	}
-	if err := verify.Signature(a.cfg.PanelKeys, so.GetKeyId(), verify.ContextOperation, so.GetBody(), so.GetSignature()); err != nil {
+	if err := verify.Signature(a.panelKeys(), so.GetKeyId(), verify.ContextOperation, so.GetBody(), so.GetSignature()); err != nil {
 		a.cfg.Log.Warn("операция с неверной подписью", "op", opID)
 		ack(false, ops.CodeSignatureInvalid)
 		return
@@ -517,6 +610,9 @@ func (a *Agent) operation(sctx context.Context, c *conn, so *agentv1.SignedOpera
 		return // отклонена, ack уже отправлен
 	}
 	a.deliver(sctx, c, res)
+	if body.GetType() == ops.TypeAgentRebind && !body.GetDryRun() {
+		a.afterRebindApplied(sctx, opID, res)
+	}
 }
 
 // stageUpdate скачивает выпуск в каталог агента: помощник (root) в сеть не выходит, он только проверяет подпись и
@@ -758,6 +854,18 @@ func (o *outbox) remove(op string, outcome agentv1.OperationOutcome) {
 	if cur, ok := o.m[op]; ok && cur.GetOutcome() == outcome {
 		delete(o.m, op)
 		delete(o.local, op)
+	}
+}
+
+// dropExcept — забыть все итоги, кроме op (перевод подтверждён: итоги прежней панели новой не нужны).
+func (o *outbox) dropExcept(op string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for k := range o.m {
+		if k != op {
+			delete(o.m, k)
+			delete(o.local, k)
+		}
 	}
 }
 

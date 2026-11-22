@@ -21,16 +21,18 @@ const MaxFrame = 4 << 20
 
 // Методы.
 const (
-	MethodHello      = "hello"       // версия и список типов помощника
-	MethodExecute    = "execute"     // выполнить SignedOperation
-	MethodConfirm    = "confirm"     // SignedConfirm: снять автооткат
-	MethodReports    = "reports"     // итоги, ещё не подтверждённые шлюзом
-	MethodReported   = "reported"    // шлюз подтвердил приём итога operation_id
-	MethodRunning    = "running"     // операции, которые выполняются сейчас
-	MethodLogsPoll   = "logs.poll"   // новые записи журналов по действующей подписке (E08-T15)
-	MethodEventsPoll = "events.poll" // события детектора (E10-T7)
-	MethodWgStats    = "wg.stats"    // метрики пиров WireGuard (E14-T14)
-	MethodAppStats   = "app.stats"   // память и CPU приложений Trassa (E17-T24-R1)
+	MethodHello       = "hello"        // версия и список типов помощника
+	MethodExecute     = "execute"      // выполнить SignedOperation
+	MethodConfirm     = "confirm"      // SignedConfirm: снять автооткат
+	MethodReports     = "reports"      // итоги, ещё не подтверждённые шлюзом
+	MethodReported    = "reported"     // шлюз подтвердил приём итога operation_id
+	MethodRunning     = "running"      // операции, которые выполняются сейчас
+	MethodLogsPoll    = "logs.poll"    // новые записи журналов по действующей подписке (E08-T15)
+	MethodEventsPoll  = "events.poll"  // события детектора (E10-T7)
+	MethodWgStats     = "wg.stats"     // метрики пиров WireGuard (E14-T14)
+	MethodAppStats    = "app.stats"    // память и CPU приложений Trassa (E17-T24-R1)
+	MethodRebindState = "rebind.state" // перевод в другую панель ждёт подтверждения (E24-T20)
+	MethodRebindFail  = "rebind.fail"  // агент: новая панель недоступна или отказала (E24-T20)
 	// Терминал (E16): продление по подписанному SignedTerminalRenew и закрытие (сужение — без подписи).
 	MethodTerminalRenew = "terminal.renew"
 	MethodTerminalClose = "terminal.close"
@@ -49,6 +51,7 @@ const (
 	KindEvents   = "events"
 	KindWgStats  = "wg.stats"
 	KindAppStats = "app.stats"
+	KindRebind   = "rebind"
 	// KindTerminal — терминал открыт: в кадре сведения, к кадру приложен дескриптор ведущей стороны PTY.
 	KindTerminal = "terminal"
 	KindOK       = "ok"
@@ -71,6 +74,9 @@ type Request struct {
 	// terminal.close: сеанс и причина (TerminalEndReason).
 	SessionID string `json:"session_id,omitempty"`
 	Reason    int32  `json:"reason,omitempty"`
+	// rebind.fail: описание сбоя (до 300 знаков) и вернуться ли к прежней панели сразу; Reason — RebindFailure.
+	Detail string `json:"detail,omitempty"`
+	Now    bool   `json:"now,omitempty"`
 }
 
 // TerminalInfo — открытый терминал (кадр terminal).

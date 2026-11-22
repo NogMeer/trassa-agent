@@ -266,7 +266,7 @@ func TestCatalogNotConfigurable(t *testing.T) {
 		}
 	}
 	want := []string{"access.rescue.grant", "access.rescue.revoke", "access.sessions.terminate", "access.state.read",
-		"access.user.ensure", "access.user.remove", "agent.uninstall", "agent.update",
+		"access.user.ensure", "access.user.remove", "agent.rebind", "agent.uninstall", "agent.update",
 		"backup.init", "backup.prune", "backup.restore", "backup.run", "backup.snapshot.browse", "backup.snapshots.list",
 		"backup.sources.discover", "backup.target.ensure", "backup.target.remove", "backup.target.revoke_reader", "backup.unconfigure", "backup.verify", "cert.renew", "config.read",
 		"deploy.build", "deploy.control", "deploy.images.prune", "deploy.inspect", "deploy.release", "deploy.remove", "deploy.rollback", "disk.cleanup", "disk.usage", "docker.ensure", "exec.run",

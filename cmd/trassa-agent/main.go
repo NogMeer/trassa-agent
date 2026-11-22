@@ -44,6 +44,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/sysinfo"
 	"github.com/NogMeer/trassa-agent/internal/sysinfo/sdunits"
 	"github.com/NogMeer/trassa-agent/internal/uninstall"
+	"github.com/NogMeer/trassa-agent/internal/verify"
 )
 
 // Коды выхода. ExitRevoked прописан в RestartPreventExitStatus службы: отозванный агент не перезапускается.
@@ -136,6 +137,15 @@ func run(ctx context.Context, log *slog.Logger) int {
 	local := &channel.Local{Checker: &opcheck.Checker{Keys: keys, ServerID: en.ServerID, Catalog: ops.Agent(), Nonces: an}, Nonces: an}
 	a := channel.New(channel.Config{
 		GatewayURL: en.GatewayURL, ServerID: en.ServerID, Identity: id, PanelKeys: keys,
+		// Перевод в другую панель (E24): запись перечитывается перед каждым подключением; server_id не меняется.
+		Reload: func() (string, []verify.PanelKey, error) {
+			n, k, err := config.LoadEnrollment(p.Enrollment)
+			if err == nil && n.ServerID != en.ServerID {
+				return "", nil, fmt.Errorf("server_id в записи сменился: %s", n.ServerID)
+			}
+			return n.GatewayURL, k, err
+		},
+		Rebind:  hc,
 		Helper:  hc,
 		Version: config.Version, OS: osID, OSVersion: osVer, Arch: runtime.GOARCH,
 		HTTPClient: &http.Client{}, Log: log, UpdateDir: p.UpdateDir, Metrics: mbuf, Events: equeue, Logs: spool, Local: local,

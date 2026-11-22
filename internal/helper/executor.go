@@ -5,6 +5,7 @@ package helper
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -237,6 +238,20 @@ func (e *Executor) Serve(ctx context.Context, req helperrpc.Request, send func(h
 		}
 		raw, _ := proto.Marshal(b)
 		_ = send(helperrpc.Response{Kind: helperrpc.KindWgStats, Result: raw})
+	case helperrpc.MethodRebindState:
+		var raw []byte
+		if st, err := e.LoadRebind(); err != nil {
+			e.log().Warn("helper: rebind.json", "err", err)
+		} else if st != nil {
+			raw, _ = json.Marshal(st)
+		}
+		_ = send(helperrpc.Response{Kind: helperrpc.KindRebind, Result: raw})
+	case helperrpc.MethodRebindFail:
+		if code := e.rebindFail(ctx, req); code != "" {
+			_ = send(helperrpc.Response{Kind: helperrpc.KindError, Code: code})
+			return
+		}
+		_ = send(helperrpc.Response{Kind: helperrpc.KindOK})
 	case helperrpc.MethodAppStats:
 		b := &agentv1.MetricsBatch{CollectedAtMs: e.now().UnixMilli()}
 		if e.AppStats != nil {
@@ -659,6 +674,9 @@ func (e *Executor) Confirm(ctx context.Context, raw []byte) ([]byte, string) {
 	if err := e.saveResult(st, &res); err != nil {
 		return nil, CodeInternal
 	}
+	if st.Type == ops.TypeAgentRebind {
+		e.rebindConfirmed(op)
+	}
 	// Набор межсетевого экрана Trassa подтверждён (firewall.apply или возврат его точки): при загрузке системы
 	// служба берёт только подтверждённый набор, неподтверждённый до старта помощника не действует.
 	if e.Security != nil {
@@ -739,6 +757,9 @@ func (e *Executor) rollbackAwaitingLocked(ctx context.Context, op string, cancel
 		}
 	default:
 		return fmt.Errorf("вид автооткатa %q", rec.Kind)
+	}
+	if st.Type == ops.TypeAgentRebind {
+		e.rebindRolledBack(&res, cancelled)
 	}
 	if err := e.saveResult(st, &res); err != nil {
 		return err

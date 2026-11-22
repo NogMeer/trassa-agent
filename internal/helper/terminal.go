@@ -267,7 +267,7 @@ func (e *Executor) TerminalRenew(raw []byte) error {
 	if err := proto.Unmarshal(raw, &sr); err != nil {
 		return fmt.Errorf("%w: разбор", ErrRenew)
 	}
-	if err := verify.Signature(e.Checker.Keys, sr.GetKeyId(), ContextRenew, sr.GetBody(), sr.GetSignature()); err != nil {
+	if err := verify.Signature(e.Checker.PanelKeys(), sr.GetKeyId(), ContextRenew, sr.GetBody(), sr.GetSignature()); err != nil {
 		return fmt.Errorf("%w: подпись", ErrRenew)
 	}
 	var b agentv1.TerminalRenewBody

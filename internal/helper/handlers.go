@@ -76,6 +76,9 @@ func (e *Executor) builtinHandlers() map[string]handler {
 	for t, x := range e.vpnHandlers() {
 		h[t] = x
 	}
+	for t, x := range e.rebindHandlers() {
+		h[t] = x
+	}
 	for t, x := range e.operatorHandlers() {
 		h[t] = x
 	}

@@ -220,6 +220,18 @@ func (c *Client) AppStats(ctx context.Context) ([]byte, error) {
 	return r.Result, err
 }
 
+// RebindState — действующий перевод в другую панель (JSON помощника) или пусто.
+func (c *Client) RebindState(ctx context.Context) ([]byte, error) {
+	r, err := c.call(ctx, Request{Method: MethodRebindState}, KindRebind)
+	return r.Result, err
+}
+
+// RebindFail — сообщить помощнику, почему новая панель не приняла агента; now — вернуться сразу.
+func (c *Client) RebindFail(ctx context.Context, operationID string, failure int32, detail string, now bool) error {
+	_, err := c.call(ctx, Request{Method: MethodRebindFail, OperationID: operationID, Reason: failure, Detail: detail, Now: now}, KindOK)
+	return err
+}
+
 // TerminalRenew — передать подписанное продление терминала.
 func (c *Client) TerminalRenew(ctx context.Context, signed []byte) error {
 	_, err := c.call(ctx, Request{Method: MethodTerminalRenew, Signed: signed}, KindOK)

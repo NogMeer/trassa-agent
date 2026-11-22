@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
 	"github.com/NogMeer/trassa-agent/internal/verify"
@@ -133,8 +134,7 @@ func (e Enrollment) Validate() ([]verify.PanelKey, error) {
 	if !IsUUID(e.ServerID) {
 		return nil, bad("serverId")
 	}
-	u, err := url.Parse(e.GatewayURL)
-	if err != nil || u.Scheme != "wss" || u.Host == "" || u.User != nil {
+	if ValidGatewayURL(e.GatewayURL) != nil {
 		return nil, bad("gatewayUrl: нужен wss://")
 	}
 	if e.ProtocolVersion != ProtocolVersion {
@@ -157,6 +157,31 @@ func (e Enrollment) Validate() ([]verify.PanelKey, error) {
 		keys = append(keys, verify.PanelKey{ID: k.KeyID, PublicKey: raw})
 	}
 	return keys, nil
+}
+
+// ValidGatewayURL — адрес шлюза: wss://, есть хост, нет userinfo, без управляющих знаков, до 2048 байт.
+func ValidGatewayURL(s string) error {
+	if len(s) > 2048 || strings.ContainsAny(s, "\x00\r\n\t ") {
+		return errors.New("gatewayUrl: длина или знаки")
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme != "wss" || u.Host == "" || u.Hostname() == "" || u.User != nil || u.Opaque != "" || u.Fragment != "" {
+		return errors.New("gatewayUrl: нужен wss://хост без userinfo")
+	}
+	return nil
+}
+
+// Rebound — та же запись с новым адресом шлюза и ключами панели (agent.rebind, E24): server_id и версия протокола
+// прежние. Итог проверяется так же, как при регистрации.
+func (e Enrollment) Rebound(gatewayURL string, keys []verify.PanelKey) (Enrollment, error) {
+	n := Enrollment{ServerID: e.ServerID, GatewayURL: gatewayURL, ProtocolVersion: e.ProtocolVersion}
+	for _, k := range keys {
+		n.PanelKeys = append(n.PanelKeys, PanelKey{KeyID: k.ID, PublicKey: base64.StdEncoding.EncodeToString(k.PublicKey)})
+	}
+	if _, err := n.Validate(); err != nil {
+		return Enrollment{}, err
+	}
+	return n, nil
 }
 
 // DecodeKey раскодирует ключ в base64: обычном или base64url, с дополнением или без. Шлюз отдаёт обычный

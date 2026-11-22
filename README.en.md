@@ -124,7 +124,7 @@ The sign-in token is kept in the Keychain (macOS), Secret Service (Linux) or Cre
 | [`proto/trassa/agent/v1/`](proto/trassa/agent/v1/) | The agent–panel channel contract (protobuf) |
 | `cmd/trassa-agent`, `cmd/trassa-helper` | The two processes: unprivileged network process and root helper |
 | `cmd/trassa`, `internal/cli` | The `trassa` program for your own computer: device-code sign-in (RFC 8628), token in the system keyring, server list, sign-in through Trassa (terminal WebSocket) and `--direct` (in-memory key, 10-minute certificate, system ssh) |
-| `internal/channel`, `internal/identity`, `internal/enroll` | WSS channel, agent key, enrollment |
+| `internal/channel`, `internal/identity`, `internal/enroll` | WSS channel, agent key, enrollment. Moving to another panel (`agent.rebind`, E24): the helper rewrites the enrollment with a rollback point and auto-return, signature checks switch to the new panel's keys at once; the agent re-reads the enrollment before every connection, connects to the new address with normal TLS verification against system roots and waits for a `SignedConfirm` of this operation signed by a new panel key. An untrusted certificate, a rejected handshake or three failed connections in a row return at once, otherwise at the deadline (60–600 s), with result `REBIND_ROLLED_BACK` and the reason |
 | `internal/helper`, `internal/helperrpc`, `internal/ops`, `internal/nonce` | Helper: socket with caller uid check, built-in operation list, signature, expiry and nonce checks |
 | `internal/rollback`, `internal/autorollback` | Rollback points and timer-based auto-rollback via systemd |
 | `internal/metrics` | Server metrics from `/proc` and `statfs` without root: a batch every 15 s, kept for up to 10 minutes while offline |

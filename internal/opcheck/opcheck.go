@@ -7,6 +7,7 @@ package opcheck
 
 import (
 	"errors"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -30,11 +31,27 @@ const (
 
 // Checker — проверки 1–6 таблицы раздела 6.
 type Checker struct {
+	// Keys — ключи панели при старте; после перевода (agent.rebind) действуют ключи из SetPanelKeys.
 	Keys     []verify.PanelKey
 	ServerID string
 	Catalog  *ops.Catalog
 	Nonces   *nonce.Store
 	Now      func() time.Time
+	live     atomic.Pointer[[]verify.PanelKey]
+}
+
+// PanelKeys — действующие ключи подписи панели.
+func (c *Checker) PanelKeys() []verify.PanelKey {
+	if p := c.live.Load(); p != nil {
+		return *p
+	}
+	return c.Keys
+}
+
+// SetPanelKeys — заменить ключи (перевод в другую панель и возврат, E24): запись о регистрации уже сменилась.
+func (c *Checker) SetPanelKeys(k []verify.PanelKey) {
+	k = append([]verify.PanelKey(nil), k...)
+	c.live.Store(&k)
 }
 
 // Rejection — отказ с кодом из таблицы.
@@ -69,7 +86,7 @@ func (c *Checker) Operation(raw []byte) (*Checked, *Rejection) {
 		return nil, reject(ops.CodeSignatureInvalid, "конверт не разобран")
 	}
 	// 1. Подпись одним из ключей панели. Пустой список ключей — отказ (verify.Signature).
-	if err := verify.Signature(c.Keys, so.GetKeyId(), verify.ContextOperation, so.GetBody(), so.GetSignature()); err != nil {
+	if err := verify.Signature(c.PanelKeys(), so.GetKeyId(), verify.ContextOperation, so.GetBody(), so.GetSignature()); err != nil {
 		return nil, reject(ops.CodeSignatureInvalid, "подпись")
 	}
 	var b agentv1.OperationBody
@@ -135,7 +152,7 @@ func (c *Checker) Confirm(raw []byte) (*agentv1.ConfirmBody, *Rejection) {
 	if err := proto.Unmarshal(raw, &sc); err != nil {
 		return nil, reject(ops.CodeSignatureInvalid, "конверт не разобран")
 	}
-	if err := verify.Signature(c.Keys, sc.GetKeyId(), verify.ContextConfirm, sc.GetBody(), sc.GetSignature()); err != nil {
+	if err := verify.Signature(c.PanelKeys(), sc.GetKeyId(), verify.ContextConfirm, sc.GetBody(), sc.GetSignature()); err != nil {
 		return nil, reject(ops.CodeSignatureInvalid, "подпись")
 	}
 	var b agentv1.ConfirmBody

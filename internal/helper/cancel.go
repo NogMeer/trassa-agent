@@ -87,7 +87,7 @@ func (e *Executor) Cancel(ctx context.Context, raw []byte) ([]byte, string) {
 	if proto.Unmarshal(raw, &sc) != nil {
 		return nil, CodeCancelInvalid
 	}
-	if verify.Signature(e.Checker.Keys, sc.GetKeyId(), verify.ContextCancel, sc.GetBody(), sc.GetSignature()) != nil {
+	if verify.Signature(e.Checker.PanelKeys(), sc.GetKeyId(), verify.ContextCancel, sc.GetBody(), sc.GetSignature()) != nil {
 		return nil, CodeCancelInvalid
 	}
 	var b agentv1.CancelBody

@@ -1,0 +1,280 @@
+{
+ "_comment": "Параметры agent.rebind (E24-T20) — общий набор панели и агента: gateway_url (wss://, хост, без userinfo, пробелов и фрагмента), panel_keys 1–2 (key_id печатные ASCII без пробелов, разные; ключ Ed25519 32 байта, здесь в hex), confirm_within_sec 60–600. valid=false — агент отвечает PARAMS_INVALID, панель не создаёт операцию.",
+ "cases": [
+  {
+   "name": "один ключ",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": true
+  },
+  {
+   "name": "два ключа (ротация)",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+     "key_id": "b2",
+     "public_key_hex": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": true
+  },
+  {
+   "name": "порт и путь",
+   "gateway_url": "wss://gw.new.example:8443/x",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 60,
+   "valid": true
+  },
+  {
+   "name": "предел 600",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 600,
+   "valid": true
+  },
+  {
+   "name": "http://",
+   "gateway_url": "http://gw.new.example/agent",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "https://",
+   "gateway_url": "https://gw.new.example/agent",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "ws:// без TLS",
+   "gateway_url": "ws://gw.new.example/agent",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "userinfo",
+   "gateway_url": "wss://u:p@gw.new.example/agent",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "без хоста",
+   "gateway_url": "wss:///agent",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "пробел в адресе",
+   "gateway_url": "wss://gw.new.example/a b",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "фрагмент",
+   "gateway_url": "wss://gw.new.example/a#x",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "пустой адрес",
+   "gateway_url": "",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "ноль ключей",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "три ключа",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+     "key_id": "b2",
+     "public_key_hex": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+     "key_id": "b3",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "повтор keyId",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+     "key_id": "b1",
+     "public_key_hex": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "пустой keyId",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "keyId с пробелом",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b 1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "ключ 31 байт",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "11111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "ключ 33 байта",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "111111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 300,
+   "valid": false
+  },
+  {
+   "name": "срок 59",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 59,
+   "valid": false
+  },
+  {
+   "name": "срок 601",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 601,
+   "valid": false
+  },
+  {
+   "name": "срок 0",
+   "gateway_url": "wss://gw.new.example/agent/v1/connect",
+   "panel_keys": [
+    {
+     "key_id": "b1",
+     "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ],
+   "confirm_within_sec": 0,
+   "valid": false
+  }
+ ]
+}
