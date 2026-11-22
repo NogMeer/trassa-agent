@@ -6,8 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +15,7 @@ import (
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
+	"github.com/NogMeer/trassa-agent/internal/sysinfo"
 )
 
 // Коды событий E18 (справочник E09: container.down, cert.expiring).
@@ -170,6 +171,10 @@ func (w *Watcher) Containers(ctx context.Context) []*agentv1.Event {
 		}
 		if info.HostConfig.RestartPolicy.Name == "" || info.HostConfig.RestartPolicy.Name == "no" {
 			continue // без политики перезапуска остановка — норма
+		}
+		// Только контейнер, который должен работать (E06, тот же признак, что в инвентаре и панели).
+		if !sysinfo.ContainerExpected(info.HostConfig.RestartPolicy.Name, cur.c.State, int32(info.State.ExitCode), cur.c.Labels[labelComposeService]) {
+			continue
 		}
 		if st == nil {
 			st = &downState{since: now}

@@ -105,11 +105,31 @@ func run(ctx context.Context, log *slog.Logger) int {
 			// Пороги событий (E08-T12): службы — по D-Bus без прав; нет ответа — службы в этом цикле не сверяются.
 			uctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			units, err := sdunits.List(uctx)
-			cancel()
 			if err != nil {
 				log.Debug("события: список служб не получен", "err", err)
 				units = nil
 			}
+			// Сведения «должна работать» — только для упавших служб: их единицы, а список — сотни.
+			var failed []sysinfo.Unit
+			for i, u := range units {
+				if u.ActiveState == "failed" && strings.HasSuffix(u.Name, ".service") {
+					failed = append(failed, units[i])
+				}
+			}
+			if len(failed) > 0 {
+				if d, derr := sdunits.Describe(uctx, failed); derr == nil {
+					byName := map[string]sysinfo.Unit{}
+					for _, u := range d {
+						byName[u.Name] = u
+					}
+					for i, u := range units {
+						if x, ok := byName[u.Name]; ok {
+							units[i] = x
+						}
+					}
+				}
+			}
+			cancel()
 			for _, e := range det.Observe(time.Now(), b, units) {
 				equeue.Add(e)
 			}

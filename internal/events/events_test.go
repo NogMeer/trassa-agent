@@ -88,6 +88,20 @@ func TestServices(t *testing.T) {
 	expect(t, "a.service пропал из списка", d.Observe(t0, batch(-1, nil), units[1:3]), "service.down a.service resolved")
 }
 
+// Упавшая служба, которая не должна работать (oneshot, по таймеру, выключенная), — не service.down (E06).
+func TestServicesExpectedOnly(t *testing.T) {
+	d := NewDetector()
+	t0 := time.Unix(1_700_000_000, 0)
+	units := []sysinfo.Unit{
+		{Name: "app.service", ActiveState: "failed", Described: true, UnitFileState: "enabled", Type: "simple"},
+		{Name: "certbot.service", ActiveState: "failed", Described: true, UnitFileState: "static", Type: "oneshot", TriggeredBy: []string{"certbot.timer"}},
+		{Name: "job.service", ActiveState: "failed", Described: true, UnitFileState: "enabled", Type: "oneshot"},
+		{Name: "old.service", ActiveState: "failed", Described: true, UnitFileState: "disabled", Type: "simple"},
+		{Name: "unknown.service", ActiveState: "failed"}, // сведения не прочитаны — как раньше
+	}
+	expect(t, "только должные", d.Observe(t0, batch(-1, nil), units), "service.down app.service firing", "service.down unknown.service firing")
+}
+
 func TestServiceLimit(t *testing.T) {
 	d := NewDetector()
 	var units []sysinfo.Unit

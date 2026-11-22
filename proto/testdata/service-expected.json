@@ -1,0 +1,254 @@
+{
+ "_comment": "Признак «должна работать» (E06): общий набор агента (internal/sysinfo/expected.go) и панели (apps/api/src/modules/services/expected.ts). Служба: unit_file_state enabled или enabled-runtime, service_type не oneshot, triggered_by пуст. Контейнер: restart_policy always или unless-stopped; либо on-failure или служба compose (compose_service не пуст), пока не завершился сам с кодом 0 (state exited или dead и exit_code 0). Проблема — expected и статус не RUNNING; service.down и container.down — только по expected.",
+ "services": [
+  {
+   "name": "включена и работает",
+   "unit_file_state": "enabled",
+   "service_type": "simple",
+   "triggered_by": [],
+   "expected": true
+  },
+  {
+   "name": "включена, notify",
+   "unit_file_state": "enabled",
+   "service_type": "notify",
+   "triggered_by": [],
+   "expected": true
+  },
+  {
+   "name": "enabled-runtime",
+   "unit_file_state": "enabled-runtime",
+   "service_type": "exec",
+   "triggered_by": [],
+   "expected": true
+  },
+  {
+   "name": "включена, forking",
+   "unit_file_state": "enabled",
+   "service_type": "forking",
+   "triggered_by": [],
+   "expected": true
+  },
+  {
+   "name": "oneshot",
+   "unit_file_state": "enabled",
+   "service_type": "oneshot",
+   "triggered_by": [],
+   "expected": false
+  },
+  {
+   "name": "по таймеру",
+   "unit_file_state": "enabled",
+   "service_type": "simple",
+   "triggered_by": [
+    "certbot.timer"
+   ],
+   "expected": false
+  },
+  {
+   "name": "по сокету",
+   "unit_file_state": "enabled",
+   "service_type": "simple",
+   "triggered_by": [
+    "docker.socket"
+   ],
+   "expected": false
+  },
+  {
+   "name": "по path",
+   "unit_file_state": "enabled",
+   "service_type": "simple",
+   "triggered_by": [
+    "foo.path"
+   ],
+   "expected": false
+  },
+  {
+   "name": "выключена",
+   "unit_file_state": "disabled",
+   "service_type": "simple",
+   "triggered_by": [],
+   "expected": false
+  },
+  {
+   "name": "static",
+   "unit_file_state": "static",
+   "service_type": "simple",
+   "triggered_by": [],
+   "expected": false
+  },
+  {
+   "name": "masked",
+   "unit_file_state": "masked",
+   "service_type": "simple",
+   "triggered_by": [],
+   "expected": false
+  },
+  {
+   "name": "indirect",
+   "unit_file_state": "indirect",
+   "service_type": "simple",
+   "triggered_by": [],
+   "expected": false
+  },
+  {
+   "name": "generated",
+   "unit_file_state": "generated",
+   "service_type": "simple",
+   "triggered_by": [],
+   "expected": false
+  },
+  {
+   "name": "transient",
+   "unit_file_state": "transient",
+   "service_type": "simple",
+   "triggered_by": [],
+   "expected": false
+  },
+  {
+   "name": "alias",
+   "unit_file_state": "alias",
+   "service_type": "simple",
+   "triggered_by": [],
+   "expected": false
+  },
+  {
+   "name": "сведения не прочитаны",
+   "unit_file_state": "",
+   "service_type": "",
+   "triggered_by": [],
+   "expected": false
+  },
+  {
+   "name": "oneshot по таймеру",
+   "unit_file_state": "enabled",
+   "service_type": "oneshot",
+   "triggered_by": [
+    "apt-daily.timer"
+   ],
+   "expected": false
+  }
+ ],
+ "containers": [
+  {
+   "name": "always работает",
+   "restart_policy": "always",
+   "state": "running",
+   "exit_code": 0,
+   "compose_service": "",
+   "expected": true
+  },
+  {
+   "name": "always остановлен",
+   "restart_policy": "always",
+   "state": "exited",
+   "exit_code": 0,
+   "compose_service": "",
+   "expected": true
+  },
+  {
+   "name": "unless-stopped упал",
+   "restart_policy": "unless-stopped",
+   "state": "exited",
+   "exit_code": 137,
+   "compose_service": "",
+   "expected": true
+  },
+  {
+   "name": "unless-stopped в цикле",
+   "restart_policy": "unless-stopped",
+   "state": "restarting",
+   "exit_code": 1,
+   "compose_service": "",
+   "expected": true
+  },
+  {
+   "name": "on-failure упал",
+   "restart_policy": "on-failure",
+   "state": "exited",
+   "exit_code": 1,
+   "compose_service": "",
+   "expected": true
+  },
+  {
+   "name": "on-failure завершился с 0",
+   "restart_policy": "on-failure",
+   "state": "exited",
+   "exit_code": 0,
+   "compose_service": "",
+   "expected": false
+  },
+  {
+   "name": "on-failure работает",
+   "restart_policy": "on-failure",
+   "state": "running",
+   "exit_code": 0,
+   "compose_service": "",
+   "expected": true
+  },
+  {
+   "name": "no, не compose, работает",
+   "restart_policy": "no",
+   "state": "running",
+   "exit_code": 0,
+   "compose_service": "",
+   "expected": false
+  },
+  {
+   "name": "пусто, не compose, упал",
+   "restart_policy": "",
+   "state": "exited",
+   "exit_code": 1,
+   "compose_service": "",
+   "expected": false
+  },
+  {
+   "name": "compose без политики работает",
+   "restart_policy": "no",
+   "state": "running",
+   "exit_code": 0,
+   "compose_service": "api",
+   "expected": true
+  },
+  {
+   "name": "compose без политики упал",
+   "restart_policy": "no",
+   "state": "exited",
+   "exit_code": 2,
+   "compose_service": "api",
+   "expected": true
+  },
+  {
+   "name": "compose миграции завершились с 0",
+   "restart_policy": "no",
+   "state": "exited",
+   "exit_code": 0,
+   "compose_service": "migrate",
+   "expected": false
+  },
+  {
+   "name": "compose dead с 0",
+   "restart_policy": "no",
+   "state": "dead",
+   "exit_code": 0,
+   "compose_service": "migrate",
+   "expected": false
+  },
+  {
+   "name": "compose created",
+   "restart_policy": "no",
+   "state": "created",
+   "exit_code": 0,
+   "compose_service": "api",
+   "expected": true
+  },
+  {
+   "name": "always и compose завершился с 0",
+   "restart_policy": "always",
+   "state": "exited",
+   "exit_code": 0,
+   "compose_service": "api",
+   "expected": true
+  }
+ ]
+}

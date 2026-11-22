@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,7 +27,13 @@ import (
 )
 
 // Unit — служба systemd.
-type Unit struct{ Name, ActiveState string }
+type Unit struct {
+	Name, ActiveState, SubState string
+	// Сведения для признака «должна работать» (ListFull, Describe); Described — прочитаны.
+	UnitFileState, Type string
+	TriggeredBy         []string
+	Described           bool
+}
 
 // UnitLister — источник служб (D-Bus systemd).
 type UnitLister func(ctx context.Context) ([]Unit, error)
@@ -84,7 +91,12 @@ func (inv *Inventory) services(ctx context.Context) ([]*agentv1.ServiceEntry, er
 		if len(out) == MaxEntries {
 			break
 		}
-		out = append(out, &agentv1.ServiceEntry{Name: Clean(u.Name), State: Clean(u.ActiveState)})
+		e := &agentv1.ServiceEntry{Name: Clean(u.Name), State: Clean(u.ActiveState), SubState: Clean(u.SubState),
+			UnitFileState: Clean(u.UnitFileState), ServiceType: Clean(u.Type)}
+		for _, t := range u.TriggeredBy {
+			e.TriggeredBy = append(e.TriggeredBy, Clean(t))
+		}
+		out = append(out, e)
 	}
 	return out, nil
 }
@@ -99,14 +111,28 @@ type dockerPort struct {
 }
 
 type dockerContainer struct {
-	Names []string     `json:"Names"`
-	Image string       `json:"Image"`
-	State string       `json:"State"`
-	Ports []dockerPort `json:"Ports"`
+	ID     string            `json:"Id"`
+	Names  []string          `json:"Names"`
+	Image  string            `json:"Image"`
+	State  string            `json:"State"`
+	Ports  []dockerPort      `json:"Ports"`
+	Labels map[string]string `json:"Labels"`
 }
 
-func (inv *Inventory) containers(ctx context.Context) ([]*agentv1.ContainerEntry, string) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+// dockerInspect — что нужно из GET /containers/{id}/json для признака «должен работать».
+type dockerInspect struct {
+	State struct {
+		ExitCode int32 `json:"ExitCode"`
+	} `json:"State"`
+	HostConfig struct {
+		RestartPolicy struct {
+			Name string `json:"Name"`
+		} `json:"RestartPolicy"`
+	} `json:"HostConfig"`
+}
+
+func (inv *Inventory) containers(parent context.Context) ([]*agentv1.ContainerEntry, string) {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 	resp, err := (&dockerapi.Client{Socket: inv.DockerSocket}).Get(ctx, "/containers/json?all=true")
 	if errors.Is(err, dockerapi.ErrNoDocker) {
@@ -119,20 +145,48 @@ func (inv *Inventory) containers(ctx context.Context) ([]*agentv1.ContainerEntry
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Sprintf("ошибка Docker API: HTTP %d", resp.StatusCode)
 	}
-	list, err := ParseContainers(io.LimitReader(resp.Body, 16<<20))
+	list, ids, err := parseContainers(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
 		return nil, "ошибка Docker API: " + Clean(err.Error())
+	}
+	// Политика перезапуска и код выхода есть только в inspect: по запросу на контейнер, общий срок — 30 с.
+	ictx, icancel := context.WithTimeout(parent, 30*time.Second)
+	defer icancel()
+	cl := &dockerapi.Client{Socket: inv.DockerSocket}
+	missed := 0
+	for i, e := range list {
+		r, err := cl.Get(ictx, "/containers/"+url.PathEscape(ids[i])+"/json")
+		if err != nil {
+			missed++
+			continue
+		}
+		var di dockerInspect
+		if r.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&di) == nil {
+			e.RestartPolicy, e.ExitCode = Clean(di.HostConfig.RestartPolicy.Name), di.State.ExitCode
+		} else {
+			missed++
+		}
+		r.Body.Close()
+	}
+	if missed > 0 {
+		return list, fmt.Sprintf("политика перезапуска не прочитана у %d контейнеров", missed)
 	}
 	return list, ""
 }
 
 // ParseContainers разбирает ответ GET /containers/json.
 func ParseContainers(r io.Reader) ([]*agentv1.ContainerEntry, error) {
+	out, _, err := parseContainers(r)
+	return out, err
+}
+
+func parseContainers(r io.Reader) ([]*agentv1.ContainerEntry, []string, error) {
 	var raw []dockerContainer
 	if err := json.NewDecoder(r).Decode(&raw); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out []*agentv1.ContainerEntry
+	var ids []string
 	for _, c := range raw {
 		if len(out) == MaxEntries {
 			break
@@ -141,7 +195,8 @@ func ParseContainers(r io.Reader) ([]*agentv1.ContainerEntry, error) {
 		if len(c.Names) > 0 {
 			name = strings.TrimPrefix(c.Names[0], "/")
 		}
-		e := &agentv1.ContainerEntry{Name: Clean(name), Image: Clean(c.Image), State: Clean(c.State)}
+		e := &agentv1.ContainerEntry{Name: Clean(name), Image: Clean(c.Image), State: Clean(c.State),
+			ComposeProject: Clean(c.Labels["com.docker.compose.project"]), ComposeService: Clean(c.Labels["com.docker.compose.service"])}
 		seen := map[string]bool{}
 		for _, p := range c.Ports {
 			if p.PublicPort == 0 {
@@ -158,8 +213,9 @@ func ParseContainers(r io.Reader) ([]*agentv1.ContainerEntry, error) {
 			}
 		}
 		out = append(out, e)
+		ids = append(ids, c.ID)
 	}
-	return out, nil
+	return out, ids, nil
 }
 
 // ---------- Порты ----------

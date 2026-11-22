@@ -165,7 +165,7 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		updater.Verifier = v
 	}
 	host := sysinfo.Real()
-	inv := &sysinfo.Inventory{Host: host, Units: sdunits.List}
+	inv := &sysinfo.Inventory{Host: host, Units: sdunits.ListFull}
 	// Ключ секретов (E13, HPKE): создаётся при первом запуске, хранится только у помощника.
 	secrets, err := sealed.LoadOrCreate(filepath.Join(p.HelperDir, "encryption.key"))
 	if err != nil {

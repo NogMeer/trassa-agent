@@ -123,7 +123,10 @@ func (d *Detector) Observe(now time.Time, batch *agentv1.MetricsBatch, units []s
 	if units != nil {
 		failed := map[string]bool{}
 		for _, u := range units {
-			if strings.HasSuffix(u.Name, ".service") && u.ActiveState == "failed" && len(failed) < MaxServices {
+			// Только служба, которая должна работать (E06): oneshot, по таймеру или выключенная — не «упала». Сведения
+			// не прочитались — считаем, что должна (лучше лишний инцидент, чем пропущенный).
+			expected := !u.Described || sysinfo.ServiceExpected(u.UnitFileState, u.Type, u.TriggeredBy)
+			if strings.HasSuffix(u.Name, ".service") && u.ActiveState == "failed" && expected && len(failed) < MaxServices {
 				failed[u.Name] = true
 			}
 		}
