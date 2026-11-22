@@ -24,16 +24,18 @@ var gate = filepath.Join("..", "..", "scripts", "release-gate.sh")
 
 var releaseFiles = []string{"trassa-agent-linux-amd64", "trassa-agent-linux-arm64", "trassa-helper-linux-amd64", "trassa-helper-linux-arm64"}
 
-// scriptWithKeys — копия install.sh с ключами keys вместо пустого списка.
+var keysLine = regexp.MustCompile(`(?m)^TRASSA_RELEASE_KEYS="[^"]*"$`)
+
+// scriptWithKeys — копия install.sh с ключами keys вместо зашитых.
 func scriptWithKeys(t *testing.T, keys string) string {
 	raw, err := os.ReadFile(script)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := strings.Replace(string(raw), "\nTRASSA_RELEASE_KEYS=\"\"\n", "\nTRASSA_RELEASE_KEYS=\""+keys+"\"\n", 1)
-	if s == string(raw) {
-		t.Fatal("в install.sh нет строки TRASSA_RELEASE_KEYS=\"\"")
+	if n := len(keysLine.FindAllIndex(raw, -1)); n != 1 {
+		t.Fatalf("в install.sh должна быть ровно одна строка TRASSA_RELEASE_KEYS, найдено %d", n)
 	}
+	s := keysLine.ReplaceAllLiteralString(string(raw), `TRASSA_RELEASE_KEYS="`+keys+`"`)
 	return write(t, t.TempDir(), "install.sh", []byte(s))
 }
 
@@ -131,5 +133,50 @@ func TestReleaseKeysInSync(t *testing.T) {
 	}
 	if !slices.Equal(inScript, inGo) {
 		t.Fatalf("ключи выпуска разошлись: install.sh %q, internal/update %q", inScript, inGo)
+	}
+}
+
+// Настоящий вектор ключа trassa-release-1 (test/vectors/release-key-1): пробный файл подписан закрытым ключом
+// выпусков (minisign -S, docs/ops/key-ceremonies.md, раздел 1, п. 3). Зашитый в install.sh и internal/update ключ
+// принимает подпись, изменённый файл и чужая версия — отказ.
+func TestRealReleaseKeyVector(t *testing.T) {
+	requireOpenSSL3(t)
+	dir := filepath.Join("..", "vectors", "release-key-1")
+	probe, err := os.ReadFile(filepath.Join(dir, "probe.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := os.ReadFile(filepath.Join(dir, "probe.txt.minisig"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs, err := filepath.Abs(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verify := func(file, version string) error {
+		return exec.Command(shell(), "-c", `TRASSA_INSTALL_LIB=1; . "$0"; verify_minisig "$1" "$2" "$3"`,
+			abs, file, filepath.Join(dir, "probe.txt.minisig"), version).Run()
+	}
+	if err := verify(filepath.Join(dir, "probe.txt"), "0.0.0-probe"); err != nil {
+		t.Fatalf("install.sh не принял подпись настоящего ключа: %v", err)
+	}
+	if verify(filepath.Join(dir, "probe.txt"), "0.0.1-probe") == nil {
+		t.Fatal("install.sh принял подпись с чужой версией")
+	}
+	tampered := write(t, t.TempDir(), "probe.txt", append(append([]byte{}, probe...), 'x'))
+	if verify(tampered, "0.0.0-probe") == nil {
+		t.Fatal("install.sh принял изменённый файл")
+	}
+
+	v, err := update.NewVerifier(update.ReleaseKeys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v.VerifySums(probe, sig, "0.0.0-probe"); err != nil {
+		t.Fatalf("internal/update не принял подпись настоящего ключа: %v", err)
+	}
+	if v.VerifySums(append(append([]byte{}, probe...), 'x'), sig, "0.0.0-probe") == nil {
+		t.Fatal("internal/update принял изменённый файл")
 	}
 }

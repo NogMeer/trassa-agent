@@ -34,6 +34,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -149,16 +150,16 @@ func setup(addr, release, version, script, out string, tamper bool) (*panel, tls
 	lines := strings.Split(strings.TrimSpace(string(pubText)), "\n")
 	key := lines[len(lines)-1]
 
-	// Копия install.sh с тестовым ключом. Настоящий скрипт не трогается: в нём список ключей пуст (R12).
+	// Копия install.sh с тестовым ключом вместо зашитых ключей выпуска. Настоящий скрипт не трогается (R12).
 	src, err := os.ReadFile(script)
 	if err != nil {
 		return nil, tls.Certificate{}, err
 	}
-	const empty = "\nTRASSA_RELEASE_KEYS=\"\"\n"
-	if bytes.Count(src, []byte(empty)) != 1 {
-		return nil, tls.Certificate{}, errors.New("в install.sh не найдена ровно одна строка TRASSA_RELEASE_KEYS=\"\"")
+	keysLine := regexp.MustCompile(`(?m)^TRASSA_RELEASE_KEYS="[^"]*"$`)
+	if len(keysLine.FindAllIndex(src, -1)) != 1 {
+		return nil, tls.Certificate{}, errors.New("в install.sh не найдена ровно одна строка TRASSA_RELEASE_KEYS")
 	}
-	src = bytes.Replace(src, []byte(empty), []byte("\nTRASSA_RELEASE_KEYS=\""+key+"\"\n"), 1)
+	src = keysLine.ReplaceAllLiteral(src, []byte(`TRASSA_RELEASE_KEYS="`+key+`"`))
 
 	tok := make([]byte, 32)
 	if _, err := rand.Read(tok); err != nil {

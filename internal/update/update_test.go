@@ -80,8 +80,12 @@ func TestVerifySums(t *testing.T) {
 	if _, err := NewVerifier(nil); !errors.Is(err, ErrSignatureInvalid) {
 		t.Fatal("пустой список ключей принят")
 	}
-	if _, err := NewVerifier(ReleaseKeys); len(ReleaseKeys) == 0 && err == nil {
-		t.Fatal("сборка без ключей выпуска принимает обновления")
+	// Ключи выпуска зашиты (OPS-10): 1–2 ключа (R12), каждый разбирается.
+	if n := len(ReleaseKeys); n < 1 || n > 2 {
+		t.Fatalf("ключей выпуска %d, нужно 1–2", n)
+	}
+	if _, err := NewVerifier(ReleaseKeys); err != nil {
+		t.Fatalf("зашитые ключи выпуска не разбираются: %v", err)
 	}
 }
 

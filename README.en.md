@@ -163,7 +163,20 @@ minisign -V -P <key> -m SHA256SUMS    # trusted comment: trassa-agent 1.2.3
 sha256sum -c SHA256SUMS
 ```
 
-An unsigned release is never published: `scripts/release-gate.sh` checks the signature with the same code and keys as `install.sh`. Until the owner adds the keys the list is empty, and installation and updates deliberately refuse.
+Release key `trassa-release-1` (key id `9889674CCEE25046`):
+
+```
+RWRGUOLOTGeJmFfIFOk0UF9AXhgfoh1qZK2h8eRTZNCa23uNDmvfNCSp
+```
+
+An unsigned release is never published: `scripts/release-gate.sh` checks the signature with the same code and keys as `install.sh`.
+
+`install.sh` of release 0.1.0: sha256 `11cf7e1b3742290d4df63916de21adc16560ed79e97b095fed80d4dc05ee14e4`. Check it before running:
+
+```sh
+curl -fsSL --proto '=https' -o install.sh https://agents.trassa.one/install.sh
+shasum -a 256 install.sh
+```
 
 ## Security
 

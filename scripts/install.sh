@@ -17,9 +17,11 @@
 
 set -eu
 
-# Открытые ключи minisign выпусков (те же, что internal/update.ReleaseKeys). Два ключа — для ротации (R12).
-# Пустой список — установка невозможна: без ключа подпись не «пропускается».
-TRASSA_RELEASE_KEYS=""
+# Открытые ключи minisign выпусков через пробел (те же, что internal/update.ReleaseKeys). Два ключа — для ротации
+# (R12). Пустой список — установка невозможна: без ключа подпись не «пропускается».
+# Ключ 1 — trassa-release-1, key_id 9889674CCEE25046 (создан 2026-11-23 на машине разработчика, до первых клиентов —
+# ротация на офлайн-ключ). Второе место — под будущий офлайн-ключ trassa-release-2: дописывается через пробел.
+TRASSA_RELEASE_KEYS="RWRGUOLOTGeJmFfIFOk0UF9AXhgfoh1qZK2h8eRTZNCa23uNDmvfNCSp"
 
 BIN_DIR=/usr/local/bin
 UNIT_DIR=/etc/systemd/system

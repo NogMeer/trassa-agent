@@ -165,7 +165,20 @@ minisign -V -P <ключ> -m SHA256SUMS    # доверенный коммент
 sha256sum -c SHA256SUMS
 ```
 
-Выпуск без подписи не публикуется: `scripts/release-gate.sh` проверяет её тем же кодом и ключами, что `install.sh`. Пока владелец не внёс ключи, список пуст, и установка и обновление намеренно отказывают.
+Ключ выпусков `trassa-release-1` (key id `9889674CCEE25046`):
+
+```
+RWRGUOLOTGeJmFfIFOk0UF9AXhgfoh1qZK2h8eRTZNCa23uNDmvfNCSp
+```
+
+Выпуск без подписи не публикуется: `scripts/release-gate.sh` проверяет её тем же кодом и ключами, что `install.sh`.
+
+`install.sh` выпуска 0.1.0: sha256 `11cf7e1b3742290d4df63916de21adc16560ed79e97b095fed80d4dc05ee14e4`. Проверить перед запуском:
+
+```sh
+curl -fsSL --proto '=https' -o install.sh https://agents.trassa.one/install.sh
+shasum -a 256 install.sh
+```
 
 ## Безопасность
 
