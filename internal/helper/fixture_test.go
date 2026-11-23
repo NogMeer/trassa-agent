@@ -57,6 +57,8 @@ type fakeTimer struct {
 	mu     sync.Mutex
 	armed  map[string]armed
 	failOn bool
+	// requireHelper — как systemd-run: исполняемого файла нет при создании таймера — ошибка.
+	requireHelper bool
 }
 
 func (f *fakeTimer) Arm(_ context.Context, op string, after time.Duration, helper string) error {
@@ -64,6 +66,11 @@ func (f *fakeTimer) Arm(_ context.Context, op string, after time.Duration, helpe
 	defer f.mu.Unlock()
 	if f.failOn {
 		return os.ErrPermission
+	}
+	if f.requireHelper {
+		if _, err := os.Stat(helper); err != nil {
+			return err
+		}
 	}
 	if f.armed == nil {
 		f.armed = map[string]armed{}

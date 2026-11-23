@@ -197,10 +197,23 @@ func SHA256Hex(b []byte) string {
 
 // Install кладёт новые бинарники (имя → содержимое) в binDir, сохранив текущие в prevDir.
 func Install(binDir, prevDir string, files map[string][]byte) error {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	if err := SavePrev(binDir, prevDir, names); err != nil {
+		return err
+	}
+	return InstallNew(binDir, files)
+}
+
+// SavePrev — копии текущих бинарников в prevDir. Делается до того, как заводится сторож обновления: сторож
+// запускает помощника из prevDir, и systemd-run проверяет, что файл есть, уже при создании таймера.
+func SavePrev(binDir, prevDir string, names []string) error {
 	if err := os.MkdirAll(prevDir, 0o700); err != nil {
 		return err
 	}
-	for name := range files {
+	for _, name := range names {
 		cur, err := os.ReadFile(filepath.Join(binDir, name))
 		if err != nil {
 			return fmt.Errorf("текущий %s: %w", name, err)
@@ -209,6 +222,11 @@ func Install(binDir, prevDir string, files map[string][]byte) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// InstallNew — новые бинарники на место (каждый атомарно).
+func InstallNew(binDir string, files map[string][]byte) error {
 	for name, b := range files {
 		if err := fsutil.WriteFileAtomic(filepath.Join(binDir, name), b, 0o755, fsutil.Keep); err != nil {
 			return err

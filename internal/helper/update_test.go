@@ -122,6 +122,25 @@ func TestUpdateSucceeds(t *testing.T) {
 	}
 }
 
+// Первое обновление (прод, 0.1.0 → 0.1.2): bin.prev ещё нет, а systemd-run проверяет файл сторожа при создании
+// таймера. Копия текущей версии делается до таймера — обновление ставится, сторож указывает на неё.
+func TestFirstUpdateArmsWatchdogFromFreshCopy(t *testing.T) {
+	f, r := updateFixture(t)
+	f.timer.requireHelper = true
+	if _, err := os.Stat(f.paths.BinPrevDir); !os.IsNotExist(err) {
+		t.Fatal("bin.prev уже есть — тест не про первое обновление")
+	}
+	b := f.body(ops.TypeAgentUpdate, r.params("1.1.0"))
+	o := f.exec(r.stage(t, f, b))
+	if o.result.GetOutcome() != agentv1.OperationOutcome_OPERATION_OUTCOME_AWAITING_CONFIRM {
+		t.Fatalf("%+v", o.result)
+	}
+	prev, _ := os.ReadFile(filepath.Join(f.paths.BinPrevDir, "trassa-helper"))
+	if string(prev) != "trassa-helper 1.0.0" || f.bin("trassa-helper") != "trassa-helper 1.1.0" {
+		t.Fatalf("копия %q, новая %q", prev, f.bin("trassa-helper"))
+	}
+}
+
 // Новая версия не вышла на связь: сторож возвращает прежние бинарники (UPDATE_ROLLED_BACK).
 func TestUpdateWatchdog(t *testing.T) {
 	f, r := updateFixture(t)

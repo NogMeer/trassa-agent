@@ -344,6 +344,12 @@ func (e *Executor) applyUpdate(ctx context.Context, r *run) *agentv1.OperationRe
 		}
 		files[b] = data
 	}
+	// Сначала копия текущих бинарников в bin.prev: из неё запускается сторож, и systemd-run требует, чтобы файл был
+	// уже при создании таймера. На первом обновлении bin.prev ещё нет — раньше сторож не заводился и обновление
+	// падало с ROLLBACK_UNAVAILABLE (прод, 0.1.0 → 0.1.2).
+	if err := update.SavePrev(e.Paths.BinDir, e.Paths.BinPrevDir, binaries); err != nil {
+		return r.failed(CodeRollbackUnavailable, "копия текущей версии: "+err.Error())
+	}
 	// Сторож заводится до замены: даже если помощник упадёт сразу после rename, прежняя версия вернётся.
 	if err := e.armAuto(ctx, op, autorollback.KindUpdate, UpdateWatchdog); err != nil {
 		return r.failed(CodeRollbackUnavailable, "сторож обновления: "+err.Error())
@@ -356,7 +362,7 @@ func (e *Executor) applyUpdate(ctx context.Context, r *run) *agentv1.OperationRe
 		e.disarmAuto(ctx, op)
 		return r.failed(code, msg)
 	}
-	if err := update.Install(e.Paths.BinDir, e.Paths.BinPrevDir, files); err != nil {
+	if err := update.InstallNew(e.Paths.BinDir, files); err != nil {
 		return fail("UPDATE_INSTALL_FAILED", err.Error())
 	}
 	// Перезапуск — во временном юните через 3 с: итог успевает уйти, а остановка помощника не обрывает команду.
