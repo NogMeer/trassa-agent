@@ -1,8 +1,17 @@
+# Экономия минут Actions (решение владельца 2026-11-23): на пуш в main — только `check` на amd64 и только при
+# правке кода агента; полная проверка (arm64, systemd, матрица ОС, воспроизводимая сборка) — вручную перед выпуском.
 name: ci
 on:
   push:
     branches: [main]
-  pull_request:
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - "scripts/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -10,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        runner: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["ubuntu-24.04","ubuntu-24.04-arm"]') || fromJSON('["ubuntu-24.04"]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -21,6 +30,7 @@ jobs:
       - run: make check
   # Службы на настоящем systemd раннера: песочница агента, права сокета, отказ чужому uid, удаление (E05-T21, R11).
   systemd:
+    if: github.event_name == 'workflow_dispatch'
     needs: check
     strategy:
       fail-fast: false
@@ -39,6 +49,7 @@ jobs:
   # Матрица ОС (E05-T28): контейнер с systemd на каждую ОС и архитектуру, команда установки как в панели, заглушка
   # панели, «Сервер на связи», system.info, повторная установка, удаление. Отчёт — артефакт matrix-report-*.
   matrix:
+    if: github.event_name == 'workflow_dispatch'
     needs: check
     strategy:
       fail-fast: false
@@ -63,6 +74,7 @@ jobs:
   # Воспроизводимая сборка (E05-T29): выпуск собирается на amd64- и arm64-исполнителе в разных каталогах,
   # SHA256SUMS обязаны совпасть байт в байт.
   reproducible-build:
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
@@ -80,6 +92,7 @@ jobs:
           name: sums-${{ matrix.runner }}
           path: src-${{ matrix.runner }}/dist/SHA256SUMS
   reproducible:
+    if: github.event_name == 'workflow_dispatch'
     needs: reproducible-build
     runs-on: ubuntu-24.04
     steps:
