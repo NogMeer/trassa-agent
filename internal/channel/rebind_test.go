@@ -233,8 +233,13 @@ func TestRebindTwoPanels(t *testing.T) {
 			var helloB *agentv1.Hello
 			var mu sync.Mutex
 			var gbURL string
+			// Операция уходит только при первом подключении, как у панели: повтор после возврата (новый nonce)
+			// снова переключил бы запись на B, и проверка «запись у A» падала бы через раз.
+			var sendRebind sync.Once
 			ga := newGateway(t, id.PublicKey(), func(ctx context.Context, c *gwConn) {
-				_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: rebindOp(t, opID(1), gbURL)}})
+				sendRebind.Do(func() {
+					_ = c.send(ctx, &agentv1.GatewayMessage{Payload: &agentv1.GatewayMessage_Operation{Operation: rebindOp(t, opID(1), gbURL)}})
+				})
 				ackAll(ctx, c, resultsA)
 			})
 			resultsB := make(chan *agentv1.OperationResult, 16)
