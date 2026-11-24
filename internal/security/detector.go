@@ -378,7 +378,7 @@ func (d *Detector) Step(ctx context.Context) error {
 	}
 	if conns, err := outbound(d.Sys); err == nil {
 		for _, c := range conns {
-			d.emitLocked("COMPROMISE_OUTBOUND", c, "", "", "исходящее соединение на "+c, now)
+			d.emitLocked("COMPROMISE_OUTBOUND", c.Subject, "", "", outboundText(c), now)
 		}
 	}
 	return d.saveLocked()
