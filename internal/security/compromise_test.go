@@ -80,3 +80,30 @@ func TestOutboundSkipsIncoming(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// Прод MeerGuard, 2026-11-26: после apt upgrade системные процессы работают со «(deleted)», хотя по тому же пути уже
+// лежит новая версия файла, — это обновление, не след взлома (так же агент после переустановки). Удалённый без
+// замены файл, memfd и запуск из /tmp — по-прежнему находка.
+func TestTmpExecReplacedBinary(t *testing.T) {
+	sys := build(t, tree{
+		"proc/10/exe": "->/usr/sbin/agetty (deleted)", "proc/10/comm": "agetty\n",
+		"usr/sbin/agetty": "new version",
+		"proc/11/exe":     "->/usr/local/bin/trassa-agent (deleted)", "proc/11/comm": "trassa-agent\n",
+		"usr/local/bin/trassa-agent": "0.1.4",
+		"proc/20/exe":                "->/usr/bin/gone (deleted)", "proc/20/comm": "gone\n",
+		"proc/21/exe": "->/memfd:x (deleted)", "proc/21/comm": "x\n",
+		"proc/22/exe": "->/dev/shm/y (deleted)", "proc/22/comm": "y\n",
+		"dev/shm/y":   "y",
+		"proc/23/exe": "->/usr/bin/dir (deleted)", "proc/23/comm": "dir\n",
+		"usr/bin/dir/file": "каталог на месте файла — не замена",
+	})
+	r := scan(t, sys, "COMPROMISE_TMP_EXEC")
+	if got := states(r["COMPROMISE_TMP_EXEC"]); got != "FAIL:/usr/bin/gone,FAIL:/memfd:x,FAIL:/dev/shm/y,FAIL:/usr/bin/dir" {
+		t.Errorf("%s", got)
+	}
+	for _, f := range r["COMPROMISE_TMP_EXEC"] {
+		if f.GetSubject() == "/usr/bin/gone" && f.GetEvidence() != "процесс 20 (gone) работает из удалённого файла: /usr/bin/gone" {
+			t.Errorf("текст: %q", f.GetEvidence())
+		}
+	}
+}

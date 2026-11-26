@@ -25,12 +25,15 @@ func init() {
 // Каталоги, из которых запуск подозрителен.
 var tmpDirs = []string{"/tmp/", "/var/tmp/", "/dev/shm/"}
 
-// Process — процесс для признаков детектора.
+// Process — процесс для признаков детектора. Replaced — файл процесса удалён, но по тому же пути уже лежит новый
+// обычный файл: так выглядит процесс после обновления пакета (dpkg ставит новую версию через rename) или переустановки
+// агента — старый процесс работает со «(deleted)», пока его не перезапустят.
 type Process struct {
-	PID     int
-	Comm    string
-	Exe     string
-	Deleted bool
+	PID      int
+	Comm     string
+	Exe      string
+	Deleted  bool
+	Replaced bool
 }
 
 // Processes — процессы с путём к исполняемому файлу (/proc/<pid>/exe, нужен root). Потоки ядра без exe пропускаются.
@@ -54,6 +57,10 @@ func (sys *System) Processes() ([]Process, error) {
 		if strings.HasSuffix(exe, " (deleted)") {
 			p.Deleted = true
 			p.Exe = strings.TrimSuffix(exe, " (deleted)")
+			if strings.HasPrefix(p.Exe, "/") {
+				fi, err := os.Stat(sys.path(p.Exe))
+				p.Replaced = err == nil && fi.Mode().IsRegular()
+			}
 		}
 		out = append(out, p)
 	}
@@ -61,17 +68,17 @@ func (sys *System) Processes() ([]Process, error) {
 	return out, nil
 }
 
-// SuspiciousExec — процесс запущен из временного каталога или его файл удалён.
+// SuspiciousExec — процесс запущен из временного каталога или его файл удалён и не заменён. Удалённый файл, на месте
+// которого уже лежит новый (Replaced), — обновление пакета или агента, а не след: прод MeerGuard, 2026-11-26 — agetty,
+// python3.12, dbus-daemon, systemd-logind после apt upgrade давали COMPROMISE_TMP_EXEC сразу после установки агента.
+// Вредонос, удаливший себя, файла на прежнем месте не оставляет; memfd и анонимные файлы пути не имеют.
 func SuspiciousExec(p Process) bool {
-	if p.Deleted {
-		return true
-	}
 	for _, d := range tmpDirs {
 		if strings.HasPrefix(p.Exe, d) {
 			return true
 		}
 	}
-	return false
+	return p.Deleted && !p.Replaced
 }
 
 func checkTmpExec(_ context.Context, s *Scan) []Finding {
@@ -81,16 +88,20 @@ func checkTmpExec(_ context.Context, s *Scan) []Finding {
 	}
 	var out []Finding
 	for _, p := range ps {
-		if !SuspiciousExec(p) {
-			continue
+		if SuspiciousExec(p) {
+			out = append(out, fail(p.Exe, tmpExecText(p)))
 		}
-		why := "запущен из временного каталога"
-		if p.Deleted {
-			why = "файл процесса удалён"
-		}
-		out = append(out, fail(p.Exe, fmt.Sprintf("процесс %d (%s) %s: %s", p.PID, p.Comm, why, p.Exe)))
 	}
 	return out
+}
+
+// tmpExecText — что именно найдено: номер и имя процесса, причина и путь (одинаково в скане и в событии детектора).
+func tmpExecText(p Process) string {
+	why := "запущен из временного каталога"
+	if p.Deleted {
+		why = "работает из удалённого файла"
+	}
+	return fmt.Sprintf("процесс %d (%s) %s: %s", p.PID, p.Comm, why, p.Exe)
 }
 
 func checkLdPreload(_ context.Context, s *Scan) []Finding {

@@ -187,15 +187,23 @@ func (d *Detector) collect(ctx context.Context, withSUID bool) ([]Item, error) {
 	return items, nil
 }
 
+// runPartsName — имя, которое cron (Debian, Ubuntu) и run-parts исполняют в /etc/cron.d и /etc/cron.{hourly,…}:
+// только буквы, цифры, «_» и «-». Файлы с точкой (geoipupdate.dpkg-new, *.dpkg-old, *.ucf-dist — остатки dpkg при
+// обновлении пакета) не запускаются и заданиями не считаются: прод MeerGuard, 2026-11-26.
+func runPartsName(n string) bool {
+	return n != "" && strings.Trim(n, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") == ""
+}
+
 // cronItems — строки заданий (/etc/crontab, /etc/cron.d, crontab пользователей); переменные окружения не задания.
 func cronItems(sys *System) []Item {
 	files := []string{"/etc/crontab"}
 	for _, dir := range []string{"/etc/cron.d", "/var/spool/cron/crontabs"} {
 		ents, _ := os.ReadDir(sys.path(dir))
 		for _, e := range ents {
-			if e.Type().IsRegular() && !strings.HasPrefix(e.Name(), ".") {
-				files = append(files, dir+"/"+e.Name())
+			if !e.Type().IsRegular() || strings.HasPrefix(e.Name(), ".") || (dir == "/etc/cron.d" && !runPartsName(e.Name())) {
+				continue
 			}
+			files = append(files, dir+"/"+e.Name())
 		}
 	}
 	var out []Item
@@ -217,8 +225,8 @@ func cronItems(sys *System) []Item {
 	for _, dir := range []string{"/etc/cron.hourly", "/etc/cron.daily", "/etc/cron.weekly", "/etc/cron.monthly"} {
 		ents, _ := os.ReadDir(sys.path(dir))
 		for _, e := range ents {
-			if e.Name() == ".placeholder" {
-				continue
+			if !runPartsName(e.Name()) {
+				continue // .placeholder, *.dpkg-new и т. п. run-parts не запускает
 			}
 			p := dir + "/" + e.Name()
 			sum, _ := fileSum(sys.path(p))
@@ -367,7 +375,7 @@ func (d *Detector) Step(ctx context.Context) error {
 	if perr == nil {
 		for _, p := range procs {
 			if SuspiciousExec(p) {
-				d.emitLocked("COMPROMISE_TMP_EXEC", p.Exe, "", "", fmt.Sprintf("процесс %d (%s) запущен из %s", p.PID, p.Comm, p.Exe), now)
+				d.emitLocked("COMPROMISE_TMP_EXEC", p.Exe, "", "", tmpExecText(p), now)
 			}
 		}
 	}

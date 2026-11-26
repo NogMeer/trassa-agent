@@ -152,3 +152,28 @@ func TestDetectorAccessUsers(t *testing.T) {
 		t.Fatalf("находки: %v", got)
 	}
 }
+
+// Прод MeerGuard, 2026-11-26: /etc/cron.d/geoipupdate.dpkg-new (остаток dpkg) давал «новое задание», хотя cron и
+// run-parts файлы с точкой в имени не исполняют. Настоящее новое задание — находка.
+func TestDetectorCronSkipsDpkgLeftovers(t *testing.T) {
+	sys, d, clk := detSystem(t)
+	steps(t, d, clk, 1, nil)
+	for p, body := range map[string]string{
+		"etc/cron.d/geoipupdate.dpkg-new": "47 6 * * 3 root /usr/bin/geoipupdate\n",
+		"etc/cron.daily/man-db.dpkg-old":  "#!/bin/sh\n",
+		"etc/cron.d/backup":               "0 3 * * * root /usr/local/bin/backup\n",
+	} {
+		full := filepath.Join(sys.Root, p)
+		_ = os.MkdirAll(filepath.Dir(full), 0o755)
+		_ = os.WriteFile(full, []byte(body), 0o644)
+	}
+	var got []string
+	for _, ev := range steps(t, d, clk, 2, nil) {
+		if ev.GetAttributes()["code"] == "COMPROMISE_NEW_CRON" {
+			got = append(got, ev.GetAttributes()["subject"])
+		}
+	}
+	if len(got) != 1 || got[0] != "/etc/cron.d/backup: 0 3 * * * root /usr/local/bin/backup" {
+		t.Fatalf("%v", got)
+	}
+}
