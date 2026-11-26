@@ -171,7 +171,7 @@ func builtinSpecs() []Spec {
 				return nil
 			},
 		},
-	}, append(append(append(append(logsSpecs(), securitySpecs()...), wireguardSpecs()...), backupSpecs()...), append(append(append(append(accessSpecs(), deploySpecs()...), vpnSpecs()...), operatorSpecs()...), append(rebindSpecs(), extraSpecs()...)...)...)...)
+	}, append(append(append(append(logsSpecs(), securitySpecs()...), wireguardSpecs()...), backupSpecs()...), append(append(append(append(accessSpecs(), deploySpecs()...), vpnSpecs()...), operatorSpecs()...), append(append(rebindSpecs(), containerSpecs()...), extraSpecs()...)...)...)...)
 }
 
 // CodeError — отказ проверки 6 со своим кодом (BACKUP_PATH_FORBIDDEN) вместо PARAMS_INVALID.

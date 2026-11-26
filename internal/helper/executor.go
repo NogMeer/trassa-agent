@@ -25,6 +25,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/fsinspect"
 	"github.com/NogMeer/trassa-agent/internal/helper/execrun"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
+	"github.com/NogMeer/trassa-agent/internal/imageupdate"
 	"github.com/NogMeer/trassa-agent/internal/logsrc"
 	"github.com/NogMeer/trassa-agent/internal/nonce"
 	"github.com/NogMeer/trassa-agent/internal/ops"
@@ -109,6 +110,8 @@ type Executor struct {
 	Deploy *deploy.Env
 	// Remedy — исправления E18 (service.restart/start, disk.cleanup, cert.renew).
 	Remedy *remedy.Env
+	// Images — container.update (E10, обновление образа сервиса compose); nil — CONTAINER_UPDATE_UNAVAILABLE.
+	Images *imageupdate.Env
 	// VpnProbe — точка замера VPN-пакета (E25); nil — VPN_PROBE_UNAVAILABLE.
 	VpnProbe *vpnprobe.Env
 	// AppStats — память и CPU приложений (E17-T24-R1, helperrpc app.stats); nil — пустая пачка.

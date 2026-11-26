@@ -11,6 +11,7 @@ package trassa.agent.v1;
 
 import "trassa/agent/v1/access.proto";
 import "trassa/agent/v1/backup.proto";
+import "trassa/agent/v1/container.proto";
 import "trassa/agent/v1/deploy.proto";
 import "trassa/agent/v1/operator.proto";
 import "trassa/agent/v1/security.proto";
@@ -242,6 +243,8 @@ message OperationParams {
     VpnProbeRunParams vpn_probe_run = 111;
     // E24: 120–129.
     AgentRebindParams agent_rebind = 120;
+    // E10, обновления образов: 130–139.
+    ContainerUpdateParams container_update = 130;
     // Только в сборке с тегом testops.
     TestConfigWriteParams test_config_write = 100;
   }
@@ -424,6 +427,9 @@ message OperationResult {
   // E20: DISK_PATH_FORBIDDEN, DISK_PATH_NOT_FOUND, CONFIG_PATH_FORBIDDEN, CONFIG_NOT_FOUND, CONFIG_TOO_LARGE,
   // CONFIG_NOT_TEXT, EXEC_DISABLED_ON_SERVER, EXEC_DENIED, EXEC_USER_INVALID, EXEC_CWD_INVALID, EXEC_TIMEOUT,
   // EXEC_FAILED, EXEC_UNAVAILABLE.
+  // E10: CONTAINER_NOT_FOUND, CONTAINER_NOT_COMPOSE, CONTAINER_IMAGE_CHANGED, CONTAINER_MANAGED_BY_TRASSA,
+  // COMPOSE_FILE_FORBIDDEN, IMAGE_TAG_NOT_EDITABLE, IMAGE_PINNED_BY_DIGEST, COMPOSE_CONFIG_FAILED,
+  // COMPOSE_EDIT_MISMATCH, IMAGE_PULL_FAILED, CONTAINER_NOT_HEALTHY, DOCKER_UNAVAILABLE.
   string error_code = 3;
   string message = 4;
   int64 started_at_ms = 5;
@@ -485,6 +491,8 @@ message OperationResult {
     VpnProbeRunResult vpn_probe_run = 111;
     // E24: 120–129.
     AgentRebindResult agent_rebind = 120;
+    // E10, обновления образов: 130–139.
+    ContainerUpdateResult container_update = 130;
   }
 }
 

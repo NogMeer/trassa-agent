@@ -64,6 +64,9 @@ func (e *Executor) builtinHandlers() map[string]handler {
 	for t, x := range e.remedyHandlers() {
 		h[t] = x
 	}
+	for t, x := range e.containerHandlers() {
+		h[t] = x
+	}
 	for t, x := range e.deployHandlers() {
 		h[t] = x
 	}

@@ -1780,6 +1780,7 @@ type OperationParams struct {
 	//	*OperationParams_VpnProbeEnsure
 	//	*OperationParams_VpnProbeRun
 	//	*OperationParams_AgentRebind
+	//	*OperationParams_ContainerUpdate
 	//	*OperationParams_TestConfigWrite
 	Params        isOperationParams_Params `protobuf_oneof:"params"`
 	unknownFields protoimpl.UnknownFields
@@ -2381,6 +2382,15 @@ func (x *OperationParams) GetAgentRebind() *AgentRebindParams {
 	return nil
 }
 
+func (x *OperationParams) GetContainerUpdate() *ContainerUpdateParams {
+	if x != nil {
+		if x, ok := x.Params.(*OperationParams_ContainerUpdate); ok {
+			return x.ContainerUpdate
+		}
+	}
+	return nil
+}
+
 func (x *OperationParams) GetTestConfigWrite() *TestConfigWriteParams {
 	if x != nil {
 		if x, ok := x.Params.(*OperationParams_TestConfigWrite); ok {
@@ -2649,6 +2659,11 @@ type OperationParams_AgentRebind struct {
 	AgentRebind *AgentRebindParams `protobuf:"bytes,120,opt,name=agent_rebind,json=agentRebind,proto3,oneof"`
 }
 
+type OperationParams_ContainerUpdate struct {
+	// E10, обновления образов: 130–139.
+	ContainerUpdate *ContainerUpdateParams `protobuf:"bytes,130,opt,name=container_update,json=containerUpdate,proto3,oneof"`
+}
+
 type OperationParams_TestConfigWrite struct {
 	// Только в сборке с тегом testops.
 	TestConfigWrite *TestConfigWriteParams `protobuf:"bytes,100,opt,name=test_config_write,json=testConfigWrite,proto3,oneof"`
@@ -2777,6 +2792,8 @@ func (*OperationParams_VpnProbeEnsure) isOperationParams_Params() {}
 func (*OperationParams_VpnProbeRun) isOperationParams_Params() {}
 
 func (*OperationParams_AgentRebind) isOperationParams_Params() {}
+
+func (*OperationParams_ContainerUpdate) isOperationParams_Params() {}
 
 func (*OperationParams_TestConfigWrite) isOperationParams_Params() {}
 
@@ -3733,6 +3750,9 @@ type OperationResult struct {
 	// E20: DISK_PATH_FORBIDDEN, DISK_PATH_NOT_FOUND, CONFIG_PATH_FORBIDDEN, CONFIG_NOT_FOUND, CONFIG_TOO_LARGE,
 	// CONFIG_NOT_TEXT, EXEC_DISABLED_ON_SERVER, EXEC_DENIED, EXEC_USER_INVALID, EXEC_CWD_INVALID, EXEC_TIMEOUT,
 	// EXEC_FAILED, EXEC_UNAVAILABLE.
+	// E10: CONTAINER_NOT_FOUND, CONTAINER_NOT_COMPOSE, CONTAINER_IMAGE_CHANGED, CONTAINER_MANAGED_BY_TRASSA,
+	// COMPOSE_FILE_FORBIDDEN, IMAGE_TAG_NOT_EDITABLE, IMAGE_PINNED_BY_DIGEST, COMPOSE_CONFIG_FAILED,
+	// COMPOSE_EDIT_MISMATCH, IMAGE_PULL_FAILED, CONTAINER_NOT_HEALTHY, DOCKER_UNAVAILABLE.
 	ErrorCode    string `protobuf:"bytes,3,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
 	Message      string `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
 	StartedAtMs  int64  `protobuf:"varint,5,opt,name=started_at_ms,json=startedAtMs,proto3" json:"started_at_ms,omitempty"`
@@ -3787,6 +3807,7 @@ type OperationResult struct {
 	//	*OperationResult_VpnProbeEnsure
 	//	*OperationResult_VpnProbeRun
 	//	*OperationResult_AgentRebind
+	//	*OperationResult_ContainerUpdate
 	Data          isOperationResult_Data `protobuf_oneof:"data"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4290,6 +4311,15 @@ func (x *OperationResult) GetAgentRebind() *AgentRebindResult {
 	return nil
 }
 
+func (x *OperationResult) GetContainerUpdate() *ContainerUpdateResult {
+	if x != nil {
+		if x, ok := x.Data.(*OperationResult_ContainerUpdate); ok {
+			return x.ContainerUpdate
+		}
+	}
+	return nil
+}
+
 type isOperationResult_Data interface {
 	isOperationResult_Data()
 }
@@ -4482,6 +4512,11 @@ type OperationResult_AgentRebind struct {
 	AgentRebind *AgentRebindResult `protobuf:"bytes,120,opt,name=agent_rebind,json=agentRebind,proto3,oneof"`
 }
 
+type OperationResult_ContainerUpdate struct {
+	// E10, обновления образов: 130–139.
+	ContainerUpdate *ContainerUpdateResult `protobuf:"bytes,130,opt,name=container_update,json=containerUpdate,proto3,oneof"`
+}
+
 func (*OperationResult_SystemInfo) isOperationResult_Data() {}
 
 func (*OperationResult_SystemInventory) isOperationResult_Data() {}
@@ -4571,6 +4606,8 @@ func (*OperationResult_VpnProbeEnsure) isOperationResult_Data() {}
 func (*OperationResult_VpnProbeRun) isOperationResult_Data() {}
 
 func (*OperationResult_AgentRebind) isOperationResult_Data() {}
+
+func (*OperationResult_ContainerUpdate) isOperationResult_Data() {}
 
 // Подтверждение приёма кадра агента: агент перестаёт досылать результат после InboundAck с этим seq.
 type InboundAck struct {
@@ -6090,7 +6127,7 @@ var File_trassa_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x1btrassa/agent/v1/agent.proto\x12\x0ftrassa.agent.v1\x1a\x1ctrassa/agent/v1/access.proto\x1a\x1ctrassa/agent/v1/backup.proto\x1a\x1ctrassa/agent/v1/deploy.proto\x1a\x1etrassa/agent/v1/operator.proto\x1a\x1etrassa/agent/v1/security.proto\x1a\x19trassa/agent/v1/vpn.proto\x1a\x1ftrassa/agent/v1/wireguard.proto\"\xea\x04\n" +
+	"\x1btrassa/agent/v1/agent.proto\x12\x0ftrassa.agent.v1\x1a\x1ctrassa/agent/v1/access.proto\x1a\x1ctrassa/agent/v1/backup.proto\x1a\x1ftrassa/agent/v1/container.proto\x1a\x1ctrassa/agent/v1/deploy.proto\x1a\x1etrassa/agent/v1/operator.proto\x1a\x1etrassa/agent/v1/security.proto\x1a\x19trassa/agent/v1/vpn.proto\x1a\x1ftrassa/agent/v1/wireguard.proto\"\xea\x04\n" +
 	"\fAgentMessage\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12.\n" +
 	"\x05hello\x18\n" +
@@ -6167,7 +6204,7 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\adry_run\x18\t \x01(\bR\x06dryRun\x12 \n" +
 	"\fissued_at_ms\x18\n" +
 	" \x01(\x03R\n" +
-	"issuedAtMs\"\xed'\n" +
+	"issuedAtMs\"\xc3(\n" +
 	"\x0fOperationParams\x12D\n" +
 	"\vsystem_info\x18\x01 \x01(\v2!.trassa.agent.v1.SystemInfoParamsH\x00R\n" +
 	"systemInfo\x12S\n" +
@@ -6240,6 +6277,7 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x10vpn_probe_ensure\x18n \x01(\v2%.trassa.agent.v1.VpnProbeEnsureParamsH\x00R\x0evpnProbeEnsure\x12H\n" +
 	"\rvpn_probe_run\x18o \x01(\v2\".trassa.agent.v1.VpnProbeRunParamsH\x00R\vvpnProbeRun\x12G\n" +
 	"\fagent_rebind\x18x \x01(\v2\".trassa.agent.v1.AgentRebindParamsH\x00R\vagentRebind\x12T\n" +
+	"\x10container_update\x18\x82\x01 \x01(\v2&.trassa.agent.v1.ContainerUpdateParamsH\x00R\x0fcontainerUpdate\x12T\n" +
 	"\x11test_config_write\x18d \x01(\v2&.trassa.agent.v1.TestConfigWriteParamsH\x00R\x0ftestConfigWriteB\b\n" +
 	"\x06params\"\x12\n" +
 	"\x10SystemInfoParams\"Q\n" +
@@ -6304,7 +6342,7 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\x06stream\x18\x04 \x01(\x0e2\x1a.trassa.agent.v1.LogStreamR\x06stream\x12\x14\n" +
 	"\x05chunk\x18\x05 \x01(\tR\x05chunk\x127\n" +
 	"\x06backup\x18\x06 \x01(\v2\x1f.trassa.agent.v1.BackupProgressR\x06backup\x127\n" +
-	"\x06deploy\x18\a \x01(\v2\x1f.trassa.agent.v1.DeployProgressR\x06deploy\"\xc1\x1e\n" +
+	"\x06deploy\x18\a \x01(\v2\x1f.trassa.agent.v1.DeployProgressR\x06deploy\"\x97\x1f\n" +
 	"\x0fOperationResult\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12;\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2!.trassa.agent.v1.OperationOutcomeR\aoutcome\x12\x1d\n" +
@@ -6366,7 +6404,8 @@ const file_trassa_agent_v1_agent_proto_rawDesc = "" +
 	"\bexec_run\x18\\ \x01(\v2\x1e.trassa.agent.v1.ExecRunResultH\x00R\aexecRun\x12Q\n" +
 	"\x10vpn_probe_ensure\x18n \x01(\v2%.trassa.agent.v1.VpnProbeEnsureResultH\x00R\x0evpnProbeEnsure\x12H\n" +
 	"\rvpn_probe_run\x18o \x01(\v2\".trassa.agent.v1.VpnProbeRunResultH\x00R\vvpnProbeRun\x12G\n" +
-	"\fagent_rebind\x18x \x01(\v2\".trassa.agent.v1.AgentRebindResultH\x00R\vagentRebindB\x06\n" +
+	"\fagent_rebind\x18x \x01(\v2\".trassa.agent.v1.AgentRebindResultH\x00R\vagentRebind\x12T\n" +
+	"\x10container_update\x18\x82\x01 \x01(\v2&.trassa.agent.v1.ContainerUpdateResultH\x00R\x0fcontainerUpdateB\x06\n" +
 	"\x04data\"\x1e\n" +
 	"\n" +
 	"InboundAck\x12\x10\n" +
@@ -6713,46 +6752,48 @@ var file_trassa_agent_v1_agent_proto_goTypes = []any{
 	(*ExecRunParams)(nil),                  // 118: trassa.agent.v1.ExecRunParams
 	(*VpnProbeEnsureParams)(nil),           // 119: trassa.agent.v1.VpnProbeEnsureParams
 	(*VpnProbeRunParams)(nil),              // 120: trassa.agent.v1.VpnProbeRunParams
-	(*BackupProgress)(nil),                 // 121: trassa.agent.v1.BackupProgress
-	(*DeployProgress)(nil),                 // 122: trassa.agent.v1.DeployProgress
-	(*SecurityScanResult)(nil),             // 123: trassa.agent.v1.SecurityScanResult
-	(*PackagesListUpdatesResult)(nil),      // 124: trassa.agent.v1.PackagesListUpdatesResult
-	(*FirewallPlanResult)(nil),             // 125: trassa.agent.v1.FirewallPlanResult
-	(*WireguardInspectResult)(nil),         // 126: trassa.agent.v1.WireguardInspectResult
-	(*WireguardKeygenResult)(nil),          // 127: trassa.agent.v1.WireguardKeygenResult
-	(*WireguardApplyResult)(nil),           // 128: trassa.agent.v1.WireguardApplyResult
-	(*BackupInitResult)(nil),               // 129: trassa.agent.v1.BackupInitResult
-	(*BackupRunResult)(nil),                // 130: trassa.agent.v1.BackupRunResult
-	(*BackupVerifyResult)(nil),             // 131: trassa.agent.v1.BackupVerifyResult
-	(*BackupRestoreResult)(nil),            // 132: trassa.agent.v1.BackupRestoreResult
-	(*BackupDiscoverResult)(nil),           // 133: trassa.agent.v1.BackupDiscoverResult
-	(*BackupSnapshotsResult)(nil),          // 134: trassa.agent.v1.BackupSnapshotsResult
-	(*BackupBrowseResult)(nil),             // 135: trassa.agent.v1.BackupBrowseResult
-	(*BackupPruneResult)(nil),              // 136: trassa.agent.v1.BackupPruneResult
-	(*BackupTargetEnsureResult)(nil),       // 137: trassa.agent.v1.BackupTargetEnsureResult
-	(*AccessStateResult)(nil),              // 138: trassa.agent.v1.AccessStateResult
-	(*SshCaTrustResult)(nil),               // 139: trassa.agent.v1.SshCaTrustResult
-	(*AccessUserEnsureResult)(nil),         // 140: trassa.agent.v1.AccessUserEnsureResult
-	(*AccessUserRemoveResult)(nil),         // 141: trassa.agent.v1.AccessUserRemoveResult
-	(*AccessSessionsTerminateResult)(nil),  // 142: trassa.agent.v1.AccessSessionsTerminateResult
-	(*AccessRescueGrantResult)(nil),        // 143: trassa.agent.v1.AccessRescueGrantResult
-	(*TerminalSessionResult)(nil),          // 144: trassa.agent.v1.TerminalSessionResult
-	(*DockerEnsureResult)(nil),             // 145: trassa.agent.v1.DockerEnsureResult
-	(*ProxyEnsureResult)(nil),              // 146: trassa.agent.v1.ProxyEnsureResult
-	(*ProxyRouteApplyResult)(nil),          // 147: trassa.agent.v1.ProxyRouteApplyResult
-	(*DeployBuildResult)(nil),              // 148: trassa.agent.v1.DeployBuildResult
-	(*DeployReleaseResult)(nil),            // 149: trassa.agent.v1.DeployReleaseResult
-	(*DeployInspectResult)(nil),            // 150: trassa.agent.v1.DeployInspectResult
-	(*DeployRemoveResult)(nil),             // 151: trassa.agent.v1.DeployRemoveResult
-	(*DeployImagesPruneResult)(nil),        // 152: trassa.agent.v1.DeployImagesPruneResult
-	(*ServiceRestartResult)(nil),           // 153: trassa.agent.v1.ServiceRestartResult
-	(*DiskCleanupResult)(nil),              // 154: trassa.agent.v1.DiskCleanupResult
-	(*CertRenewResult)(nil),                // 155: trassa.agent.v1.CertRenewResult
-	(*DiskUsageResult)(nil),                // 156: trassa.agent.v1.DiskUsageResult
-	(*ConfigReadResult)(nil),               // 157: trassa.agent.v1.ConfigReadResult
-	(*ExecRunResult)(nil),                  // 158: trassa.agent.v1.ExecRunResult
-	(*VpnProbeEnsureResult)(nil),           // 159: trassa.agent.v1.VpnProbeEnsureResult
-	(*VpnProbeRunResult)(nil),              // 160: trassa.agent.v1.VpnProbeRunResult
+	(*ContainerUpdateParams)(nil),          // 121: trassa.agent.v1.ContainerUpdateParams
+	(*BackupProgress)(nil),                 // 122: trassa.agent.v1.BackupProgress
+	(*DeployProgress)(nil),                 // 123: trassa.agent.v1.DeployProgress
+	(*SecurityScanResult)(nil),             // 124: trassa.agent.v1.SecurityScanResult
+	(*PackagesListUpdatesResult)(nil),      // 125: trassa.agent.v1.PackagesListUpdatesResult
+	(*FirewallPlanResult)(nil),             // 126: trassa.agent.v1.FirewallPlanResult
+	(*WireguardInspectResult)(nil),         // 127: trassa.agent.v1.WireguardInspectResult
+	(*WireguardKeygenResult)(nil),          // 128: trassa.agent.v1.WireguardKeygenResult
+	(*WireguardApplyResult)(nil),           // 129: trassa.agent.v1.WireguardApplyResult
+	(*BackupInitResult)(nil),               // 130: trassa.agent.v1.BackupInitResult
+	(*BackupRunResult)(nil),                // 131: trassa.agent.v1.BackupRunResult
+	(*BackupVerifyResult)(nil),             // 132: trassa.agent.v1.BackupVerifyResult
+	(*BackupRestoreResult)(nil),            // 133: trassa.agent.v1.BackupRestoreResult
+	(*BackupDiscoverResult)(nil),           // 134: trassa.agent.v1.BackupDiscoverResult
+	(*BackupSnapshotsResult)(nil),          // 135: trassa.agent.v1.BackupSnapshotsResult
+	(*BackupBrowseResult)(nil),             // 136: trassa.agent.v1.BackupBrowseResult
+	(*BackupPruneResult)(nil),              // 137: trassa.agent.v1.BackupPruneResult
+	(*BackupTargetEnsureResult)(nil),       // 138: trassa.agent.v1.BackupTargetEnsureResult
+	(*AccessStateResult)(nil),              // 139: trassa.agent.v1.AccessStateResult
+	(*SshCaTrustResult)(nil),               // 140: trassa.agent.v1.SshCaTrustResult
+	(*AccessUserEnsureResult)(nil),         // 141: trassa.agent.v1.AccessUserEnsureResult
+	(*AccessUserRemoveResult)(nil),         // 142: trassa.agent.v1.AccessUserRemoveResult
+	(*AccessSessionsTerminateResult)(nil),  // 143: trassa.agent.v1.AccessSessionsTerminateResult
+	(*AccessRescueGrantResult)(nil),        // 144: trassa.agent.v1.AccessRescueGrantResult
+	(*TerminalSessionResult)(nil),          // 145: trassa.agent.v1.TerminalSessionResult
+	(*DockerEnsureResult)(nil),             // 146: trassa.agent.v1.DockerEnsureResult
+	(*ProxyEnsureResult)(nil),              // 147: trassa.agent.v1.ProxyEnsureResult
+	(*ProxyRouteApplyResult)(nil),          // 148: trassa.agent.v1.ProxyRouteApplyResult
+	(*DeployBuildResult)(nil),              // 149: trassa.agent.v1.DeployBuildResult
+	(*DeployReleaseResult)(nil),            // 150: trassa.agent.v1.DeployReleaseResult
+	(*DeployInspectResult)(nil),            // 151: trassa.agent.v1.DeployInspectResult
+	(*DeployRemoveResult)(nil),             // 152: trassa.agent.v1.DeployRemoveResult
+	(*DeployImagesPruneResult)(nil),        // 153: trassa.agent.v1.DeployImagesPruneResult
+	(*ServiceRestartResult)(nil),           // 154: trassa.agent.v1.ServiceRestartResult
+	(*DiskCleanupResult)(nil),              // 155: trassa.agent.v1.DiskCleanupResult
+	(*CertRenewResult)(nil),                // 156: trassa.agent.v1.CertRenewResult
+	(*DiskUsageResult)(nil),                // 157: trassa.agent.v1.DiskUsageResult
+	(*ConfigReadResult)(nil),               // 158: trassa.agent.v1.ConfigReadResult
+	(*ExecRunResult)(nil),                  // 159: trassa.agent.v1.ExecRunResult
+	(*VpnProbeEnsureResult)(nil),           // 160: trassa.agent.v1.VpnProbeEnsureResult
+	(*VpnProbeRunResult)(nil),              // 161: trassa.agent.v1.VpnProbeRunResult
+	(*ContainerUpdateResult)(nil),          // 162: trassa.agent.v1.ContainerUpdateResult
 }
 var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	15,  // 0: trassa.agent.v1.AgentMessage.hello:type_name -> trassa.agent.v1.Hello
@@ -6843,90 +6884,92 @@ var file_trassa_agent_v1_agent_proto_depIdxs = []int32{
 	119, // 85: trassa.agent.v1.OperationParams.vpn_probe_ensure:type_name -> trassa.agent.v1.VpnProbeEnsureParams
 	120, // 86: trassa.agent.v1.OperationParams.vpn_probe_run:type_name -> trassa.agent.v1.VpnProbeRunParams
 	26,  // 87: trassa.agent.v1.OperationParams.agent_rebind:type_name -> trassa.agent.v1.AgentRebindParams
-	33,  // 88: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
-	3,   // 89: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
-	25,  // 90: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
-	27,  // 91: trassa.agent.v1.AgentRebindParams.panel_keys:type_name -> trassa.agent.v1.RebindPanelKey
-	4,   // 92: trassa.agent.v1.AgentRebindResult.failure:type_name -> trassa.agent.v1.RebindFailure
-	52,  // 93: trassa.agent.v1.LogsSubscribeParams.sources:type_name -> trassa.agent.v1.LogSource
-	10,  // 94: trassa.agent.v1.LogsSubscribeParams.min_level:type_name -> trassa.agent.v1.LogLevel
-	52,  // 95: trassa.agent.v1.LogsReadParams.source:type_name -> trassa.agent.v1.LogSource
-	5,   // 96: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
-	6,   // 97: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
-	121, // 98: trassa.agent.v1.OperationProgress.backup:type_name -> trassa.agent.v1.BackupProgress
-	122, // 99: trassa.agent.v1.OperationProgress.deploy:type_name -> trassa.agent.v1.DeployProgress
-	7,   // 100: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
-	40,  // 101: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
-	42,  // 102: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
-	43,  // 103: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
-	44,  // 104: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
-	55,  // 105: trassa.agent.v1.OperationResult.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeResult
-	56,  // 106: trassa.agent.v1.OperationResult.logs_read:type_name -> trassa.agent.v1.LogsReadResult
-	123, // 107: trassa.agent.v1.OperationResult.security_scan:type_name -> trassa.agent.v1.SecurityScanResult
-	124, // 108: trassa.agent.v1.OperationResult.packages_list_updates:type_name -> trassa.agent.v1.PackagesListUpdatesResult
-	125, // 109: trassa.agent.v1.OperationResult.firewall_plan:type_name -> trassa.agent.v1.FirewallPlanResult
-	60,  // 110: trassa.agent.v1.OperationResult.net_check:type_name -> trassa.agent.v1.NetCheckResult
-	126, // 111: trassa.agent.v1.OperationResult.wireguard_inspect:type_name -> trassa.agent.v1.WireguardInspectResult
-	127, // 112: trassa.agent.v1.OperationResult.wireguard_keygen:type_name -> trassa.agent.v1.WireguardKeygenResult
-	128, // 113: trassa.agent.v1.OperationResult.wireguard_apply:type_name -> trassa.agent.v1.WireguardApplyResult
-	129, // 114: trassa.agent.v1.OperationResult.backup_init:type_name -> trassa.agent.v1.BackupInitResult
-	130, // 115: trassa.agent.v1.OperationResult.backup_run:type_name -> trassa.agent.v1.BackupRunResult
-	131, // 116: trassa.agent.v1.OperationResult.backup_verify:type_name -> trassa.agent.v1.BackupVerifyResult
-	132, // 117: trassa.agent.v1.OperationResult.backup_restore:type_name -> trassa.agent.v1.BackupRestoreResult
-	133, // 118: trassa.agent.v1.OperationResult.backup_discover:type_name -> trassa.agent.v1.BackupDiscoverResult
-	134, // 119: trassa.agent.v1.OperationResult.backup_snapshots:type_name -> trassa.agent.v1.BackupSnapshotsResult
-	135, // 120: trassa.agent.v1.OperationResult.backup_browse:type_name -> trassa.agent.v1.BackupBrowseResult
-	136, // 121: trassa.agent.v1.OperationResult.backup_prune:type_name -> trassa.agent.v1.BackupPruneResult
-	137, // 122: trassa.agent.v1.OperationResult.backup_target_ensure:type_name -> trassa.agent.v1.BackupTargetEnsureResult
-	138, // 123: trassa.agent.v1.OperationResult.access_state:type_name -> trassa.agent.v1.AccessStateResult
-	139, // 124: trassa.agent.v1.OperationResult.sshca_trust:type_name -> trassa.agent.v1.SshCaTrustResult
-	139, // 125: trassa.agent.v1.OperationResult.sshca_untrust:type_name -> trassa.agent.v1.SshCaTrustResult
-	140, // 126: trassa.agent.v1.OperationResult.access_user_ensure:type_name -> trassa.agent.v1.AccessUserEnsureResult
-	141, // 127: trassa.agent.v1.OperationResult.access_user_remove:type_name -> trassa.agent.v1.AccessUserRemoveResult
-	142, // 128: trassa.agent.v1.OperationResult.access_sessions_terminate:type_name -> trassa.agent.v1.AccessSessionsTerminateResult
-	143, // 129: trassa.agent.v1.OperationResult.access_rescue_grant:type_name -> trassa.agent.v1.AccessRescueGrantResult
-	144, // 130: trassa.agent.v1.OperationResult.terminal_open:type_name -> trassa.agent.v1.TerminalSessionResult
-	145, // 131: trassa.agent.v1.OperationResult.docker_ensure:type_name -> trassa.agent.v1.DockerEnsureResult
-	146, // 132: trassa.agent.v1.OperationResult.proxy_ensure:type_name -> trassa.agent.v1.ProxyEnsureResult
-	147, // 133: trassa.agent.v1.OperationResult.proxy_route_apply:type_name -> trassa.agent.v1.ProxyRouteApplyResult
-	148, // 134: trassa.agent.v1.OperationResult.deploy_build:type_name -> trassa.agent.v1.DeployBuildResult
-	149, // 135: trassa.agent.v1.OperationResult.deploy_release:type_name -> trassa.agent.v1.DeployReleaseResult
-	150, // 136: trassa.agent.v1.OperationResult.deploy_inspect:type_name -> trassa.agent.v1.DeployInspectResult
-	151, // 137: trassa.agent.v1.OperationResult.deploy_remove:type_name -> trassa.agent.v1.DeployRemoveResult
-	152, // 138: trassa.agent.v1.OperationResult.deploy_images_prune:type_name -> trassa.agent.v1.DeployImagesPruneResult
-	153, // 139: trassa.agent.v1.OperationResult.service_restart:type_name -> trassa.agent.v1.ServiceRestartResult
-	154, // 140: trassa.agent.v1.OperationResult.disk_cleanup:type_name -> trassa.agent.v1.DiskCleanupResult
-	155, // 141: trassa.agent.v1.OperationResult.cert_renew:type_name -> trassa.agent.v1.CertRenewResult
-	156, // 142: trassa.agent.v1.OperationResult.disk_usage:type_name -> trassa.agent.v1.DiskUsageResult
-	157, // 143: trassa.agent.v1.OperationResult.config_read:type_name -> trassa.agent.v1.ConfigReadResult
-	158, // 144: trassa.agent.v1.OperationResult.exec_run:type_name -> trassa.agent.v1.ExecRunResult
-	159, // 145: trassa.agent.v1.OperationResult.vpn_probe_ensure:type_name -> trassa.agent.v1.VpnProbeEnsureResult
-	160, // 146: trassa.agent.v1.OperationResult.vpn_probe_run:type_name -> trassa.agent.v1.VpnProbeRunResult
-	28,  // 147: trassa.agent.v1.OperationResult.agent_rebind:type_name -> trassa.agent.v1.AgentRebindResult
-	41,  // 148: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
-	8,   // 149: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
-	2,   // 150: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
-	45,  // 151: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
-	46,  // 152: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
-	47,  // 153: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
-	49,  // 154: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
-	61,  // 155: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
-	9,   // 156: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
-	62,  // 157: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
-	53,  // 158: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
-	11,  // 159: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
-	10,  // 160: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
-	52,  // 161: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
-	63,  // 162: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
-	52,  // 163: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
-	54,  // 164: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
-	53,  // 165: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
-	64,  // 166: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
-	167, // [167:167] is the sub-list for method output_type
-	167, // [167:167] is the sub-list for method input_type
-	167, // [167:167] is the sub-list for extension type_name
-	167, // [167:167] is the sub-list for extension extendee
-	0,   // [0:167] is the sub-list for field type_name
+	121, // 88: trassa.agent.v1.OperationParams.container_update:type_name -> trassa.agent.v1.ContainerUpdateParams
+	33,  // 89: trassa.agent.v1.OperationParams.test_config_write:type_name -> trassa.agent.v1.TestConfigWriteParams
+	3,   // 90: trassa.agent.v1.SystemInventoryParams.include:type_name -> trassa.agent.v1.InventoryKind
+	25,  // 91: trassa.agent.v1.AgentUpdateParams.artifacts:type_name -> trassa.agent.v1.ReleaseArtifact
+	27,  // 92: trassa.agent.v1.AgentRebindParams.panel_keys:type_name -> trassa.agent.v1.RebindPanelKey
+	4,   // 93: trassa.agent.v1.AgentRebindResult.failure:type_name -> trassa.agent.v1.RebindFailure
+	52,  // 94: trassa.agent.v1.LogsSubscribeParams.sources:type_name -> trassa.agent.v1.LogSource
+	10,  // 95: trassa.agent.v1.LogsSubscribeParams.min_level:type_name -> trassa.agent.v1.LogLevel
+	52,  // 96: trassa.agent.v1.LogsReadParams.source:type_name -> trassa.agent.v1.LogSource
+	5,   // 97: trassa.agent.v1.OperationProgress.phase:type_name -> trassa.agent.v1.OperationPhase
+	6,   // 98: trassa.agent.v1.OperationProgress.stream:type_name -> trassa.agent.v1.LogStream
+	122, // 99: trassa.agent.v1.OperationProgress.backup:type_name -> trassa.agent.v1.BackupProgress
+	123, // 100: trassa.agent.v1.OperationProgress.deploy:type_name -> trassa.agent.v1.DeployProgress
+	7,   // 101: trassa.agent.v1.OperationResult.outcome:type_name -> trassa.agent.v1.OperationOutcome
+	40,  // 102: trassa.agent.v1.OperationResult.preview:type_name -> trassa.agent.v1.Preview
+	42,  // 103: trassa.agent.v1.OperationResult.rollback_point:type_name -> trassa.agent.v1.RollbackPoint
+	43,  // 104: trassa.agent.v1.OperationResult.system_info:type_name -> trassa.agent.v1.SystemInfoResult
+	44,  // 105: trassa.agent.v1.OperationResult.system_inventory:type_name -> trassa.agent.v1.SystemInventoryResult
+	55,  // 106: trassa.agent.v1.OperationResult.logs_subscribe:type_name -> trassa.agent.v1.LogsSubscribeResult
+	56,  // 107: trassa.agent.v1.OperationResult.logs_read:type_name -> trassa.agent.v1.LogsReadResult
+	124, // 108: trassa.agent.v1.OperationResult.security_scan:type_name -> trassa.agent.v1.SecurityScanResult
+	125, // 109: trassa.agent.v1.OperationResult.packages_list_updates:type_name -> trassa.agent.v1.PackagesListUpdatesResult
+	126, // 110: trassa.agent.v1.OperationResult.firewall_plan:type_name -> trassa.agent.v1.FirewallPlanResult
+	60,  // 111: trassa.agent.v1.OperationResult.net_check:type_name -> trassa.agent.v1.NetCheckResult
+	127, // 112: trassa.agent.v1.OperationResult.wireguard_inspect:type_name -> trassa.agent.v1.WireguardInspectResult
+	128, // 113: trassa.agent.v1.OperationResult.wireguard_keygen:type_name -> trassa.agent.v1.WireguardKeygenResult
+	129, // 114: trassa.agent.v1.OperationResult.wireguard_apply:type_name -> trassa.agent.v1.WireguardApplyResult
+	130, // 115: trassa.agent.v1.OperationResult.backup_init:type_name -> trassa.agent.v1.BackupInitResult
+	131, // 116: trassa.agent.v1.OperationResult.backup_run:type_name -> trassa.agent.v1.BackupRunResult
+	132, // 117: trassa.agent.v1.OperationResult.backup_verify:type_name -> trassa.agent.v1.BackupVerifyResult
+	133, // 118: trassa.agent.v1.OperationResult.backup_restore:type_name -> trassa.agent.v1.BackupRestoreResult
+	134, // 119: trassa.agent.v1.OperationResult.backup_discover:type_name -> trassa.agent.v1.BackupDiscoverResult
+	135, // 120: trassa.agent.v1.OperationResult.backup_snapshots:type_name -> trassa.agent.v1.BackupSnapshotsResult
+	136, // 121: trassa.agent.v1.OperationResult.backup_browse:type_name -> trassa.agent.v1.BackupBrowseResult
+	137, // 122: trassa.agent.v1.OperationResult.backup_prune:type_name -> trassa.agent.v1.BackupPruneResult
+	138, // 123: trassa.agent.v1.OperationResult.backup_target_ensure:type_name -> trassa.agent.v1.BackupTargetEnsureResult
+	139, // 124: trassa.agent.v1.OperationResult.access_state:type_name -> trassa.agent.v1.AccessStateResult
+	140, // 125: trassa.agent.v1.OperationResult.sshca_trust:type_name -> trassa.agent.v1.SshCaTrustResult
+	140, // 126: trassa.agent.v1.OperationResult.sshca_untrust:type_name -> trassa.agent.v1.SshCaTrustResult
+	141, // 127: trassa.agent.v1.OperationResult.access_user_ensure:type_name -> trassa.agent.v1.AccessUserEnsureResult
+	142, // 128: trassa.agent.v1.OperationResult.access_user_remove:type_name -> trassa.agent.v1.AccessUserRemoveResult
+	143, // 129: trassa.agent.v1.OperationResult.access_sessions_terminate:type_name -> trassa.agent.v1.AccessSessionsTerminateResult
+	144, // 130: trassa.agent.v1.OperationResult.access_rescue_grant:type_name -> trassa.agent.v1.AccessRescueGrantResult
+	145, // 131: trassa.agent.v1.OperationResult.terminal_open:type_name -> trassa.agent.v1.TerminalSessionResult
+	146, // 132: trassa.agent.v1.OperationResult.docker_ensure:type_name -> trassa.agent.v1.DockerEnsureResult
+	147, // 133: trassa.agent.v1.OperationResult.proxy_ensure:type_name -> trassa.agent.v1.ProxyEnsureResult
+	148, // 134: trassa.agent.v1.OperationResult.proxy_route_apply:type_name -> trassa.agent.v1.ProxyRouteApplyResult
+	149, // 135: trassa.agent.v1.OperationResult.deploy_build:type_name -> trassa.agent.v1.DeployBuildResult
+	150, // 136: trassa.agent.v1.OperationResult.deploy_release:type_name -> trassa.agent.v1.DeployReleaseResult
+	151, // 137: trassa.agent.v1.OperationResult.deploy_inspect:type_name -> trassa.agent.v1.DeployInspectResult
+	152, // 138: trassa.agent.v1.OperationResult.deploy_remove:type_name -> trassa.agent.v1.DeployRemoveResult
+	153, // 139: trassa.agent.v1.OperationResult.deploy_images_prune:type_name -> trassa.agent.v1.DeployImagesPruneResult
+	154, // 140: trassa.agent.v1.OperationResult.service_restart:type_name -> trassa.agent.v1.ServiceRestartResult
+	155, // 141: trassa.agent.v1.OperationResult.disk_cleanup:type_name -> trassa.agent.v1.DiskCleanupResult
+	156, // 142: trassa.agent.v1.OperationResult.cert_renew:type_name -> trassa.agent.v1.CertRenewResult
+	157, // 143: trassa.agent.v1.OperationResult.disk_usage:type_name -> trassa.agent.v1.DiskUsageResult
+	158, // 144: trassa.agent.v1.OperationResult.config_read:type_name -> trassa.agent.v1.ConfigReadResult
+	159, // 145: trassa.agent.v1.OperationResult.exec_run:type_name -> trassa.agent.v1.ExecRunResult
+	160, // 146: trassa.agent.v1.OperationResult.vpn_probe_ensure:type_name -> trassa.agent.v1.VpnProbeEnsureResult
+	161, // 147: trassa.agent.v1.OperationResult.vpn_probe_run:type_name -> trassa.agent.v1.VpnProbeRunResult
+	28,  // 148: trassa.agent.v1.OperationResult.agent_rebind:type_name -> trassa.agent.v1.AgentRebindResult
+	162, // 149: trassa.agent.v1.OperationResult.container_update:type_name -> trassa.agent.v1.ContainerUpdateResult
+	41,  // 150: trassa.agent.v1.Preview.files:type_name -> trassa.agent.v1.FileChange
+	8,   // 151: trassa.agent.v1.FileChange.kind:type_name -> trassa.agent.v1.FileChangeKind
+	2,   // 152: trassa.agent.v1.RollbackPoint.kind:type_name -> trassa.agent.v1.RollbackKind
+	45,  // 153: trassa.agent.v1.SystemInventoryResult.services:type_name -> trassa.agent.v1.ServiceEntry
+	46,  // 154: trassa.agent.v1.SystemInventoryResult.containers:type_name -> trassa.agent.v1.ContainerEntry
+	47,  // 155: trassa.agent.v1.SystemInventoryResult.ports:type_name -> trassa.agent.v1.PortEntry
+	49,  // 156: trassa.agent.v1.MetricsBatch.metrics:type_name -> trassa.agent.v1.Metric
+	61,  // 157: trassa.agent.v1.Metric.labels:type_name -> trassa.agent.v1.Metric.LabelsEntry
+	9,   // 158: trassa.agent.v1.Event.severity:type_name -> trassa.agent.v1.EventSeverity
+	62,  // 159: trassa.agent.v1.Event.attributes:type_name -> trassa.agent.v1.Event.AttributesEntry
+	53,  // 160: trassa.agent.v1.LogChunk.records:type_name -> trassa.agent.v1.LogRecord
+	11,  // 161: trassa.agent.v1.LogSource.kind:type_name -> trassa.agent.v1.LogSourceKind
+	10,  // 162: trassa.agent.v1.LogRecord.level:type_name -> trassa.agent.v1.LogLevel
+	52,  // 163: trassa.agent.v1.LogRecord.source:type_name -> trassa.agent.v1.LogSource
+	63,  // 164: trassa.agent.v1.LogRecord.fields:type_name -> trassa.agent.v1.LogRecord.FieldsEntry
+	52,  // 165: trassa.agent.v1.LogSourceStatus.source:type_name -> trassa.agent.v1.LogSource
+	54,  // 166: trassa.agent.v1.LogsSubscribeResult.sources:type_name -> trassa.agent.v1.LogSourceStatus
+	53,  // 167: trassa.agent.v1.LogsReadResult.records:type_name -> trassa.agent.v1.LogRecord
+	64,  // 168: trassa.agent.v1.Subscribe.options:type_name -> trassa.agent.v1.Subscribe.OptionsEntry
+	169, // [169:169] is the sub-list for method output_type
+	169, // [169:169] is the sub-list for method input_type
+	169, // [169:169] is the sub-list for extension type_name
+	169, // [169:169] is the sub-list for extension extendee
+	0,   // [0:169] is the sub-list for field type_name
 }
 
 func init() { file_trassa_agent_v1_agent_proto_init() }
@@ -6936,6 +6979,7 @@ func file_trassa_agent_v1_agent_proto_init() {
 	}
 	file_trassa_agent_v1_access_proto_init()
 	file_trassa_agent_v1_backup_proto_init()
+	file_trassa_agent_v1_container_proto_init()
 	file_trassa_agent_v1_deploy_proto_init()
 	file_trassa_agent_v1_operator_proto_init()
 	file_trassa_agent_v1_security_proto_init()
@@ -7028,6 +7072,7 @@ func file_trassa_agent_v1_agent_proto_init() {
 		(*OperationParams_VpnProbeEnsure)(nil),
 		(*OperationParams_VpnProbeRun)(nil),
 		(*OperationParams_AgentRebind)(nil),
+		(*OperationParams_ContainerUpdate)(nil),
 		(*OperationParams_TestConfigWrite)(nil),
 	}
 	file_trassa_agent_v1_agent_proto_msgTypes[26].OneofWrappers = []any{
@@ -7076,6 +7121,7 @@ func file_trassa_agent_v1_agent_proto_init() {
 		(*OperationResult_VpnProbeEnsure)(nil),
 		(*OperationResult_VpnProbeRun)(nil),
 		(*OperationResult_AgentRebind)(nil),
+		(*OperationResult_ContainerUpdate)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

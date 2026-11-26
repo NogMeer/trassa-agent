@@ -38,6 +38,7 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/helper"
 	"github.com/NogMeer/trassa-agent/internal/helper/execrun"
 	"github.com/NogMeer/trassa-agent/internal/helperrpc"
+	"github.com/NogMeer/trassa-agent/internal/imageupdate"
 	"github.com/NogMeer/trassa-agent/internal/logsrc"
 	"github.com/NogMeer/trassa-agent/internal/metrics"
 	"github.com/NogMeer/trassa-agent/internal/nonce"
@@ -202,6 +203,8 @@ func executor(log *slog.Logger) (*helper.Executor, func(), error) {
 		Deploy:   dep,
 		AppStats: &deploy.AppStats{Env: dep},
 		Remedy:   remedyEnv(p, sec),
+		Images: &imageupdate.Env{Docker: &imageupdate.EngineDocker{Client: &dockerapi.Client{}}, Run: imageupdate.Exec,
+			Poll: 2 * time.Second, Stable: 10 * time.Second, PullTimeout: 15 * time.Minute, UpTimeout: 5 * time.Minute},
 		VpnProbe: vpnProbeEnv(p),
 		Inspect:  &fsinspect.Env{Root: "/"},
 		Exec:     execrun.Systemd{SystemdRun: "/usr/bin/systemd-run", Systemctl: "/usr/bin/systemctl"},
