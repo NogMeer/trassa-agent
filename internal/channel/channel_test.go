@@ -645,3 +645,29 @@ func TestHelloEncryptionKey(t *testing.T) {
 		t.Fatal("нет Hello")
 	}
 }
+
+// Полуоткрытый канал (прод, ams1, 2026-11-26): после рукопожатия шлюз перестаёт читать — ни кадров, ни pong на ping,
+// а запись агента уходит в буфер ядра без ошибки. Агент сам рвёт такой канал через keepaliveMisses пульсов без
+// ответа и переподключается, а не держит его часами.
+func TestReconnectWhenGatewayStopsAnswering(t *testing.T) {
+	id := newIdentity(t)
+	stop := make(chan struct{})
+	t.Cleanup(func() { close(stop) })
+	var conns atomic.Int32
+	g := newGateway(t, id.PublicKey(), func(ctx context.Context, c *gwConn) {
+		if conns.Add(1) == 1 {
+			<-stop // молчим: не читаем — pong не уходит, квитанций нет
+			return
+		}
+		for {
+			if _, err := c.read(ctx); err != nil {
+				return
+			}
+		}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = newAgent(t, id, g, newFakeHelper()).Run(ctx) }()
+	// Пульс 1 с (Welcome тестового шлюза): обрыв не позже keepaliveMisses+1 секунд.
+	waitFor(t, time.Duration(keepaliveMisses+2)*time.Second, func() bool { return conns.Load() >= 2 }, "агент переподключился к молчащему шлюзу")
+}

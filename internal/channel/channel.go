@@ -46,6 +46,8 @@ const (
 	writeTimeout     = 10 * time.Second
 	// stableAfter — сессия дольше этого сбрасывает счётчик задержек.
 	stableAfter = 60 * time.Second
+	// keepaliveMisses — столько пульсов подряд без pong шлюза — канал мёртв: агент рвёт его и переподключается.
+	keepaliveMisses = 3
 )
 
 // Helper — помощник глазами агента (helperrpc.Client).
@@ -357,6 +359,7 @@ func (a *Agent) session(ctx context.Context) error {
 	}()
 	errc := make(chan error, 5)
 	go func() { errc <- a.heartbeat(sctx, c, hb) }()
+	go func() { errc <- a.keepalive(sctx, c, hb) }()
 	go func() { errc <- a.readLoop(sctx, c) }()
 	if a.cfg.Metrics != nil {
 		go func() {
@@ -496,6 +499,30 @@ func (a *Agent) heartbeat(ctx context.Context, c *conn, every time.Duration) err
 			AgentTimeMs: a.cfg.Now().UnixMilli(), RunningOperationIds: running,
 		}}}); err != nil {
 			return err
+		}
+	}
+}
+
+// keepalive — ping шлюзу на каждом пульсе; pong не пришёл за keepaliveMisses пульсов — канал полуоткрыт (шлюз не
+// читает, путь теряет пакеты, кадры стоят в буфере ядра за большими): ошибка рвёт сессию, Run переподключается.
+// Запись в такой канал ошибки не даёт, поэтому одного пульса мало. Pong читает readLoop (websocket.Conn.Read).
+func (a *Agent) keepalive(ctx context.Context, c *conn, every time.Duration) error {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
+		}
+		pctx, cancel := context.WithTimeout(ctx, keepaliveMisses*every)
+		err := c.ws.Ping(pctx)
+		cancel()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("шлюз не отвечает %s: %w", keepaliveMisses*every, err)
 		}
 	}
 }

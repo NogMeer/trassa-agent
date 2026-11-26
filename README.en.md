@@ -46,7 +46,7 @@ The networked process has no root rights. The root process does not touch the ne
 
 - The agent opens an outbound WSS connection on port 443. It opens no inbound ports.
 - Messages are protobuf; the schema lives in [`proto/`](proto/).
-- A heartbeat is sent every 20 seconds. After a disconnect the agent reconnects with an increasing delay, capped at 60 seconds.
+- A heartbeat is sent every 20 seconds. If the gateway does not answer pings for three heartbeats in a row, the agent drops the connection itself. After a disconnect the agent reconnects with an increasing delay, capped at 60 seconds.
 
 ### Signed operations
 
