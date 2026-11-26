@@ -149,6 +149,16 @@ func TestTimeAndEOL(t *testing.T) {
 	if got := states(scan(t, sys, "TIME_SYNC_OFF")["TIME_SYNC_OFF"]); got != "PASS:" {
 		t.Fatal("timedatectl:", got)
 	}
+	// Ubuntu 26.04: стандартная поддержка — по 2031-05-31 включительно.
+	u26 := build(t, tree{"etc/os-release": "ID=ubuntu\nVERSION_ID=\"26.04\"\nVERSION_CODENAME=resolute\n"})
+	u26.Now = func() time.Time { return time.Date(2031, 5, 31, 12, 0, 0, 0, time.UTC) }
+	if got := states(scan(t, u26, "OS_EOL")["OS_EOL"]); got != "PASS:ubuntu 26.04" {
+		t.Fatal("26.04 в срок:", got)
+	}
+	u26.Now = func() time.Time { return time.Date(2031, 6, 1, 0, 0, 0, 0, time.UTC) }
+	if got := states(scan(t, u26, "OS_EOL")["OS_EOL"]); got != "FAIL:ubuntu 26.04" {
+		t.Fatal("26.04 после срока:", got)
+	}
 	if got := states(scan(t, build(t, tree{"etc/os-release": "ID=fedora\nVERSION_ID=40\n"}), "OS_EOL")["OS_EOL"]); got != "NA:" {
 		t.Fatal(got)
 	}

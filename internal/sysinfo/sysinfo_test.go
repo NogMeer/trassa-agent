@@ -15,10 +15,10 @@ import (
 	"github.com/NogMeer/trassa-agent/internal/dockerapi"
 )
 
-// Сохранённые образцы четырёх ОС на двух архитектурах (8 сочетаний).
+// Сохранённые образцы пяти ОС на двух архитектурах (10 сочетаний).
 func TestInfoSamples(t *testing.T) {
 	want := map[string][2]string{
-		"ubuntu-22.04": {"ubuntu", "22.04"}, "ubuntu-24.04": {"ubuntu", "24.04"},
+		"ubuntu-22.04": {"ubuntu", "22.04"}, "ubuntu-24.04": {"ubuntu", "24.04"}, "ubuntu-26.04": {"ubuntu", "26.04"},
 		"debian-12": {"debian", "12"}, "debian-13": {"debian", "13"},
 	}
 	n := 0
@@ -72,7 +72,7 @@ func TestInfoSamples(t *testing.T) {
 			}
 		}
 	}
-	if n != 8 {
+	if n != 10 {
 		t.Fatal(n)
 	}
 }

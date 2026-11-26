@@ -87,7 +87,7 @@ Every run also needs approval, and the signed operation must carry a hoster snap
 
 ## Supported systems
 
-First wave: Ubuntu 22.04 and 24.04, Debian 12 and 13, on amd64 and arm64. On other systems the installer stops with a clear message.
+First wave: Ubuntu 22.04, 24.04 and 26.04, Debian 12 and 13, on amd64 and arm64. Installing Docker for apps (E17) on Ubuntu 26.04 is not supported yet. On other systems the installer stops with a clear message.
 
 ## Installation and removal
 
@@ -143,7 +143,7 @@ The sign-in token is kept in the Keychain (macOS), Secret Service (Linux) or Cre
 
 Updates are downloaded by the network process; the helper never goes online, it only verifies the signature and checksums of what was downloaded and installs the binaries.
 
-Build and checks: Go 1.26, `make tools`, then `make check` (protobuf codegen, `go vet`, staticcheck, tests in the regular build and with the internal `testops` tag, release binary check, building `trassa` for macOS, Linux and Windows). The test operation `test.config_write` exists only in builds with the `testops` tag; `make release-check` verifies the release binary does not contain it. CI on every commit: the OS matrix (Ubuntu 22.04 and 24.04, Debian 12 and 13 on amd64 and arm64 in containers with systemd: install with the panel command, refusal on a tampered signature, coming online, `system.info`, reinstall, removal; the report is the `matrix-report-*` artifact) and a release build on two runners with a `sha256` comparison.
+Build and checks: Go 1.26, `make tools`, then `make check` (protobuf codegen, `go vet`, staticcheck, tests in the regular build and with the internal `testops` tag, release binary check, building `trassa` for macOS, Linux and Windows). The test operation `test.config_write` exists only in builds with the `testops` tag; `make release-check` verifies the release binary does not contain it. CI on every commit: the OS matrix (Ubuntu 22.04, 24.04 and 26.04, Debian 12 and 13 on amd64 and arm64 in containers with systemd: install with the panel command, refusal on a tampered signature, coming online, `system.info`, reinstall, removal; the report is the `matrix-report-*` artifact) and a release build on two runners with a `sha256` comparison.
 
 ## Verifying a release
 

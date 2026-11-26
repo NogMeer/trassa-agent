@@ -29,6 +29,31 @@ func tool(name, version string) *agentv1.DeployTool {
 	return &agentv1.DeployTool{Name: name, Version: version, Sha256: tools.Known[name][version][runtime.GOARCH], Url: "https://github.com/x/" + name}
 }
 
+// Docker ставится только там, где в его репозитории есть закреплённая версия: Ubuntu 26.04 — явный отказ.
+func TestOSReleaseForDocker(t *testing.T) {
+	for _, c := range []struct {
+		osr string
+		ok  bool
+	}{
+		{"ID=ubuntu\nVERSION_ID=\"24.04\"\nVERSION_CODENAME=noble\n", true},
+		{"ID=debian\nVERSION_ID=\"13\"\nVERSION_CODENAME=trixie\n", true},
+		{"ID=ubuntu\nVERSION_ID=\"24.04\"\nVERSION_CODENAME=jammy\n", false},
+		{"ID=ubuntu\nVERSION_ID=\"26.04\"\nVERSION_CODENAME=resolute\n", false},
+	} {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "etc"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "etc", "os-release"), []byte(c.osr), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, _, _, err := (&Env{Root: root}).osRelease()
+		if c.ok != (err == nil) || (!c.ok && !errors.Is(err, ErrOSUnsupported)) {
+			t.Errorf("%q: %v", c.osr, err)
+		}
+	}
+}
+
 func TestDockerKeyFingerprint(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("testdata", "docker.asc"))
 	if err != nil {

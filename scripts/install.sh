@@ -27,7 +27,7 @@ BIN_DIR=/usr/local/bin
 UNIT_DIR=/etc/systemd/system
 STATE_DIR=/var/lib/trassa
 ETC_DIR=/etc/trassa
-SUPPORTED="Ubuntu 22.04, Ubuntu 24.04, Debian 12, Debian 13; amd64, arm64"
+SUPPORTED="Ubuntu 22.04, Ubuntu 24.04, Ubuntu 26.04, Debian 12, Debian 13; amd64, arm64"
 
 say() { printf '%s\n' "$*"; }
 die() {
@@ -148,15 +148,20 @@ detect_arch() {
 	esac
 }
 
+# os_supported <ID> <VERSION_ID> — система из списка поддерживаемых (те же, что матрица ОС в CI).
+os_supported() {
+	case "$1:$2" in
+	ubuntu:22.04 | ubuntu:24.04 | ubuntu:26.04 | debian:12 | debian:13) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
 check_os() {
 	[ -r /etc/os-release ] || die 4 "Эта система пока не поддерживается: нет /etc/os-release. Список поддерживаемых: $SUPPORTED"
 	# Значения читаются разбором, а не через «.»: файл не исполняется.
 	id=$(sed -n 's/^ID=//p' /etc/os-release | tr -d '"' | head -n1)
 	ver=$(sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '"' | head -n1)
-	case "$id:$ver" in
-	ubuntu:22.04 | ubuntu:24.04 | debian:12 | debian:13) ;;
-	*) die 4 "Эта система пока не поддерживается: $id $ver. Список поддерживаемых: $SUPPORTED" ;;
-	esac
+	os_supported "$id" "$ver" || die 4 "Эта система пока не поддерживается: $id $ver. Список поддерживаемых: $SUPPORTED"
 	ARCH=$(detect_arch) || die 4 "Эта система пока не поддерживается: архитектура $(uname -m). Список поддерживаемых: $SUPPORTED"
 	[ -d /run/systemd/system ] || die 4 "Нужен systemd: эта система загружена без него"
 	command -v curl >/dev/null 2>&1 || die 1 "Нет curl: установите его (apt-get install curl) и повторите"

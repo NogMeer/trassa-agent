@@ -71,7 +71,9 @@ type Env struct {
 
 func (e *Env) path(p string) string { return filepath.Join(e.Root, p) }
 
-// osRelease — дистрибутив и выпуск из /etc/os-release: ubuntu 22.04/24.04, debian 12/13.
+// osRelease — дистрибутив и выпуск из /etc/os-release: ubuntu 22.04/24.04, debian 12/13. Ubuntu 26.04 (resolute)
+// агент поддерживает, а Docker на ней — нет: в репозитории Docker для resolute нет закреплённой версии
+// (supportedDocker), только 29.10.x; до смены версии — явный отказ ErrOSUnsupported, а не сбой apt.
 func (e *Env) osRelease() (distro, version, codename string, err error) {
 	raw, err := os.ReadFile(e.path("/etc/os-release"))
 	if err != nil {

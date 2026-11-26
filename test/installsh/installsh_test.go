@@ -147,6 +147,21 @@ func TestCheckSum(t *testing.T) {
 	}
 }
 
+// Список систем установщика совпадает с матрицей ОС в CI; соседние выпуски и другие системы — отказ.
+func TestOSSupported(t *testing.T) {
+	for _, ok := range []string{"ubuntu 22.04", "ubuntu 24.04", "ubuntu 26.04", "debian 12", "debian 13"} {
+		if err := lib(t, "", "os_supported "+ok); err != nil {
+			t.Errorf("%s: отказ", ok)
+		}
+	}
+	for _, bad := range []string{"ubuntu 20.04", "ubuntu 25.10", "ubuntu 26.10", "ubuntu 26.04.1", "debian 11", "debian 14",
+		"fedora 41", "ubuntu ''", "'' 26.04"} {
+		if err := lib(t, "", "os_supported "+bad); err == nil {
+			t.Errorf("%s: принята", bad)
+		}
+	}
+}
+
 // Встроенные в скрипт юниты совпадают с packaging/systemd.
 func TestUnitsInSync(t *testing.T) {
 	raw, err := os.ReadFile(script)
