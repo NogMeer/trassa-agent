@@ -20,6 +20,7 @@ import (
 	"time"
 
 	agentv1 "github.com/NogMeer/trassa-agent/gen/trassa/agent/v1"
+	"github.com/NogMeer/trassa-agent/internal/config"
 	"github.com/NogMeer/trassa-agent/internal/fsutil"
 	"github.com/NogMeer/trassa-agent/internal/redact"
 )
@@ -169,6 +170,9 @@ func (d *Detector) collect(ctx context.Context, withSUID bool) ([]Item, error) {
 		if _, ok := managed[u.Name]; ok {
 			continue
 		}
+		if ownAccount(u) {
+			continue
+		}
 		items = append(items, Item{Kind: KindUser, Subject: u.Name, Fingerprint: fingerprint("user", u.Name, strconv.Itoa(u.UID)),
 			Evidence: fmt.Sprintf("учётная запись %s (uid %d, оболочка %s)", u.Name, u.UID, u.Shell)})
 	}
@@ -192,6 +196,18 @@ func (d *Detector) collect(ctx context.Context, withSUID bool) ([]Item, error) {
 // обновлении пакета) не запускаются и заданиями не считаются: прод MeerGuard, 2026-11-26.
 func runPartsName(n string) bool {
 	return n != "" && strings.Trim(n, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") == ""
+}
+
+// ownAccounts — системные учётные записи самого агента: trassa (установщик) и trassa-vpnprobe (помощник создаёт её
+// при первой точке замера E25, уже после базового списка — давала COMPROMISE_NEW_USER на собственное действие).
+var ownAccounts = map[string]bool{config.UserName: true, config.ProbeUserName: true}
+
+// ownAccount — учётная запись агента: точное имя и тот вид, в котором её создаёт useradd установщика и помощника
+// (без входа: оболочка nologin, дом /nonexistent). Запись с тем же именем, но с оболочкой или домом, — не наша и
+// остаётся находкой (под имя агента не спрятать вход).
+func ownAccount(u User) bool {
+	return ownAccounts[u.Name] && u.Home == "/nonexistent" &&
+		(u.Shell == "/usr/sbin/nologin" || u.Shell == "/sbin/nologin" || u.Shell == "/bin/false")
 }
 
 // cronItems — строки заданий (/etc/crontab, /etc/cron.d, crontab пользователей); переменные окружения не задания.

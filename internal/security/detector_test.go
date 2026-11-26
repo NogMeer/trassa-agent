@@ -177,3 +177,67 @@ func TestDetectorCronSkipsDpkgLeftovers(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+// Учётные записи самого агента: trassa (установщик) и trassa-vpnprobe (помощник создаёт её при первой точке замера,
+// после базового списка) — не находка. То же имя с входом (оболочка, дом) — находка.
+func TestDetectorOwnAccounts(t *testing.T) {
+	sys, d, clk := detSystem(t)
+	steps(t, d, clk, 1, nil)
+	add := func(line string) {
+		f, _ := os.OpenFile(filepath.Join(sys.Root, "etc/passwd"), os.O_APPEND|os.O_WRONLY, 0)
+		fmt.Fprint(f, line)
+		f.Close()
+	}
+	add("trassa-vpnprobe:x:996:996::/nonexistent:/usr/sbin/nologin\ntrassa:x:997:997::/nonexistent:/usr/sbin/nologin\n")
+	for _, ev := range steps(t, d, clk, 2, nil) {
+		t.Errorf("своя учётная запись дала событие: %v", ev.GetAttributes())
+	}
+	sys2, d2, clk2 := detSystem(t)
+	steps(t, d2, clk2, 1, nil)
+	f, _ := os.OpenFile(filepath.Join(sys2.Root, "etc/passwd"), os.O_APPEND|os.O_WRONLY, 0)
+	fmt.Fprint(f, "trassa:x:1005:1005::/home/trassa:/bin/bash\n")
+	f.Close()
+	var got []string
+	for _, ev := range steps(t, d2, clk2, 2, nil) {
+		got = append(got, ev.GetAttributes()["subject"])
+	}
+	if len(got) != 1 || got[0] != "trassa" {
+		t.Fatalf("trassa с оболочкой должна быть находкой: %v", got)
+	}
+}
+
+// Первый цикл после установки только запоминает базовый список: старые пользователи, ключи, задания, юниты и
+// SUID-файлы не находки (ни событием, ни в скане); новое после него — находка.
+func TestDetectorFirstStepIsBaseline(t *testing.T) {
+	sys, d, clk := detSystem(t)
+	for p, body := range map[string]string{
+		"etc/cron.d/certbot":     "0 */12 * * * root certbot -q renew\n",
+		"etc/cron.d/e2scrub_all": "30 3 * * 0 root /sbin/e2scrub_all -A -r\n",
+		"etc/systemd/system/multi-user.target.wants/nginx.service": "[Service]\n",
+		"root/.ssh/authorized_keys":                                "ssh-ed25519 " + sshBlob("ssh-ed25519", make([]byte, 32)) + " owner\n",
+		"usr/bin/sudo":                                             "suid",
+	} {
+		full := filepath.Join(sys.Root, p)
+		_ = os.MkdirAll(filepath.Dir(full), 0o755)
+		_ = os.WriteFile(full, []byte(body), 0o644)
+	}
+	if err := os.Chmod(filepath.Join(sys.Root, "usr/bin/sudo"), 0o755|os.ModeSetuid); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := os.OpenFile(filepath.Join(sys.Root, "etc/passwd"), os.O_APPEND|os.O_WRONLY, 0)
+	fmt.Fprint(f, "sitedeploy:x:1001:1001::/home/sitedeploy:/bin/bash\n")
+	f.Close()
+	if evs := stepsBy(t, d, clk, 20, SUIDInterval, nil); len(evs) != 0 {
+		t.Fatalf("первые циклы дали события: %v", evs)
+	}
+	codes := []string{"COMPROMISE_KEYS_CHANGED", "COMPROMISE_NEW_CRON", "COMPROMISE_NEW_SUID", "COMPROMISE_NEW_USER"}
+	for code, rs := range scan(t, sys, codes...) {
+		if states(rs) != "PASS:" {
+			t.Errorf("%s после установки: %s", code, states(rs))
+		}
+	}
+	_ = os.WriteFile(filepath.Join(sys.Root, "etc/cron.d/miner"), []byte("* * * * * root /tmp/x\n"), 0o644)
+	if evs := steps(t, d, clk, 1, nil); len(evs) != 1 || evs[0].GetAttributes()["code"] != "COMPROMISE_NEW_CRON" {
+		t.Fatalf("новое задание после базового списка: %v", evs)
+	}
+}
